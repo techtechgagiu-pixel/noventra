@@ -2,7 +2,8 @@
 import { migrate } from './migrate.mjs';
 import { existsSync } from 'node:fs';
 await migrate();
-process.env.HOSTNAME = process.env.HOSTNAME || '0.0.0.0';
+// Render sets HOSTNAME to the container name; the server must bind all interfaces.
+process.env.HOSTNAME = '0.0.0.0';
 if (existsSync('./.next/standalone/server.js')) {
   process.chdir('./.next/standalone');
   await import(`${process.cwd()}/server.js`);
