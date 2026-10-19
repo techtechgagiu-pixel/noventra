@@ -184,12 +184,21 @@ export async function structuredCall<T>(opts: {
     throw new SchemaError('Răspuns invalid după reparare.', '');
   };
 
+  const transient = (e: unknown) => e instanceof ProviderUnavailableError && /\b5\d\d\b|high demand|UNAVAILABLE|overloaded/i.test(e.message);
   try {
     return await attempt(opts.primary, false);
   } catch (error) {
     const fallbackAllowed = opts.fallback && providerConfigured(opts.fallback.provider) &&
       (error instanceof ProviderUnavailableError || (error instanceof RateLimitError && (error.daily || error.retryAfterMs > 120_000)) || error instanceof SchemaError);
-    if (fallbackAllowed) return attempt(opts.fallback!, true);
+    if (fallbackAllowed) {
+      try { return await attempt(opts.fallback!, true); }
+      catch (fallbackError) {
+        // Both models temporarily overloaded: wait and retry the same unit later instead of abstaining.
+        if (transient(error) && transient(fallbackError)) throw new RateLimitError(opts.primary.provider, 30_000);
+        throw fallbackError;
+      }
+    }
+    if (transient(error)) throw new RateLimitError(opts.primary.provider, 30_000);
     throw error;
   }
 }

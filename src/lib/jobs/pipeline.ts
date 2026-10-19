@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { config } from '../config';
 import { many, one, query, tx } from '../db';
-import { AGENTS, DEBATE_SCHEMA_TEXT, DebateOutputSchema, INITIAL_SCHEMA_TEXT, InitialOutputSchema, SCOUT_SCHEMA_TEXT, ScoutOutputSchema, VOTING_AGENTS, agentById, systemPrompt, type AgentDefinition } from '../ai/agents';
+import { type Prediction, type Revision, AGENTS, DEBATE_SCHEMA_TEXT, DebateOutputSchema, INITIAL_SCHEMA_TEXT, InitialOutputSchema, SCOUT_SCHEMA_TEXT, ScoutOutputSchema, VOTING_AGENTS, agentById, systemPrompt, type AgentDefinition } from '../ai/agents';
 import { activeAssignments } from '../ai/assignments';
 import { BudgetExceededError, RateLimitError, structuredCall } from '../ai/router';
 import { optimizeTicket, type Candidate } from '../optimizer';
@@ -220,14 +220,26 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       fixtureId: f.fixtureId, match: f.match, markets: f.markets.map((m) => ({ key: m.key, odds: m.odds, estimated: m.est, ev: m.ev })),
       yourPosition: prior.find((p) => p.fixture_id === f.fixtureId && p.agent_id === agent.id) ? summarize(prior.find((p) => p.fixture_id === f.fixtureId && p.agent_id === agent.id)!) : 'fără poziție (eroare anterioară)',
       others: prior.filter((p) => p.fixture_id === f.fixtureId && p.agent_id !== agent.id).map((p) => `${agentById(p.agent_id)?.name}: ${summarize(p)}`),
+      leadingCandidate: (() => { const t: Record<string, number> = {}; for (const p of prior.filter((x) => x.fixture_id === f.fixtureId && x.decision === 'BET_CANDIDATE' && x.market_key)) t[p.market_key!] = (t[p.market_key!] ?? 0) + 1; const top = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; return top ? `${top[0]} (${top[1]}/6 voturi)` : 'niciunul'; })(),
     }));
-    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
+    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Spune explicit dacă poți susține „leadingCandidate” (selecția cu cele mai multe voturi); un bilet are nevoie de minimum 4/6 voturi pe aceeași piață, dar nu vota împotriva propriei analize doar pentru consens. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
   }
   try {
     const res = round === 0
       ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user, temperature: agent.temperature, maxOutputTokens: Math.min(config.limits.maxOutputTokens, 380 * snaps.length + 300) }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL' } })
       : await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: DebateOutputSchema, input: { system: systemPrompt(agent), user, temperature: agent.temperature, maxOutputTokens: Math.min(config.limits.maxOutputTokens, 300 * snaps.length + 300) }, log: { jobId: job.id, agentId: agent.id, stage: `DEBATE${round}` } });
-    const items = 'predictions' in res.data ? res.data.predictions : res.data.revisions;
+    let items: Array<Prediction | Revision> = 'predictions' in res.data ? res.data.predictions : res.data.revisions;
+    // One follow-up call for fixtures the model skipped, before recording an abstention.
+    const missingIds = snaps.filter((s) => !items.some((p) => p.fixtureId === s.fixture.id)).map((s) => s.fixture.id);
+    if (missingIds.length && missingIds.length < snaps.length) {
+      try {
+        const subset = facts.filter((f) => missingIds.includes(f.fixtureId));
+        const retry = round === 0
+          ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user: `Analizează independent fiecare meci. Schema răspunsului: ${INITIAL_SCHEMA_TEXT}\nMeciuri (${subset.length}):\n${JSON.stringify(subset)}`, temperature: agent.temperature, maxOutputTokens: 380 * subset.length + 300 }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL_RETRY' } })
+          : null;
+        if (retry) items = [...items, ...retry.data.predictions];
+      } catch (e) { if (e instanceof RateLimitError || e instanceof BudgetExceededError) throw e; }
+    }
     for (const s of snaps) {
       const item = items.find((p) => p.fixtureId === s.fixture.id);
       if (!item) { await recordEvent(job.id, { type: 'AGENT_FAILED', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { round, error: 'Agentul nu a răspuns pentru acest meci (abținere).' } }); continue; }
