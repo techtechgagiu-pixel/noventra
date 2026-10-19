@@ -1,0 +1,1 @@
+export const SLOTS_UI: Record<string, string> = { FIVE_A: 'COTĂ 5 — BILETUL A', FIVE_B: 'COTĂ 5 — BILETUL B', TEN_A: 'COTĂ 10 — BILETUL A', TEN_B: 'COTĂ 10 — BILETUL B', WEEKLY_100: 'BILETUL SĂPTĂMÂNII · COTĂ 100' };

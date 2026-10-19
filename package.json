@@ -1,0 +1,39 @@
+{
+  "name": "betmind-six",
+  "version": "5.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build && node scripts/postbuild.mjs",
+    "start": "node scripts/start.mjs",
+    "migrate": "node scripts/migrate.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "lucide-react": "0.468.0",
+    "motion": "12.23.0",
+    "next": "16.4.2",
+    "pg": "8.16.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "zod": "4.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.0",
+    "@tailwindcss/postcss": "4.1.13",
+    "@types/node": "22.18.0",
+    "@types/pg": "8.15.5",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "tailwindcss": "4.1.13",
+    "tsx": "^4.20.5",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
+  },
+  "type": "module"
+}

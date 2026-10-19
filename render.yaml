@@ -1,0 +1,35 @@
+# Render Blueprint — one free Node web service. Durable data lives in Neon, never on Render's disk.
+services:
+  - type: web
+    name: betmind-nexus
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: betmind-six
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: APP_BASE_URL
+        value: https://nexus.noventra.ro
+      - key: APP_TIMEZONE
+        value: Europe/Bucharest
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GOOGLE_GENERATIVE_AI_API_KEY
+        sync: false

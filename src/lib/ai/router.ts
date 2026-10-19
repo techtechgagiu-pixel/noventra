@@ -1,0 +1,205 @@
+import { z } from 'zod';
+import { config } from '../config';
+import { query } from '../db';
+import { aiUsageToday, recordProviderUsage } from '../usage';
+
+export type Provider = 'groq' | 'gemini' | 'openrouter';
+export type ModelRef = { provider: Provider; model: string };
+
+export class RateLimitError extends Error {
+  constructor(public provider: Provider, public retryAfterMs: number, public daily = false) {
+    super(daily ? `Cota zilnică ${provider} este epuizată.` : `Limită de ritm ${provider}; reîncercare în ${Math.ceil(retryAfterMs / 1000)}s.`);
+  }
+}
+export class BudgetExceededError extends Error {
+  constructor(message: string) { super(message); }
+}
+export class ProviderUnavailableError extends Error {
+  constructor(public provider: Provider, message: string) { super(message); }
+}
+export class SchemaError extends Error {
+  constructor(message: string, public raw: string) { super(message); }
+}
+
+export function providerConfigured(p: Provider) {
+  return p === 'groq' ? !!config.groqApiKey : p === 'gemini' ? !!config.geminiApiKey : !!config.openRouterApiKey;
+}
+
+// Pacing so a single instance stays inside free-tier limits. Groq free tier allows ~8,000 tokens/min
+// per model; we read the provider's x-ratelimit headers and wait instead of triggering 429s.
+const MIN_INTERVAL_MS: Record<Provider, number> = { groq: 2500, gemini: 7000, openrouter: 3000 };
+const lastCall = new Map<string, number>();
+const tokenWindow = new Map<string, { remaining: number; resetAt: number }>();
+const MAX_INLINE_WAIT_MS = 45_000;
+const estimateTokens = (input: CallInput) => Math.ceil((input.system.length + input.user.length) / 3.2) + (input.maxOutputTokens ?? config.limits.maxOutputTokens);
+async function pace(ref: ModelRef, input: CallInput) {
+  const key = `${ref.provider}:${ref.model}`;
+  let wait = (lastCall.get(key) ?? 0) + MIN_INTERVAL_MS[ref.provider] - Date.now();
+  const tw = tokenWindow.get(key);
+  if (tw && tw.resetAt > Date.now() && tw.remaining < estimateTokens(input)) wait = Math.max(wait, tw.resetAt - Date.now() + 500);
+  if (wait > MAX_INLINE_WAIT_MS) throw new RateLimitError(ref.provider, wait);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastCall.set(key, Date.now());
+}
+function parseDuration(v: string | null) {
+  if (!v) return null;
+  let ms = 0;
+  for (const m of v.matchAll(/([\d.]+)(ms|s|m|h)/g)) ms += Number(m[1]) * (m[2] === 'ms' ? 1 : m[2] === 's' ? 1000 : m[2] === 'm' ? 60_000 : 3_600_000);
+  return ms || null;
+}
+function rememberLimits(ref: ModelRef, res: Response) {
+  const remaining = Number(res.headers.get('x-ratelimit-remaining-tokens'));
+  const reset = parseDuration(res.headers.get('x-ratelimit-reset-tokens'));
+  if (Number.isFinite(remaining) && reset !== null) tokenWindow.set(`${ref.provider}:${ref.model}`, { remaining, resetAt: Date.now() + reset });
+}
+
+export type CallInput = { system: string; user: string; maxOutputTokens?: number; temperature?: number };
+type RawResult = { text: string; inputTokens: number | null; outputTokens: number | null; resolvedModel: string };
+
+function retryAfter(res: Response, body: string) {
+  const header = res.headers.get('retry-after');
+  if (header && Number.isFinite(Number(header))) return Number(header) * 1000;
+  const m = body.match(/try again in ([\d.]+)(ms|s|m)/i);
+  if (m) return Number(m[1]) * (m[2] === 'ms' ? 1 : m[2] === 'm' ? 60_000 : 1000);
+  const g = body.match(/"retryDelay":\s*"(\d+)s"/);
+  if (g) return Number(g[1]) * 1000;
+  return 30_000;
+}
+
+async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: string, apiKey: string): Promise<RawResult> {
+  const body: Record<string, unknown> = {
+    model: ref.model,
+    messages: [{ role: 'system', content: input.system }, { role: 'user', content: input.user }],
+    temperature: input.temperature ?? 0.3,
+    max_completion_tokens: input.maxOutputTokens ?? config.limits.maxOutputTokens,
+    response_format: { type: 'json_object' },
+  };
+  if (ref.provider === 'groq' && ref.model.startsWith('openai/gpt-oss')) { body.reasoning_effort = 'low'; body.include_reasoning = false; }
+  if (ref.provider === 'groq' && ref.model.startsWith('qwen/')) { body.reasoning_effort = 'none'; }
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(90_000),
+  });
+  const text = await res.text();
+  rememberLimits(ref, res);
+  if (res.status === 413 || /request too large|reduce your message size/i.test(text)) throw new ProviderUnavailableError(ref.provider, `Cerere prea mare pentru limita ${ref.model}.`);
+  if (res.status === 429) throw new RateLimitError(ref.provider, retryAfter(res, text), /per day|daily|TPD|RPD/i.test(text));
+  if (res.status === 404 || res.status === 400 && /model/i.test(text) && /not (found|exist)|decommissioned/i.test(text)) throw new ProviderUnavailableError(ref.provider, `Model indisponibil: ${ref.model}`);
+  if (!res.ok) throw new ProviderUnavailableError(ref.provider, `${ref.provider} ${res.status}: ${text.slice(0, 300)}`);
+  const json = JSON.parse(text) as { model?: string; choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+  return { text: json.choices?.[0]?.message?.content ?? '', inputTokens: json.usage?.prompt_tokens ?? null, outputTokens: json.usage?.completion_tokens ?? null, resolvedModel: json.model || ref.model };
+}
+
+async function callGemini(ref: ModelRef, input: CallInput): Promise<RawResult> {
+  const generationConfig: Record<string, unknown> = {
+    responseMimeType: 'application/json',
+    temperature: input.temperature ?? 0.3,
+    maxOutputTokens: input.maxOutputTokens ?? config.limits.maxOutputTokens,
+  };
+  if (/2\.5-flash/.test(ref.model)) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  else if (/gemini-3/.test(ref.model) && !/lite/.test(ref.model)) generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(ref.model)}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.geminiApiKey },
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: input.system }] }, contents: [{ role: 'user', parts: [{ text: input.user }] }], generationConfig }),
+    signal: AbortSignal.timeout(90_000),
+  });
+  const text = await res.text();
+  if (res.status === 429) throw new RateLimitError('gemini', retryAfter(res, text), /PerDay|per day/i.test(text));
+  if (res.status === 404) throw new ProviderUnavailableError('gemini', `Model indisponibil: ${ref.model}`);
+  if (!res.ok) throw new ProviderUnavailableError('gemini', `gemini ${res.status}: ${text.slice(0, 300)}`);
+  const json = JSON.parse(text) as { modelVersion?: string; candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } };
+  return { text: json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '', inputTokens: json.usageMetadata?.promptTokenCount ?? null, outputTokens: json.usageMetadata?.candidatesTokenCount ?? null, resolvedModel: json.modelVersion || ref.model };
+}
+
+/** Test hook: replace real network inference with a deterministic fake. Never set in production. */
+type FakeTransport = (ref: ModelRef, input: CallInput) => Promise<RawResult>;
+const ag = globalThis as unknown as { __bmFakeAi?: FakeTransport | null; __bmAiCalls?: number };
+export function setAiTransportForTests(t: FakeTransport | null) { ag.__bmFakeAi = t; }
+/** Total inference attempts made by this process (real or fake). Used by tests to prove replay makes zero calls. */
+export const aiCallCount = () => ag.__bmAiCalls ?? 0;
+
+async function rawCall(ref: ModelRef, input: CallInput): Promise<RawResult> {
+  ag.__bmAiCalls = (ag.__bmAiCalls ?? 0) + 1;
+  if (ag.__bmFakeAi) return ag.__bmFakeAi(ref, input);
+  if (!providerConfigured(ref.provider)) throw new ProviderUnavailableError(ref.provider, `Cheia ${ref.provider} nu este configurată.`);
+  await pace(ref, input);
+  if (ref.provider === 'gemini') {
+    try { return await callGemini(ref, input); }
+    catch (error) {
+      // Gemini answers 503 "high demand" transiently; one short retry before any fallback.
+      if (error instanceof ProviderUnavailableError && /503|high demand|UNAVAILABLE/i.test(error.message)) { await new Promise((r) => setTimeout(r, 4000)); return callGemini(ref, input); }
+      throw error;
+    }
+  }
+  if (ref.provider === 'groq') return callOpenAiCompatible(ref, input, 'https://api.groq.com/openai/v1', config.groqApiKey);
+  return callOpenAiCompatible(ref, input, 'https://openrouter.ai/api/v1', config.openRouterApiKey);
+}
+
+function extractJson(text: string): unknown {
+  const trimmed = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  try { return JSON.parse(trimmed); } catch { /* fall through */ }
+  const start = trimmed.indexOf('{'), end = trimmed.lastIndexOf('}');
+  if (start >= 0 && end > start) return JSON.parse(trimmed.slice(start, end + 1));
+  throw new Error('Răspunsul nu conține JSON.');
+}
+
+export type StructuredResult<T> = { data: T; provider: Provider; model: string; requestedModel: string; inputTokens: number | null; outputTokens: number | null; latencyMs: number; usedFallback: boolean };
+
+/**
+ * Calls one model with strict schema validation. One repair attempt on invalid output.
+ * Fallback runs only when explicitly configured, and the actual model used is always returned.
+ */
+export async function structuredCall<T>(opts: {
+  primary: ModelRef; fallback?: ModelRef | null; schema: z.ZodType<T>; input: CallInput;
+  log: { jobId?: string | null; agentId?: string | null; stage: string };
+}): Promise<StructuredResult<T>> {
+  const usage = await aiUsageToday();
+  if (usage.requests >= config.limits.aiDailyCalls) throw new BudgetExceededError(`Plafonul zilnic de apeluri AI (${config.limits.aiDailyCalls}) a fost atins.`);
+  if (usage.tokens >= config.limits.aiDailyTokens) throw new BudgetExceededError(`Plafonul zilnic de tokeni AI (${config.limits.aiDailyTokens}) a fost atins.`);
+
+  const attempt = async (ref: ModelRef, usedFallback: boolean): Promise<StructuredResult<T>> => {
+    let input = opts.input;
+    for (let tryNo = 0; tryNo < 2; tryNo++) {
+      const started = Date.now();
+      let raw: RawResult | null = null;
+      try {
+        raw = await rawCall(ref, input);
+        const parsed = opts.schema.safeParse(extractJson(raw.text));
+        if (!parsed.success) throw new SchemaError(parsed.error.issues.slice(0, 4).map((i) => `${i.path.join('.')}: ${i.message}`).join('; '), raw.text);
+        await logCall(opts.log, ref, raw, true, true, Date.now() - started, null);
+        return { data: parsed.data, provider: ref.provider, model: raw.resolvedModel, requestedModel: ref.model, inputTokens: raw.inputTokens, outputTokens: raw.outputTokens, latencyMs: Date.now() - started, usedFallback };
+      } catch (error) {
+        const schemaFailure = error instanceof SchemaError || (raw !== null && error instanceof Error && /JSON/.test(error.message));
+        await logCall(opts.log, ref, raw, raw !== null, schemaFailure ? false : null, Date.now() - started, (error as Error).message);
+        if (schemaFailure && tryNo === 0) {
+          input = { ...input, user: `${input.user}\n\nRăspunsul anterior nu a respectat schema (${(error as Error).message.slice(0, 300)}). Răspunde DOAR cu un obiect JSON valid conform schemei.` };
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new SchemaError('Răspuns invalid după reparare.', '');
+  };
+
+  try {
+    return await attempt(opts.primary, false);
+  } catch (error) {
+    const fallbackAllowed = opts.fallback && providerConfigured(opts.fallback.provider) &&
+      (error instanceof ProviderUnavailableError || (error instanceof RateLimitError && (error.daily || error.retryAfterMs > 120_000)) || error instanceof SchemaError);
+    if (fallbackAllowed) return attempt(opts.fallback!, true);
+    throw error;
+  }
+}
+
+async function logCall(log: { jobId?: string | null; agentId?: string | null; stage: string }, ref: ModelRef, raw: RawResult | null, ok: boolean, schemaValid: boolean | null, latencyMs: number, error: string | null) {
+  const tokens = (raw?.inputTokens ?? 0) + (raw?.outputTokens ?? 0);
+  await recordProviderUsage(ref.provider, { requests: 1, tokens, errors: error ? 1 : 0 });
+  await query(
+    `INSERT INTO model_usage_logs (job_id, agent_id, stage, provider, model_id, requested_model_id, ok, schema_valid, input_tokens, output_tokens, latency_ms, error)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [log.jobId ?? null, log.agentId ?? null, log.stage, ref.provider, raw?.resolvedModel ?? ref.model, ref.model, ok && !error, schemaValid, raw?.inputTokens ?? null, raw?.outputTokens ?? null, latencyMs, error?.slice(0, 500) ?? null],
+  ).catch((e) => console.warn(JSON.stringify({ event: 'usage_log_failed', message: (e as Error).message })));
+}
