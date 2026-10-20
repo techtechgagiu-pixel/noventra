@@ -42,7 +42,7 @@ const hg = globalThis as unknown as { __bmHistoryHook?: HistoryHook | null };
 /** Tests only: synthetic, clearly-labelled DEMO history for provider 'demo' fixtures. */
 export function setHistoryProviderForTests(h: HistoryHook | null) { hg.__bmHistoryHook = h; }
 
-/** Up to `limit` completed league matches before kickoff (no future-data leakage). */
+/** Up to `limit` completed official matches (all competitions) before kickoff (no future-data leakage). */
 export async function teamHistory(fixture: Fixture, side: 'home' | 'away', limit = 10): Promise<{ matches: HistoricalMatch[]; missing: string[] }> {
   if (fixture.provider === 'demo' && hg.__bmHistoryHook) return { matches: hg.__bmHistoryHook(fixture, side).filter((m) => Date.parse(m.date) < Date.parse(fixture.kickoff)), missing: ['DEMO: istoric sintetic de test'] };
   const teamId = side === 'home' ? fixture.homeTeamId : fixture.awayTeamId;
@@ -52,13 +52,13 @@ export async function teamHistory(fixture: Fixture, side: 'home' | 'away', limit
   const matches: HistoricalMatch[] = [];
   for (const e of events) {
     try {
-      const summary = await cachedPastSummary(fixture.leagueKey, e.eventId, e.date);
+      const summary = await cachedPastSummary(e.leagueKey, e.eventId, e.date);
       const m = summary ? historicalFromSummary(summary, teamId, `espn:${e.eventId}`) : null;
       if (m && Date.parse(m.date || e.date) < Date.parse(fixture.kickoff)) matches.push({ ...m, date: m.date || e.date });
     } catch (error) {
       missing.push(`Meciul ${e.eventId} nu a putut fi citit (${(error as Error).message}).`);
     }
   }
-  if (events.length < limit) missing.push(`Sursa are ${events.length} meciuri de campionat încheiate în sezonul curent (țintă: ${limit}).`);
+  if (events.length < limit) missing.push(`Sursa are ${events.length} meciuri oficiale încheiate în sezonul curent (țintă: ${limit}).`);
   return { matches, missing };
 }

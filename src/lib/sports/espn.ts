@@ -173,19 +173,29 @@ export function historicalFromSummary(summary: Obj, teamId: string, eventKey: st
 }
 
 /** Past league matches for a team from its season schedule, strictly before `before`. */
+/**
+ * Completed official matches of a team before `before`, across ALL competitions (league, European cups, domestic cups),
+ * friendlies excluded. A cup fixture therefore gets the team's full recent form, not only its 2–3 cup games.
+ * Falls back to the fixture's own league schedule if the cross-competition feed is unavailable.
+ */
 export async function espnTeamPastEvents(leagueKey: string, teamId: string, before: string, limit = 10) {
   if (!/^\d+$/.test(teamId)) return [];
-  const data = obj(await sportsGet(`${BASE}/${leagueKey}/teams/${teamId}/schedule`, { provider: 'espn', ttlMs: 6 * 3600_000 }));
   const cutoff = Math.min(Date.parse(before), Date.now());
-  return arr(data.events).map(obj)
+  const pick = (data: Obj, source: string) => arr(data.events).map(obj)
     .filter((e) => {
       const state = str(obj(obj(obj(arr(e.competitions)[0]).status).type).state);
       const d = Date.parse(str(e.date) || '');
-      return state === 'post' && Number.isFinite(d) && d < cutoff;
+      const competition = str(obj(e.league).name) ?? '';
+      return state === 'post' && Number.isFinite(d) && d < cutoff && !/friendly|amical/i.test(competition);
     })
     .sort((a, b) => Date.parse(str(b.date)!) - Date.parse(str(a.date)!))
     .slice(0, limit)
-    .map((e) => ({ eventId: str(e.id)!, date: str(e.date)! }));
+    .map((e) => ({ eventId: str(e.id)!, date: str(e.date)!, leagueKey: source, competition: str(obj(e.league).name) ?? null }));
+  try {
+    const all = pick(obj(await sportsGet(`${BASE}/all/teams/${teamId}/schedule`, { provider: 'espn', ttlMs: 6 * 3600_000 })), 'all');
+    if (all.length) return all;
+  } catch { /* fall back to the league feed below */ }
+  return pick(obj(await sportsGet(`${BASE}/${leagueKey}/teams/${teamId}/schedule`, { provider: 'espn', ttlMs: 6 * 3600_000 })), leagueKey);
 }
 
 // ── Extra markets (ESPN core odds API) ─────────────────────────────────────────
