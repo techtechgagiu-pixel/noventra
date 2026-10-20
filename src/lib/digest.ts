@@ -19,7 +19,7 @@ Format: un rând = o propoziție scurtă (max. 160 de caractere), fără liniuț
 Rândul 1: concluzia generală (câte meciuri, cota totală, cât de prudent e biletul).
 Apoi, pentru fiecare meci, 1–2 rânduri: de ce a fost ales (numește 1–2 agenți și argumentul lor) și ce risc a semnalat cineva.
 Ultimul rând: principalul risc al biletului.
-Nu inventa date, accidentări, știri sau cifre care nu apar în mesaj. Numele agenților sunt doar personaje; nu le atribui declarații reale. Nu promite câștig.
+Nu inventa date, accidentări, știri sau cifre care nu apar în mesaj; cotele și procentele le copiezi EXACT cum sunt scrise, fără rotunjire. Numele agenților sunt doar personaje; nu le atribui declarații reale. Nu promite câștig.
 Răspunzi DOAR cu JSON: {"lines":["...", "..."]}.`;
 
 type Row = { fixture_id: string; agent_id: string; decision: string; market_key: string | null; estimated_probability: string | null; payload: { rationale?: string; evidence?: string[]; failureReasons?: string[] } };
@@ -36,13 +36,13 @@ async function material(ticketId: string) {
   const agents = Number((t.summary as { agents?: number }).agents ?? 11);
   const cut = (s: string | undefined, n: number) => (s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
   return {
-    ticket: { totalOdds: t.actual_odds ? Number(t.actual_odds) : null, legs: t.leg_count, target: Number(t.target_odds), status: t.generation_status },
+    ticket: { totalOdds: t.actual_odds ? Number(t.actual_odds).toFixed(2) : null, legs: t.leg_count, target: Number(t.target_odds), status: t.generation_status },
     fixtures: legs.map((l) => {
       const mine = rows.filter((r) => r.fixture_id === l.fixture_id);
       const backers = mine.filter((r) => r.decision === 'BET_CANDIDATE' && r.market_key && selectionImplies(r.market_key, l.market_key));
       const against = mine.filter((r) => !backers.includes(r));
       return {
-        match: `${l.snapshot.home} – ${l.snapshot.away}`, pick: l.market_label, odds: Number(l.odds), votes: `${l.votes_for}/${agents}`,
+        match: `${l.snapshot.home} – ${l.snapshot.away}`, pick: l.market_label, odds: Number(l.odds).toFixed(2), votes: `${l.votes_for}/${agents}`,
         estimatedProbability: l.model_probability ? Number(l.model_probability) : null,
         backers: backers.slice(0, 4).map((r) => `${agentById(r.agent_id)?.name ?? r.agent_id}: ${cut(r.payload.rationale, 200)}${r.agent_id === 'hantu' && r.payload.evidence?.[0] ? ` (știre: ${cut(r.payload.evidence[0], 120)})` : ''}`),
         risks: [...backers, ...against].map((r) => (r.payload.failureReasons?.[0] ? `${agentById(r.agent_id)?.name ?? r.agent_id}: ${cut(r.payload.failureReasons[0], 140)}` : null)).filter(Boolean).slice(0, 2),
@@ -54,9 +54,9 @@ async function material(ticketId: string) {
 
 /** Deterministic fallback when no model is available: built only from the recorded data. */
 function fromData(m: NonNullable<Awaited<ReturnType<typeof material>>>): string[] {
-  const lines = [`${m.ticket.legs} meciuri, cotă totală ${m.ticket.totalOdds?.toFixed(2) ?? '—'} (țintă ${m.ticket.target}).`];
+  const lines = [`${m.ticket.legs} meciuri, cotă totală ${m.ticket.totalOdds ?? '—'} (țintă ${m.ticket.target}).`];
   for (const f of m.fixtures) {
-    lines.push(`${f.match}: ${f.pick} @ ${f.odds.toFixed(2)}, susținut de ${f.votes} agenți${f.estimatedProbability ? ` (șansă estimată ${Math.round(f.estimatedProbability * 100)}%)` : ''}.`);
+    lines.push(`${f.match}: ${f.pick} @ ${f.odds}, susținut de ${f.votes} agenți${f.estimatedProbability ? ` (șansă estimată ${Math.round(f.estimatedProbability * 100)}%)` : ''}.`);
     if (f.risks[0]) lines.push(`Risc semnalat — ${f.risks[0]}`);
   }
   return lines.slice(0, 10);
