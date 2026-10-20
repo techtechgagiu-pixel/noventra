@@ -16,10 +16,10 @@ const DigestSchema = z.preprocess((v) => (Array.isArray(v) ? { lines: v } : v), 
 
 const SYSTEM = `Ești redactorul aplicației PRIMUL 11. Scrii un rezumat de MAXIMUM 10 rânduri, în română, al unui bilet de pariuri, folosind EXCLUSIV motivările agenților primite în mesaj.
 Format: un rând = o propoziție scurtă (max. 160 de caractere), fără liniuțe sau numerotare.
-Rândul 1: concluzia generală (câte meciuri, cota totală, cât de prudent e biletul).
+Rândul 1: concluzia generală (câte meciuri, cota totală, prudența EXACT cum e dată în ticket.prudence și șansa estimată ca toate să iasă, ticket.chanceAllLegsWin).
 Apoi, pentru fiecare meci, 1–2 rânduri: de ce a fost ales (numește 1–2 agenți și argumentul lor) și ce risc a semnalat cineva.
 Ultimul rând: principalul risc al biletului.
-Nu inventa date, accidentări, știri sau cifre care nu apar în mesaj; cotele și procentele le copiezi EXACT cum sunt scrise, fără rotunjire. Numele agenților sunt doar personaje; nu le atribui declarații reale. Nu promite câștig.
+Nu inventa date, accidentări, știri sau cifre care nu apar în mesaj; cotele și procentele le copiezi EXACT cum sunt scrise, fără rotunjire. Numărul de voturi îl iei DOAR din câmpul votes (ignori alte numere de voturi din motivări). Nu scrie probabilități ca 0.5553 — doar procente din date. Numele agenților sunt doar personaje; nu le atribui declarații reale. Nu promite câștig.
 Răspunzi DOAR cu JSON: {"lines":["...", "..."]}.`;
 
 type Row = { fixture_id: string; agent_id: string; decision: string; market_key: string | null; estimated_probability: string | null; payload: { rationale?: string; evidence?: string[]; failureReasons?: string[] } };
@@ -34,9 +34,13 @@ async function material(ticketId: string) {
     `SELECT DISTINCT ON (fixture_id, agent_id) fixture_id, agent_id, decision, market_key, estimated_probability, payload
      FROM agent_predictions WHERE job_id=$1 AND fixture_id = ANY($2) ORDER BY fixture_id, agent_id, round DESC`, [t.job_id, legs.map((l) => l.fixture_id)]);
   const agents = Number((t.summary as { agents?: number }).agents ?? 11);
+  // Prudence is computed, not judged by the model: from the highest leg price and the chance that every leg wins.
+  const maxLeg = Math.max(...legs.map((l) => Number(l.odds)));
+  const allWin = legs.reduce((p, l) => p * (l.model_probability ? Number(l.model_probability) : 0.9 / Number(l.odds)), 1);
+  const prudence = maxLeg <= 1.65 && allWin >= 0.18 ? 'ridicată (doar cote mici)' : maxLeg <= 2.0 ? 'medie' : 'scăzută (conține cote mari)';
   const cut = (s: string | undefined, n: number) => (s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
   return {
-    ticket: { totalOdds: t.actual_odds ? Number(t.actual_odds).toFixed(2) : null, legs: t.leg_count, target: Number(t.target_odds), status: t.generation_status },
+    ticket: { totalOdds: t.actual_odds ? Number(t.actual_odds).toFixed(2) : null, legs: t.leg_count, target: Number(t.target_odds), status: t.generation_status, prudence, chanceAllLegsWin: `${Math.round(allWin * 100)}%` },
     fixtures: legs.map((l) => {
       const mine = rows.filter((r) => r.fixture_id === l.fixture_id);
       const backers = mine.filter((r) => r.decision === 'BET_CANDIDATE' && r.market_key && selectionImplies(r.market_key, l.market_key));
@@ -65,7 +69,9 @@ function fromData(m: NonNullable<Awaited<ReturnType<typeof material>>>): string[
 export async function buildDigest(ticketId: string, jobId: string | null): Promise<Digest | null> {
   const m = await material(ticketId);
   if (!m || !m.fixtures.length) return null;
-  const assignment = (await activeAssignments()).get('scout');
+  const scoutAssignment = (await activeAssignments()).get('scout');
+  // A stronger free model writes better summaries; the scout's models are the fallback chain.
+  const assignment = scoutAssignment ? { primary: { provider: 'gemini' as const, model: 'gemini-3-flash-preview' }, fallback: scoutAssignment.primary } : null;
   let digest: Digest = { lines: fromData(m), source: 'data', model: null, createdAt: new Date().toISOString() };
   if (assignment) {
     try {
