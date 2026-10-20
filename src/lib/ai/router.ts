@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { config } from '../config';
-import { query } from '../db';
+import { many, query } from '../db';
 import { aiUsageToday, recordProviderUsage } from '../usage';
 
 export type Provider = 'groq' | 'gemini' | 'openrouter';
@@ -191,6 +191,7 @@ export async function structuredCall<T>(opts: {
     .filter((m) => providerConfigured(m.provider));
   let shortestWait = Infinity;
   let lastError: unknown = null;
+  await loadPersistedExhaustion();
   for (let i = 0; i < chain.length; i++) {
     const ref = chain[i];
     const key = `${ref.provider}:${ref.model}`;
@@ -202,7 +203,7 @@ export async function structuredCall<T>(opts: {
     } catch (error) {
       lastError = error;
       if (error instanceof RateLimitError) {
-        if (error.daily || error.retryAfterMs > 120_000) exhausted.set(key, Date.now() + Math.max(error.retryAfterMs, 60_000));
+        if (error.daily || error.retryAfterMs > 120_000) markExhausted(key, exhaustionUntil(ref, error), error.daily ? 'cota zilnică gratuită' : 'limită lungă');
         shortestWait = Math.min(shortestWait, error.retryAfterMs);
         // A short per-minute limit on the primary: wait for it rather than spreading to other models.
         if (!error.daily && error.retryAfterMs <= 120_000 && i === 0) throw error;
@@ -217,8 +218,55 @@ export async function structuredCall<T>(opts: {
   throw lastError ?? new ProviderUnavailableError(opts.primary.provider, 'Niciun model disponibil.');
 }
 
-/** A manual resume gives every model a fresh chance (the provider's own answer decides again). */
-export function resetModelExhaustion() { exhaustedModels().clear(); }
+/**
+ * A manual resume clears short-lived blocks (rate limits, temporary overload) but keeps daily-quota exhaustion,
+ * so already-spent free models are not retried on every resume.
+ */
+export function resetModelExhaustion() {
+  const m = exhaustedModels();
+  for (const [k, until] of m) if (until - Date.now() < 15 * 60_000) m.delete(k);
+}
+
+/** Tests only: simulates the providers' quota reset (e.g. the next day). */
+export function clearModelExhaustionForTests() { exhaustedModels().clear(); }
+
+/** Daily free quotas: Gemini resets at midnight Pacific (≈07:00/08:00 UTC); Groq's window is rolling (use its hint, ≥ 10 min). */
+function exhaustionUntil(ref: ModelRef, e: RateLimitError) {
+  if (!e.daily) return Date.now() + Math.max(e.retryAfterMs, 60_000);
+  if (ref.provider === 'gemini') {
+    const now = new Date();
+    const pacificOffset = isPacificDst(now) ? 7 : 8;
+    const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), pacificOffset, 0, 0));
+    if (reset.getTime() <= now.getTime()) reset.setUTCDate(reset.getUTCDate() + 1);
+    return reset.getTime();
+  }
+  return Date.now() + Math.max(e.retryAfterMs, 10 * 60_000);
+}
+function isPacificDst(d: Date) {
+  const y = d.getUTCFullYear();
+  const marchSecondSunday = Date.UTC(y, 2, 8 + ((7 - new Date(Date.UTC(y, 2, 8)).getUTCDay()) % 7), 10);
+  const novFirstSunday = Date.UTC(y, 10, 1 + ((7 - new Date(Date.UTC(y, 10, 1)).getUTCDay()) % 7), 9);
+  return d.getTime() >= marchSecondSunday && d.getTime() < novFirstSunday;
+}
+
+function markExhausted(key: string, until: number, reason: string) {
+  exhaustedModels().set(key, until);
+  if (ag.__bmFakeAi) return; // tests: in-memory only
+  void query(`INSERT INTO model_health(model_key, exhausted_until, reason, updated_at) VALUES ($1, to_timestamp($2/1000.0), $3, now())
+              ON CONFLICT (model_key) DO UPDATE SET exhausted_until=EXCLUDED.exhausted_until, reason=EXCLUDED.reason, updated_at=now()`, [key, until, reason]).catch(() => {});
+}
+
+let healthLoadedAt = 0;
+/** Restores quota exhaustion recorded before a restart/deploy (cached 30 s). */
+async function loadPersistedExhaustion() {
+  if (ag.__bmFakeAi || Date.now() - healthLoadedAt < 30_000) return;
+  healthLoadedAt = Date.now();
+  try {
+    const rows = await many<{ model_key: string; until: string }>('SELECT model_key, extract(epoch from exhausted_until)*1000 AS until FROM model_health WHERE exhausted_until > now()');
+    const m = exhaustedModels();
+    for (const r of rows) m.set(r.model_key, Math.max(m.get(r.model_key) ?? 0, Number(r.until)));
+  } catch { /* table missing or DB hiccup: in-memory state still applies */ }
+}
 
 /** Free models used, in order, when an agent's own models are exhausted. The model actually used is always recorded. */
 export const RESERVE_MODELS: ModelRef[] = [

@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { one, many } from '@/lib/db';
 import { createOrGetJob, resumeJob, slotStates } from '@/lib/jobs/service';
 import { _processOneForTests } from '@/lib/jobs/worker';
-import { aiCallCount } from '@/lib/ai/router';
+import { aiCallCount, clearModelExhaustionForTests } from '@/lib/ai/router';
 import { jobEvents, listTickets, ticketDetail } from '@/lib/views';
 import { clearFakes, closePool, demoFixtures, installFakes, makeUser, resetDb, type FakeAi } from './helpers';
 
@@ -109,7 +109,11 @@ describe('provider quota failure and recovery', () => {
     expect(paused!.last_error).toMatch(/Cota zilnică/);
     const fabricated = await one<{ n: string }>("SELECT count(*) n FROM agent_predictions WHERE job_id=$1", [jobId]);
     expect(Number(fabricated!.n)).toBe(0);
+    // Resuming while every free quota is still spent pauses again honestly (exhaustion is remembered, not retried blindly).
+    await resumeJob(u, jobId);
+    expect(await drain(jobId)).toBe('PAUSED');
     ai.failNext = 0;
+    clearModelExhaustionForTests(); // the providers' daily quotas reset
     await resumeJob(u, jobId);
     const status = await drain(jobId);
     expect(['COMPLETED', 'INCOMPLETE', 'NO_BET']).toContain(status);

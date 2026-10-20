@@ -91,7 +91,7 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
       setAgent(id, { status: 'DONE', activeFixtures: [], model: `${p.provider}/${p.model}`, usedFallback: !!p.usedFallback });
       const done = Object.values(s.agents).filter((a) => a.status === 'DONE' || a.status === 'FAILED').length;
       s.batchFraction = Math.max(s.batchFraction, (p.round ?? 0) === 0 ? 0.25 + 0.5 * (done / Object.keys(s.agents).length) : 0.8);
-      if (p.usedFallback) log(`${NAMES[id]}: modelul principal indisponibil, a rulat rezerva ${p.model}.`, 'warn');
+      if (p.usedFallback) log(`${NAMES[id]}: cota gratuită a modelului principal e consumată azi; a lucrat pe rezerva ${p.model}.`, 'info');
       break;
     }
     case 'AGENT_FAILED': if (e.agentId && s.agents[e.agentId]) { setAgent(e.agentId, { status: 'FAILED', activeFixtures: [] }); } log(`${NAMES[e.agentId ?? ''] ?? 'Agent'}: ${short(p.error, 120)} ${p.consequence ?? ''}`, 'bad'); break;
