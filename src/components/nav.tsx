@@ -20,7 +20,7 @@ export function Nav({ admin, name }: { admin: boolean; name: string }) {
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
         <Link href="/dashboard" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
           <img src="/favicon.svg" alt="" className="h-8 w-8" />
-          <span>BETMIND <span className="text-cyan">SIX</span></span>
+          <span>PRIMUL <span className="text-cyan">11</span></span>
         </Link>
         <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Navigare principală">
           {all.map(({ href, label, icon: Icon }) => {

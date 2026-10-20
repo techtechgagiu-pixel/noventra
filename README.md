@@ -1,4 +1,4 @@
-# BETMIND SIX · NEXUS 5.0
+# PRIMUL 11 (formerly BETMIND SIX · NEXUS 5.0)
 
 **Six Minds. One Decision.** — analiză de fotbal cu șase agenți AI, pe date reale, cu replay complet al deciziilor.
 

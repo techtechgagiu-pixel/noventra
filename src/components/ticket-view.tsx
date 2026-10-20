@@ -16,7 +16,7 @@ export type TicketData = {
 const RISK_RO: Record<string, string> = { LOW: 'Risc scăzut', MEDIUM: 'Risc mediu', HIGH: 'Risc ridicat' };
 
 export function ticketText(t: TicketData) {
-  const lines = [`BETMIND SIX — ${t.title}`, `Creat: ${fmtDateTime(t.createdAt)} (ora României)`, `Țintă: ${t.target} · Cotă reală: ${odds(t.actualOdds)} · ${t.legCount} meciuri`, ''];
+  const lines = [`PRIMUL 11 — ${t.title}`, `Creat: ${fmtDateTime(t.createdAt)} (ora României)`, `Țintă: ${t.target} · Cotă reală: ${odds(t.actualOdds)} · ${t.legCount} meciuri`, ''];
   t.selections.forEach((s) => lines.push(`${s.position}. ${s.snapshot.match} (${s.snapshot.league}) — ${fmtDateTime(s.snapshot.kickoff)}`, `   ${s.market_label} @ ${odds(s.odds)} · ${s.bookmaker} · cotă observată ${fmtDateTime(s.quote_observed_at)} · ${s.votes_for}/${t.summary.agents ?? 6} voturi`));
   if (t.mixedBookmakers) lines.push('', 'Atenție: cotele provin de la bookmakeri diferiți; cota combinată poate să nu fie reproductibilă la un singur operator.');
   lines.push('', 'Cotele sunt cele observate la creare și se pot schimba. Analiza nu garantează rezultatul. 18+');

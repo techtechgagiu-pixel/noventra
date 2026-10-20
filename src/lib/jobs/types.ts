@@ -1,3 +1,4 @@
+import type { NewsItem } from '../news/google-news';
 import type { FixtureModel } from '../stats/engine';
 import type { OddsSnapshot } from '../sports/types';
 import type { ScoutDossier } from '../scout/dossier';
@@ -11,7 +12,7 @@ export const STAGES: { id: Stage; label: string }[] = [
   { id: 'SELECTING', label: 'Alegerea meciurilor' },
   { id: 'SCOUT', label: 'Cercetarea SCOUT' },
   { id: 'STATS', label: 'Calculele statistice' },
-  { id: 'ANALYSIS', label: 'Analiza celor zece agenți' },
+  { id: 'ANALYSIS', label: 'Analiza celor unsprezece agenți' },
   { id: 'DEBATE', label: 'Dezbaterea' },
   { id: 'VOTING', label: 'Votarea și validarea' },
   { id: 'BUILDING', label: 'Construirea biletului' },
@@ -40,4 +41,6 @@ export type FixtureSnapshot = {
   model: FixtureModel;
   dossier: ScoutDossier;
   dataQuality: { historyHome: number; historyAway: number; shotsAvailable: boolean; standings: boolean; oddsObservedAt: string };
+  /** Real dated headlines for HANȚU (Google News); absent for older snapshots and demo data. */
+  news?: { home: NewsItem[]; away: NewsItem[]; errors: string[] };
 };

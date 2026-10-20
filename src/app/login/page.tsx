@@ -11,7 +11,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-md p-8 text-center">
         <img src="/favicon.svg" alt="" className="mx-auto h-14 w-14" />
-        <h1 className="mt-4 font-display text-3xl font-bold">BETMIND SIX</h1>
+        <h1 className="mt-4 font-display text-3xl font-bold">PRIMUL 11</h1>
         <p className="mt-2 text-muted">Conectează-te pentru a-ți crea și păstra biletele.</p>
         {error && <p role="alert" className="mt-4 rounded-lg bg-rose/10 p-3 text-sm text-rose">{ERRORS[error] ?? 'Eroare la autentificare.'}</p>}
         <a href="/auth/google" className={`btn btn-primary mt-6 w-full py-4 text-base ${authConfigured() ? '' : 'pointer-events-none opacity-50'}`}>

@@ -15,6 +15,7 @@ export const AGENT_META: Record<string, { name: string; short?: string; title: s
   ioana: { name: 'Cristi Chivu', short: 'Chivu', title: 'Fost căpitan, antrenor', accent: '#f472b6', img: '/agents/ioana.webp' },
   radu: { name: 'Răzvan Lucescu', short: 'R. Lucescu', title: 'Antrenor', accent: '#2dd4bf', img: '/agents/radu.webp' },
   elena: { name: 'Dumitru Dragomir', short: 'Dragomir', title: '„Mitică Dragomir”', accent: '#facc15', img: '/agents/elena.webp' },
+  hantu: { name: 'Hanțu', short: 'Hanțu', title: 'Omul de știri · doar presa sportivă', accent: '#84cc16', img: '/agents/hantu.webp' },
   cosmin: { name: 'Anghel Iordănescu', short: 'Iordănescu', title: 'Fost selecționer', accent: '#fb923c', img: '/agents/cosmin.webp' },
 };
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {

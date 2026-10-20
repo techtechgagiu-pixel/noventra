@@ -30,8 +30,8 @@ export type NexusState = {
   seed: string | null;
 };
 
-const VOTERS = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin'];
-const NAMES: Record<string, string> = { victor: 'Mircea Sandu', andrei: 'Gheorghe Hagi', mihai: 'Gică Popescu', alex: 'Adrian Mutu', diana: 'Răzvan Raț', robert: 'Mircea Lucescu', ioana: 'Cristi Chivu', radu: 'Răzvan Lucescu', elena: 'Dumitru Dragomir', cosmin: 'Anghel Iordănescu', scout: 'SCOUT' };
+const VOTERS = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin', 'hantu'];
+const NAMES: Record<string, string> = { victor: 'Mircea Sandu', andrei: 'Gheorghe Hagi', mihai: 'Gică Popescu', alex: 'Adrian Mutu', diana: 'Răzvan Raț', robert: 'Mircea Lucescu', ioana: 'Cristi Chivu', radu: 'Răzvan Lucescu', elena: 'Dumitru Dragomir', cosmin: 'Anghel Iordănescu', hantu: 'Hanțu', scout: 'SCOUT' };
 
 export function initialState(): NexusState {
   return {
@@ -73,6 +73,7 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
       break;
     case 'BATCH_STARTED': s.batchIndex = (p.batch ?? 1) - 1; s.batchFraction = 0; for (const id of p.fixtures ?? []) setFx(id, { state: 'RESEARCH' }); log(`Lotul ${p.batch}/${p.of} intră în analiză.`); break;
     case 'SCOUT_STARTED': s.scout = { ...s.scout, status: 'RESEARCHING', message: p.message }; log(p.message); break;
+    case 'NEWS_COLLECTED': log(`Hanțu: ${p.home + p.away} știri despre ${p.match}${p.headlines?.[0] ? ` — „${short(p.headlines[0].title, 90)}” (${p.headlines[0].source ?? 'presă'})` : ''}.`); break;
     case 'SCOUT_COMPLETED': s.scout = { ...s.scout, status: 'DONE', message: p.message, model: p.model ?? s.scout.model, dossiers: s.scout.dossiers + 1 }; s.batchFraction = Math.max(s.batchFraction, 0.15); log(`SCOUT: dosar istoric pentru ${p.match} (${p.homeSample}+${p.awaySample} meciuri).`); break;
     case 'STATS_COMPLETED': s.batchFraction = Math.max(s.batchFraction, 0.25); log(`Model statistic: ${p.match} — λ ${p.lambdaHome}–${p.lambdaAway}, incertitudine ${p.uncertainty}.`); break;
     case 'AGENT_STARTED': {

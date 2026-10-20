@@ -26,6 +26,22 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
   };
 }
 
+/** HANȚU's facts: only real headlines (indexed), prices in his band and standings — no statistics. */
+export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
+  const n = s.news ?? { home: [], away: [], errors: [] };
+  let i = 0;
+  const fmt = (x: { title: string; source: string | null; publishedAt: string }) => `[H${++i}] ${x.publishedAt.slice(0, 10)} · ${x.source ?? 'sursă necunoscută'}: ${x.title}`;
+  return {
+    fixtureId: s.fixture.id,
+    match: `${s.fixture.home} – ${s.fixture.away}`,
+    league: s.fixture.league,
+    kickoffUtc: s.fixture.kickoff,
+    standings: { home: s.standings.home, away: s.standings.away },
+    news: { [s.fixture.home]: n.home.map(fmt), [s.fixture.away]: n.away.map(fmt), note: n.home.length + n.away.length === 0 ? 'Nicio știre relevantă găsită în ultimele zile.' : undefined },
+    markets: s.model.markets.filter((m) => m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, odds: m.odds, fair: m.fairMarketProbability })),
+  };
+}
+
 export type FinalPosition = { agentId: string; decision: 'BET_CANDIDATE' | 'NO_BET'; marketKey: string | null; estimatedProbability: number | null; confidence: number; risk: string; round: number; rationale: string; provider: string; model: string };
 
 /** Canonicalises equivalent selections so votes are comparable. */

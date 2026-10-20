@@ -13,8 +13,9 @@ import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sp
 import type { Fixture } from '../sports/types';
 import { modelFixture } from '../stats/engine';
 import { localDate, yyyymmdd } from '../time';
-import { agentFacts, characterViolation, consensus, contested, riskClass, toPosition, type FinalPosition } from './analysis';
+import { agentFacts, characterViolation, newsFacts, consensus, contested, riskClass, toPosition, type FinalPosition } from './analysis';
 import { agentTrackRecord, trackRecordText } from '../track-record';
+import { teamNews } from '../news/google-news';
 import { recordEvent } from './events';
 import type { CandidateEntry, Checkpoint, FixtureSnapshot, Stage } from './types';
 
@@ -148,9 +149,15 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
       const dossier = buildDossier({ home: f.home, away: f.away, kickoff: f.kickoff, league: f.leagueName, homeMatches: home.matches, awayMatches: away.matches, missing: [...home.missing, ...away.missing] });
       const ppg = (s: { points: number | null; played: number | null } | null) => (s && s.points !== null && s.played ? Math.round((s.points / s.played) * 100) / 100 : null);
       const model = modelFixture({ homeHistory: home.matches, awayHistory: away.matches, markets: f.odds.markets, homePpg: ppg(standings.home), awayPpg: ppg(standings.away) });
+      let news: FixtureSnapshot['news'];
+      if (f.provider !== 'demo') {
+        const [nh, na] = await Promise.all([teamNews(f.home, f.kickoff), teamNews(f.away, f.kickoff)]);
+        news = { home: nh.items, away: na.items, errors: [...nh.errors, ...na.errors] };
+        await recordEvent(job.id, { type: 'NEWS_COLLECTED', stage: 'SCOUT', fixtureId: f.id, agentId: 'hantu', payload: { match: `${f.home} – ${f.away}`, home: nh.items.length, away: na.items.length, headlines: [...nh.items, ...na.items].slice(0, 6).map((x) => ({ title: x.title, source: x.source, publishedAt: x.publishedAt, link: x.link })), errors: news.errors.slice(0, 2) } });
+      }
       const snapshot: FixtureSnapshot = {
         fixture: { id: f.id, home: f.home, away: f.away, league: `${f.country} · ${f.leagueName}`, leagueKey: f.leagueKey, kickoff: f.kickoff, provider: f.provider, providerId: f.providerId },
-        odds: f.odds, standings, model, dossier,
+        odds: f.odds, standings, model, dossier, news,
         dataQuality: { historyHome: home.matches.length, historyAway: away.matches.length, shotsAvailable: model.usedShotsOnTarget, standings: !!(standings.home && standings.away), oddsObservedAt: f.odds.observedAt },
       };
       await query('INSERT INTO fixture_snapshots(fixture_id, job_id, payload, data_quality) VALUES ($1,$2,$3,$4)', [f.id, job.id, JSON.stringify(snapshot), JSON.stringify(snapshot.dataQuality)]);
@@ -216,7 +223,9 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
   const stage: Stage = round === 0 ? 'ANALYSIS' : 'DEBATE';
   await recordEvent(job.id, { type: 'AGENT_STARTED', stage, agentId: agent.id, payload: { round, fixtures: snaps.map((s) => s.fixture.id), provider: assignment.primary.provider, model: assignment.primary.model, promptVersion: assignment.promptVersion } });
   const policy = jobPolicy(job);
-  const facts = snaps.map((s) => agentFacts(s, { minOdds: policy.minOdds, maxOdds: Math.min(agent.maxOdds, policy.maxOdds) }));
+  const band = { minOdds: policy.minOdds, maxOdds: Math.min(agent.maxOdds, policy.maxOdds) };
+  const facts: Array<{ fixtureId: string; match: string; markets: Array<{ key: string; odds: number; est?: number | null; ev?: number | null }> }> =
+    agent.id === 'hantu' ? snaps.map((s) => newsFacts(s, band)) : snaps.map((s) => agentFacts(s, band));
   const record = trackRecordText(await agentTrackRecord(agent.id).catch(() => null));
   const validKeys = new Map(snaps.map((s) => [s.fixture.id, new Set(s.model.markets.map((m) => m.key))]));
   let user: string;
