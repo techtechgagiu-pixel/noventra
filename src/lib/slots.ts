@@ -28,10 +28,10 @@ export const POLICIES = {
 } satisfies Record<string, LegPolicy>;
 
 export const SLOTS: readonly SlotDefinition[] = [
-  { id: 'FIVE_A', title: 'COTĂ 5 — BILETUL A', subtitle: 'Bilet zilnic · minimum 3 meciuri, cote 1.15–1.65', target: 5, period: 'daily', requiredLegs: null, variant: 'A', windowDays: 5, policy: POLICIES.five },
-  { id: 'FIVE_B', title: 'COTĂ 5 — BILETUL B', subtitle: 'Bilet zilnic · minimum 3 meciuri, cote 1.15–1.65', target: 5, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 5, policy: POLICIES.five },
-  { id: 'TWO_A', title: 'COTĂ 2 — BILETUL A', subtitle: 'Bilet zilnic · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'A', windowDays: 5, policy: POLICIES.two },
-  { id: 'TWO_B', title: 'COTĂ 2 — BILETUL B', subtitle: 'Bilet zilnic · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 5, policy: POLICIES.two },
+  { id: 'FIVE_A', title: 'COTĂ 5 — BILETUL A', subtitle: 'Azi și mâine · minimum 3 meciuri, cote 1.15–1.65', target: 5, period: 'daily', requiredLegs: null, variant: 'A', windowDays: 2, policy: POLICIES.five },
+  { id: 'FIVE_B', title: 'COTĂ 5 — BILETUL B', subtitle: 'Azi și mâine · minimum 3 meciuri, cote 1.15–1.65', target: 5, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 2, policy: POLICIES.five },
+  { id: 'TWO_A', title: 'COTĂ 2 — BILETUL A', subtitle: 'Azi și mâine · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'A', windowDays: 2, policy: POLICIES.two },
+  { id: 'TWO_B', title: 'COTĂ 2 — BILETUL B', subtitle: 'Azi și mâine · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 2, policy: POLICIES.two },
   { id: 'WEEKLY_100', title: 'BILETUL SĂPTĂMÂNII', subtitle: 'COTĂ 100 — 12 MECIURI', target: 100, period: 'weekly', requiredLegs: 12, variant: 'W', windowDays: 7, policy: POLICIES.weekly },
 ] as const;
 
@@ -52,7 +52,7 @@ export function periodKey(slot: SlotDefinition, at: Date = new Date()): string {
   return slot.period === 'daily' ? localDate(at) : isoWeekStart(at);
 }
 
-/** Fixture window: daily = today + 4 days; weekly = 7 days from the actual creation date. */
+/** Fixture window: daily = today + tomorrow (Romanian calendar days); weekly = 7 days from the actual creation date. */
 export function fixtureWindow(slot: SlotDefinition, at: Date = new Date()) {
   const start = localDate(at);
   return { startDate: start, endDateExclusive: addDays(start, slot.windowDays), days: slot.windowDays };

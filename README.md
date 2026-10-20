@@ -12,8 +12,8 @@ Five generation slots per user, locked server-side by a unique `(user, slot, per
 
 | Slot | Target | Period | Legs |
 |---|---|---|---|
-| `FIVE_A`, `FIVE_B` | 5 | Romanian calendar day | AUTO 3–7, each leg 1.15–1.65, engine p ≥ 60% |
-| `TWO_A`, `TWO_B` | 2 | Romanian calendar day | AUTO 2–4, each leg 1.12–1.45, engine p ≥ 68% |
+| `FIVE_A`, `FIVE_B` | 5 | today + tomorrow (Romanian days) | AUTO 3–7, each leg 1.15–1.65, engine p ≥ 60% |
+| `TWO_A`, `TWO_B` | 2 | today + tomorrow (Romanian days) | AUTO 2–4, each leg 1.12–1.45, engine p ≥ 68% |
 | `WEEKLY_100` | 100 | ISO week (Mon 00:00 Bucharest) | exactly 12 distinct fixtures, each leg 1.20–1.85, p ≥ 55% |
 
 (`TEN_A`/`TEN_B` — COTĂ 10 — were retired; old rows remain readable as history.)
