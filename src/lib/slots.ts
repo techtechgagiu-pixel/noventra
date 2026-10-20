@@ -24,7 +24,8 @@ export type LegPolicy = { minOdds: number; maxOdds: number; minProbability: numb
 export const POLICIES = {
   five: { minOdds: 1.15, maxOdds: 1.65, minProbability: 0.6, minLegs: 3, maxLegs: 7 },
   two: { minOdds: 1.12, maxOdds: 1.45, minProbability: 0.68, minLegs: 2, maxLegs: 4 },
-  weekly: { minOdds: 1.2, maxOdds: 1.85, minProbability: 0.55, minLegs: 12, maxLegs: 12 },
+  // 12 legs × ~1.47 average ≈ 100: small prices alone cannot reach it, so the weekly band starts at 1.35 and allows up to 2.00.
+  weekly: { minOdds: 1.35, maxOdds: 2.0, minProbability: 0.5, minLegs: 12, maxLegs: 12 },
 } satisfies Record<string, LegPolicy>;
 
 export const SLOTS: readonly SlotDefinition[] = [
@@ -32,7 +33,7 @@ export const SLOTS: readonly SlotDefinition[] = [
   { id: 'FIVE_B', title: 'COTĂ 5 — BILETUL B', subtitle: 'Azi și mâine · minimum 3 meciuri, cote 1.15–1.65', target: 5, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 2, policy: POLICIES.five },
   { id: 'TWO_A', title: 'COTĂ 2 — BILETUL A', subtitle: 'Azi și mâine · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'A', windowDays: 2, policy: POLICIES.two },
   { id: 'TWO_B', title: 'COTĂ 2 — BILETUL B', subtitle: 'Azi și mâine · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 2, policy: POLICIES.two },
-  { id: 'WEEKLY_100', title: 'BILETUL SĂPTĂMÂNII', subtitle: 'COTĂ 100 — 12 MECIURI', target: 100, period: 'weekly', requiredLegs: 12, variant: 'W', windowDays: 7, policy: POLICIES.weekly },
+  { id: 'WEEKLY_100', title: 'BILETUL SĂPTĂMÂNII', subtitle: 'COTĂ 100 — 12 MECIURI · cote 1.35–2.00', target: 100, period: 'weekly', requiredLegs: 12, variant: 'W', windowDays: 7, policy: POLICIES.weekly },
 ] as const;
 
 export function slotById(id: string): SlotDefinition | undefined {
