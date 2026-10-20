@@ -22,11 +22,18 @@ export async function sportsGet<T = unknown>(url: string, opts: { provider: stri
   const work = (async () => {
     const usage = await providerUsageToday(opts.provider).catch(() => ({ requests: 0 }));
     if (usage.requests >= config.limits.sportsDailyRequests) throw new QuotaExceededError(opts.provider);
-    const response = await fetch(url, {
-      headers: { Accept: opts.as === 'text' ? 'text/html' : 'application/json' },
-      signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
-    });
-    void recordProviderUsage(opts.provider, { errors: response.ok ? 0 : 1 });
+    // Public sources throttle bursts (ESPN answers 403/429 when hit too fast): back off and retry twice.
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, attempt * 2000 + Math.random() * 1000));
+      response = await fetch(url, {
+        headers: { Accept: opts.as === 'text' ? 'text/html' : 'application/json' },
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
+      });
+      void recordProviderUsage(opts.provider, { errors: response.ok ? 0 : 1 });
+      if (response.ok || ![403, 429, 500, 502, 503, 504].includes(response.status)) break;
+    }
+    response = response!;
     if (!response.ok) throw new Error(`${opts.provider} a răspuns ${response.status}`);
     const value = opts.as === 'text' ? await response.text() : await response.json();
     if (cache.size > 2000) cache.clear();

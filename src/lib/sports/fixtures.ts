@@ -26,7 +26,7 @@ export const liveProvider: FixtureProvider = async (leagues, days) => {
   );
   const results: Fixture[][] = [];
   // Bounded concurrency to stay polite with the public source.
-  for (let i = 0; i < tasks.length; i += 8) results.push(...(await Promise.all(tasks.slice(i, i + 8))));
+  for (let i = 0; i < tasks.length; i += 4) results.push(...(await Promise.all(tasks.slice(i, i + 4))));
   const daySet = new Set(days);
   const unique = new Map<string, Fixture>();
   for (const f of results.flat()) if (daySet.has(localDate(new Date(f.kickoff)))) unique.set(f.id, f);
