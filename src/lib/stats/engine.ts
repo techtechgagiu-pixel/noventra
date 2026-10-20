@@ -35,6 +35,7 @@ export function selectionWins(key: string, hg: number, ag: number): boolean | nu
     case 'DC': return parts[1] === '1X' ? hg >= ag : parts[1] === 'X2' ? ag >= hg : hg !== ag;
     case 'TOTAL': { const line = Number(parts[2]); return parts[1] === 'OVER' ? hg + ag > line : hg + ag < line; }
     case 'AH': { const line = Number(parts[2]); return parts[1] === 'HOME' ? hg + line > ag : ag + line > hg; }
+    case 'TT': { const goals = parts[1] === 'HOME' ? hg : ag; const line = Number(parts[3]); return parts[2] === 'OVER' ? goals > line : goals < line; }
     default: return null;
   }
 }
@@ -91,11 +92,12 @@ export function fairProbabilities(markets: MarketQuote[]) {
   const out = new Map<string, { implied: number; fair: number | null; groupMargin: number | null }>();
   const groups = new Map<string, MarketQuote[]>();
   for (const m of markets) {
-    const g = m.marketType === '1X2' ? '1X2' : m.marketType === 'TOTAL' ? `TOTAL:${m.line}` : m.marketType === 'HANDICAP' ? `AH:${Math.abs(m.line ?? 0)}` : m.key;
+    const book = m.bookmaker ?? '';
+    const g = m.marketType === '1X2' ? `1X2|${book}` : m.marketType === 'TOTAL' ? `TOTAL:${m.line}|${book}` : m.marketType === 'HANDICAP' ? `AH:${Math.abs(m.line ?? 0)}|${book}` : m.marketType === 'TEAM_TOTAL' ? `TT:${m.key.split(':')[1]}:${m.line}|${book}` : m.key;
     groups.set(g, [...(groups.get(g) ?? []), m]);
   }
   for (const [g, list] of groups) {
-    const complete = g === '1X2' ? list.length === 3 : g.startsWith('TOTAL') || g.startsWith('AH') ? list.length === 2 : false;
+    const complete = g.startsWith('1X2|') ? list.length === 3 : g.startsWith('TOTAL') || g.startsWith('AH') || g.startsWith('TT:') ? list.length === 2 : false;
     const sum = list.reduce((s, m) => s + 1 / m.odds, 0);
     for (const m of list) out.set(m.key, { implied: 1 / m.odds, fair: complete ? 1 / m.odds / sum : null, groupMargin: complete ? sum - 1 : null });
   }
@@ -110,6 +112,7 @@ export function fairProbabilities(markets: MarketQuote[]) {
 
 export type MarketEstimate = {
   key: string;
+  bookmaker?: string;
   label: string;
   odds: number;
   impliedProbability: number;
@@ -156,7 +159,7 @@ export function modelFixture(input: { homeHistory: HistoricalMatch[]; awayHistor
     const fairP = f?.fair ?? null;
     const est = fairP !== null && modelP !== null ? (1 - modelWeight) * fairP + modelWeight * modelP : fairP ?? (modelP !== null ? 0.5 * modelP + 0.5 * (f?.implied ?? modelP) : null);
     return {
-      key: m.key, label: m.label, odds: m.odds,
+      key: m.key, label: m.label, odds: m.odds, bookmaker: m.bookmaker,
       impliedProbability: round(1 / m.odds), fairMarketProbability: fairP === null ? null : round(fairP),
       modelProbability: modelP === null ? null : round(modelP), estimatedProbability: est === null ? null : round(est),
       expectedValue: est === null ? null : round(expectedValue(est, m.odds)),

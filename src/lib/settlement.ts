@@ -12,6 +12,7 @@ export function settleMarket(key: string, home: number, away: number): 'WON' | '
     case 'DC': return (side === '1X' ? home >= away : side === 'X2' ? away >= home : home !== away) ? 'WON' : 'LOST';
     case 'TOTAL': return (side === 'OVER' ? home + away > line : home + away < line) ? 'WON' : 'LOST';
     case 'AH': return (side === 'HOME' ? home + line > away : away + line > home) ? 'WON' : 'LOST';
+    case 'TT': { const goals = side === 'HOME' ? home : away; const l = Number(key.split(':')[3]); return (key.split(':')[2] === 'OVER' ? goals > l : goals < l) ? 'WON' : 'LOST'; }
     default: return null;
   }
 }

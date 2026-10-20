@@ -16,6 +16,15 @@ export async function ensureAgentConfig() {
        WHERE NOT EXISTS (SELECT 1 FROM agent_model_assignments WHERE agent_id=$1 AND active)`,
       [a.id, a.defaultModel.provider, a.defaultModel.model, a.defaultFallback?.provider ?? null, a.defaultFallback?.model ?? null],
     );
+    // A system default (never edited by an admin) follows the code's current verified default, as a new version.
+    await query(
+      `WITH cur AS (SELECT id FROM agent_model_assignments WHERE agent_id=$1 AND active AND created_by IS NULL
+         AND (provider, model_id, COALESCE(fallback_provider,''), COALESCE(fallback_model_id,'')) IS DISTINCT FROM ($2::text, $3::text, COALESCE($4::text,''), COALESCE($5::text,''))),
+       off AS (UPDATE agent_model_assignments SET active=false WHERE id IN (SELECT id FROM cur) RETURNING id)
+       INSERT INTO agent_model_assignments(agent_id, provider, model_id, fallback_provider, fallback_model_id, active, reason)
+       SELECT $1,$2,$3,$4,$5,true,'Implicit actualizat: încărcare mutată pe Gemini pentru limita zilnică Groq (200k tokeni/model)' FROM off`,
+      [a.id, a.defaultModel.provider, a.defaultModel.model, a.defaultFallback?.provider ?? null, a.defaultFallback?.model ?? null],
+    );
   }
   seeded = true;
 }

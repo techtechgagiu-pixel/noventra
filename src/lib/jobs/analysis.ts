@@ -21,7 +21,7 @@ export function agentFacts(s: FixtureSnapshot) {
     standings: { home: s.standings.home, away: s.standings.away },
     scout: { home: team(d.home), away: team(d.away) },
     model: { lambdaHome: s.model.lambdaHome, lambdaAway: s.model.lambdaAway, uncertainty: s.model.uncertainty, margin1x2: s.model.bookmakerMargin1x2 },
-    markets: s.model.markets.map((m) => ({ key: m.key, odds: m.odds, fair: m.fairMarketProbability, model: m.modelProbability, est: m.estimatedProbability, ev: m.expectedValue })),
+    markets: s.model.markets.filter((m) => m.odds >= 1.12 && m.odds <= 6).map((m) => ({ key: m.key, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: m.fairMarketProbability, model: m.modelProbability, est: m.estimatedProbability, ev: m.expectedValue })),
     missing: d.missing.filter((x) => !/xG|Accident/.test(x)).slice(0, 2),
   };
 }
@@ -45,7 +45,7 @@ export type ConsensusResult = { outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET'
  * selection it implies (e.g. "Away wins" ⇒ "Draw or Away"), because an agent backing the former necessarily backs the latter.
  * Among keys reaching the threshold, the most specific one (highest odds = fewest implied outcomes) is chosen.
  */
-export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 6, availableKeys?: Array<{ key: string; odds: number }>): ConsensusResult {
+export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 10, availableKeys?: Array<{ key: string; odds: number }>): ConsensusResult {
   const bets = positions.filter((p) => p.decision === 'BET_CANDIDATE' && p.marketKey);
   const noBet = positions.length - bets.length;
   const abstentions = totalAgents - positions.length;
@@ -65,9 +65,10 @@ export function consensus(positions: FinalPosition[], threshold: number, totalAg
 }
 
 /** Fixtures that deserve a debate: a plausible consensus that is not already unanimous. */
-export function contested(positions: FinalPosition[], availableKeys?: Array<{ key: string; odds: number }>) {
-  const c = consensus(positions, 99, 6, availableKeys);
-  return c.votesFor >= 2 && c.votesFor < 6;
+export function contested(positions: FinalPosition[], availableKeys?: Array<{ key: string; odds: number }>, threshold = 3, total = 10) {
+  // Debate where it can change the outcome: one vote short of the threshold, or a qualified pick that the majority still rejects.
+  const c = consensus(positions, threshold, total, availableKeys);
+  return (c.outcome !== 'QUALIFIED' && c.votesFor === threshold - 1) || (c.outcome === 'QUALIFIED' && c.noBetVotes > total / 2);
 }
 
 export function toPosition(agentId: string, p: Prediction | Revision, round: number, provider: string, model: string, validKeys: Set<string>): FinalPosition {

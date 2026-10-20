@@ -12,7 +12,7 @@ describe('voting', () => {
   });
   it('3/6 is NO CONSENSUS; 4 NO_BET is NO BET; failed agents are abstentions, not votes', () => {
     expect(consensus([pos('a', '1X2:HOME'), pos('b', '1X2:HOME'), pos('c', '1X2:HOME'), pos('d', 'TOTAL:OVER:2.5'), pos('e', null), pos('f', null)], 4).outcome).toBe('NO_CONSENSUS');
-    expect(consensus([pos('a', null), pos('b', null), pos('c', null), pos('d', null), pos('e', '1X2:HOME')], 4)).toMatchObject({ outcome: 'NO_BET', abstentions: 1 });
+    expect(consensus([pos('a', null), pos('b', null), pos('c', null), pos('d', null), pos('e', '1X2:HOME')], 4, 6)).toMatchObject({ outcome: 'NO_BET', abstentions: 1 });
     expect(consensus([pos('a', '1X2:HOME'), pos('b', '1X2:HOME'), pos('c', '1X2:HOME')], 4).outcome).toBe('NO_CONSENSUS');
   });
   it('normalises equivalent selections and rejects keys not in the market list', () => {
@@ -79,5 +79,20 @@ describe('logical vote normalisation', () => {
   it('never counts unrelated markets together', () => {
     const c = consensus([pos('a', '1X2:AWAY'), pos('b', 'TOTAL:UNDER:2.5'), pos('c', 'TOTAL:UNDER:2.5'), pos('d', '1X2:AWAY'), pos('e', null), pos('f', null)], 4, 6, keys);
     expect(c.outcome).toBe('NO_CONSENSUS');
+  });
+});
+
+describe('ten agents, threshold 3/10', () => {
+  it('3 of 10 matching votes qualify; 2 of 10 do not', () => {
+    const p = (id: string, k: string | null) => pos(id, k);
+    const ten = (keys: Array<string | null>) => keys.map((k, i) => p(`a${i}`, k));
+    expect(consensus(ten(['1X2:HOME', '1X2:HOME', 'DC:1X', null, null, null, null, null, null, null]), 3, 10, [{ key: '1X2:HOME', odds: 1.9 }, { key: 'DC:1X', odds: 1.3 }])).toMatchObject({ outcome: 'QUALIFIED', marketKey: 'DC:1X', votesFor: 3 });
+    expect(consensus(ten(['1X2:HOME', '1X2:HOME', 'TOTAL:OVER:2.5', null, null, null, null, null, null, null]), 3, 10, [{ key: '1X2:HOME', odds: 1.9 }, { key: 'TOTAL:OVER:2.5', odds: 1.8 }]).outcome).toBe('NO_BET');
+  });
+  it('team totals settle and imply correctly', async () => {
+    const { selectionImplies } = await import('@/lib/stats/engine');
+    expect(selectionImplies('TT:HOME:OVER:1.5', 'TT:HOME:OVER:0.5')).toBe(true);
+    expect(selectionImplies('TT:HOME:OVER:1.5', 'TOTAL:OVER:1.5')).toBe(true);
+    expect(settleMarket('TT:AWAY:UNDER:1.5', 3, 1)).toBe('WON');
   });
 });

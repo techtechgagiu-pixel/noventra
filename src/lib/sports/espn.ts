@@ -187,3 +187,104 @@ export async function espnTeamPastEvents(leagueKey: string, teamId: string, befo
     .slice(0, limit)
     .map((e) => ({ eventId: str(e.id)!, date: str(e.date)! }));
 }
+
+// ── Extra markets (ESPN core odds API) ─────────────────────────────────────────
+const CORE = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues';
+
+/** "14/5" → 3.8; "evens" → 2. Returns null when not parseable. */
+export function fractionalToDecimal(raw: unknown): number | null {
+  if (typeof raw !== 'string') return null;
+  if (/^evens?$/i.test(raw.trim())) return 2;
+  const m = raw.trim().match(/^(\d+)\/(\d+)$/);
+  if (!m || Number(m[2]) === 0) return null;
+  return Math.round((1 + Number(m[1]) / Number(m[2])) * 1000) / 1000;
+}
+
+const teamIdFromRef = (o: Obj) => (str(obj(o.team).$ref) ?? '').match(/\/teams\/(\d+)/)?.[1];
+
+/**
+ * Additional priced selections for one fixture, each tagged with its own bookmaker:
+ * - Bet365 (labelled fields): 1X2, double chance (1X/X2/12), goal line when it is a .5 line.
+ * - DraftKings props: double chance (team-tagged), team totals per line. Over/under labels are
+ *   not published, so a line pair is accepted only when one side's prices rise strictly with the
+ *   line (that side is "over") and the other's fall — otherwise the market is dropped, never guessed.
+ */
+export async function espnExtraMarkets(f: { leagueKey: string; providerId: string; home: string; away: string; homeTeamId?: string; awayTeamId?: string }): Promise<MarketQuote[]> {
+  if (!/^[a-z0-9.]+$/.test(f.leagueKey) || !/^\d+$/.test(f.providerId)) return [];
+  const base = `${CORE}/${f.leagueKey}/events/${f.providerId}/competitions/${f.providerId}/odds`;
+  const out: MarketQuote[] = [];
+  const add = (q: MarketQuote | null) => { if (q && q.odds > 1.01 && !out.some((x) => x.key === q.key)) out.push(q); };
+  let items: Obj[] = [];
+  try { items = arr(obj(await sportsGet(`${base}?lang=en&region=us`, { provider: 'espn', ttlMs: 10 * 60_000 })).items).map(obj); } catch { return []; }
+
+  // Bet365 block
+  const b365 = items.find((i) => /bet ?365/i.test(str(obj(i.provider).name) ?? ''));
+  const t = obj(obj(b365?.bettingOdds).teamOdds);
+  const fr = (k: string) => fractionalToDecimal(obj(t[k]).value);
+  if (b365) {
+    const bk = 'Bet365';
+    const h = fr('preMatchFullTimeResultHome'), d = fr('preMatchFullTimeResultDraw'), a = fr('preMatchFullTimeResultAway');
+    if (h) add({ key: '1X2:HOME', label: `${f.home} câștigă (1)`, marketType: '1X2', odds: h, bookmaker: bk });
+    if (d) add({ key: '1X2:DRAW', label: 'Egal (X)', marketType: '1X2', odds: d, bookmaker: bk });
+    if (a) add({ key: '1X2:AWAY', label: `${f.away} câștigă (2)`, marketType: '1X2', odds: a, bookmaker: bk });
+    const dc1x = fr('preMatchDoubleChanceHomeOrDraw'), dcx2 = fr('preMatchDoubleChanceDrawOrAway'), dc12 = fr('preMatchDoubleChanceHomeOrAway');
+    if (dc1x) add({ key: 'DC:1X', label: `${f.home} sau egal (1X)`, marketType: 'DOUBLE_CHANCE', odds: dc1x, bookmaker: bk });
+    if (dcx2) add({ key: 'DC:X2', label: `Egal sau ${f.away} (X2)`, marketType: 'DOUBLE_CHANCE', odds: dcx2, bookmaker: bk });
+    if (dc12) add({ key: 'DC:12', label: `${f.home} sau ${f.away} (12)`, marketType: 'DOUBLE_CHANCE', odds: dc12, bookmaker: bk });
+    const line = Number(obj(t.preMatchOverUnderHandicap).value);
+    if (Number.isFinite(line) && Math.abs(line % 1) === 0.5) {
+      const o = fr('preMatchGoalLineOver'), u = fr('preMatchGoalLineUnder');
+      if (o) add({ key: `TOTAL:OVER:${line}`, label: `Peste ${line} goluri`, marketType: 'TOTAL', odds: o, line, bookmaker: bk });
+      if (u) add({ key: `TOTAL:UNDER:${line}`, label: `Sub ${line} goluri`, marketType: 'TOTAL', odds: u, line, bookmaker: bk });
+    }
+  }
+
+  // DraftKings props
+  const dk = items.find((i) => /draftkings/i.test(str(obj(i.provider).name) ?? ''));
+  const propsRef = str(obj(dk?.propBets).$ref);
+  if (propsRef) {
+    try {
+      const url = propsRef.replace(/^http:/, 'https:') + (propsRef.includes('?') ? '&' : '?') + 'limit=300';
+      const props = arr(obj(await sportsGet(url, { provider: 'espn', ttlMs: 10 * 60_000 })).items).map(obj);
+      const price = (p: Obj) => numOrNull(obj(obj(p.current).over).decimal);
+      const bk = 'DraftKings';
+      for (const p of props.filter((x) => str(obj(x.type).name) === 'Double Chance')) {
+        const team = teamIdFromRef(p); const v = price(p);
+        if (!v) continue;
+        if (team && team === f.homeTeamId) add({ key: 'DC:1X', label: `${f.home} sau egal (1X)`, marketType: 'DOUBLE_CHANCE', odds: v, bookmaker: bk });
+        else if (team && team === f.awayTeamId) add({ key: 'DC:X2', label: `Egal sau ${f.away} (X2)`, marketType: 'DOUBLE_CHANCE', odds: v, bookmaker: bk });
+        else if (!team) add({ key: 'DC:12', label: `${f.home} sau ${f.away} (12)`, marketType: 'DOUBLE_CHANCE', odds: v, bookmaker: bk });
+      }
+      for (const [side, teamId, name] of [['HOME', f.homeTeamId, f.home], ['AWAY', f.awayTeamId, f.away]] as const) {
+        if (!teamId) continue;
+        const rows = props.filter((x) => str(obj(x.type).name) === 'Team Total Goals' && teamIdFromRef(x) === teamId)
+          .map((x) => ({ line: numOrNull(obj(obj(x.current).target).value), odds: price(x) }))
+          .filter((r): r is { line: number; odds: number } => r.line !== null && r.odds !== null && Math.abs(r.line % 1) === 0.5);
+        const byLine = new Map<number, number[]>();
+        for (const r of rows) byLine.set(r.line, [...(byLine.get(r.line) ?? []), r.odds]);
+        const lines = [...byLine.keys()].filter((l) => byLine.get(l)!.length === 2).sort((x, y) => x - y);
+        if (lines.length < 2) continue;
+        // Published order is first-of-pair = one side, second = the other. Verify with monotonicity before labelling.
+        const first = lines.map((l) => byLine.get(l)![0]), second = lines.map((l) => byLine.get(l)![1]);
+        const rising = (xs: number[]) => xs.every((v, i) => i === 0 || v > xs[i - 1]);
+        const falling = (xs: number[]) => xs.every((v, i) => i === 0 || v < xs[i - 1]);
+        let overs: number[] | null = null, unders: number[] | null = null;
+        if (rising(first) && falling(second)) { overs = first; unders = second; }
+        else if (rising(second) && falling(first)) { overs = second; unders = first; }
+        if (!overs || !unders) continue;
+        lines.forEach((l, i) => {
+          if (l > 3.5) return;
+          add({ key: `TT:${side}:OVER:${l}`, label: `${name} peste ${l} goluri`, marketType: 'TEAM_TOTAL', odds: overs![i], line: l, bookmaker: bk });
+          add({ key: `TT:${side}:UNDER:${l}`, label: `${name} sub ${l} goluri`, marketType: 'TEAM_TOTAL', odds: unders![i], line: l, bookmaker: bk });
+        });
+      }
+    } catch { /* props optional */ }
+  }
+  return out;
+}
+
+/** Main snapshot markets keep priority; extra markets fill keys the main bookmaker does not offer. */
+export function mergeMarkets(main: MarketQuote[], extra: MarketQuote[], mainBookmaker: string): MarketQuote[] {
+  const keys = new Set(main.map((m) => m.key));
+  return [...main.map((m) => ({ ...m, bookmaker: m.bookmaker ?? mainBookmaker })), ...extra.filter((m) => !keys.has(m.key))];
+}

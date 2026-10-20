@@ -41,27 +41,33 @@ Pipeline per job (checkpointed, idempotent units, `src/lib/jobs/pipeline.ts`):
 Every meaningful transition is an `analysis_events` row (gap-free per-job `seq`). The same client reducer
 (`src/lib/nexus-state.ts`) drives LIVE (SSE + polling fallback) and **Decision Replay** (read-only, zero inference).
 
-## Agents and models (verified in the provider catalogs on 2026-10-19)
+## Agents and models (verified in the provider catalogs on 2026-10-20)
+
+Ten voting agents + SCOUT. Selection threshold: **3/10** on the same canonical market (with logical vote normalisation).
 
 | Agent | Role | Risk | Model | Fallback |
 |---|---|---|---|---|
-| Victor | Strategul | 20 | groq `openai/gpt-oss-20b` | groq `qwen/qwen3.8-27b` |
-| Andrei | Matematicianul | 60 | groq `openai/gpt-oss-120b` | groq `openai/gpt-oss-20b` |
+| Victor | Strategul | 20 | groq `openai/gpt-oss-20b` | gemini `gemini-3-flash-preview` |
+| Andrei | Matematicianul | 60 | groq `openai/gpt-oss-120b` | gemini `gemini-3.6-flash` |
 | Mihai | Veteranul | 40 | gemini `gemini-3.6-flash` | gemini `gemini-3.1-flash-lite` |
-| Alex | Vânătorul de cote | 90 | groq `qwen/qwen3.8-27b` | groq `openai/gpt-oss-20b` |
+| Alex | Vânătorul de cote | 90 | groq `qwen/qwen3.8-27b` | gemini `gemini-3.1-flash-lite` |
 | Diana | Tacticiana | 50 | gemini `gemini-3.5-flash-lite` | gemini `gemini-3.1-flash-lite` |
-| Robert | Managerul de risc | 10 | groq `openai/gpt-oss-120b` | groq `qwen/qwen3.8-27b` |
-| SCOUT | Cercetare (nu votează) | — | groq `openai/gpt-oss-20b` | groq `qwen/qwen3.8-27b` |
+| Robert | Managerul de risc | 10 | groq `openai/gpt-oss-120b` | gemini `gemini-3-flash-preview` |
+| Ioana | Specialista în goluri | 45 | gemini `gemini-3.1-flash-lite` | gemini `gemini-3.5-flash-lite` |
+| Radu | Analistul acasă/deplasare | 30 | gemini `gemini-3.5-flash-lite` | gemini `gemini-3-flash-preview` |
+| Elena | Statisticiana bayesiană | 35 | gemini `gemini-3-flash-preview` | gemini `gemini-3.6-flash` |
+| Cosmin | Analistul de piață | 70 | gemini `gemini-3.1-flash-lite` | gemini `gemini-3-flash-preview` |
+| SCOUT | Cercetare (nu votează) | — | gemini `gemini-3.1-flash-lite` | groq `openai/gpt-oss-20b` |
 
-Substitutions vs. the original brief: Qwen 3 32B and Llama models are no longer in this Groq account's catalog
-(Qwen 3.8 27B is); Gemini 2.5 Flash is closed to new users, Gemini 3.5/3.6 Flash replace it. Assignments are versioned
-in `agent_model_assignments` and editable in **/admin/models**; every prediction stores the model actually used.
-Six models ≠ six statistically independent opinions.
+Groq Free allows **200,000 tokens per day per model** (rolling) and ~8,000 tokens/minute, so most agents run on Gemini.
+Substitutions vs. the original brief are recorded as versioned assignments; every prediction stores the model actually used.
 
 ## Data sources
 
 - **ESPN public site API** — fixtures, status, standings, team schedules, match summaries and embedded bookmaker odds
-  (DraftKings) for 9/10 leagues. No SLA, no contractual licence; `providerUpdatedAt` is unknown → stored as `null`,
+  (DraftKings) for 9/10 TOP leagues + 15 extended competitions (UEFA cups, second divisions, SCO/AUT/DEN/GRE/NOR/SWE).
+  The ESPN core odds API adds Bet365 (1X2, double chance, .5 goal line) and DraftKings props (double chance,
+  team totals; over/under accepted only when the price ladder proves the labels). BTTS is not used (unlabelled at source). No SLA, no contractual licence; `providerUpdatedAt` is unknown → stored as `null`,
   `observedAt` is our read time. Suitable for a personal tool; review licensing before any commercial launch.
 - **LPF (lpf.ro)** — official Romanian SuperLiga schedule. ESPN's `rou.1` feed is stale (last events 2025-09).
   LPF publishes no odds, so Romanian fixtures are shown but never qualify.

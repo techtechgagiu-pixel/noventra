@@ -7,7 +7,8 @@ import { STAGE_ORDER, progress, type AgentView, type NexusState } from '@/lib/ne
 
 const STAGE_LABELS: Record<string, string> = { SELECTING: 'Alegerea meciurilor', SCOUT: 'Cercetarea SCOUT', STATS: 'Calculele statistice', ANALYSIS: 'Analiza celor șase agenți', DEBATE: 'Dezbaterea', VOTING: 'Votarea și validarea', BUILDING: 'Construirea biletului' };
 const STATUS_LABEL: Record<string, string> = { IDLE: 'În așteptare', ANALYZING: 'Analizează', DEBATING: 'Dezbate', DONE: 'Gata', FAILED: 'Abținere (eroare)', WAITING: 'Așteaptă limita' };
-const ORDER = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert'];
+const ORDER = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin'];
+const shown = (s: NexusState) => (s.participants.length >= 6 && s.participants.length < ORDER.length && !!s.final ? ORDER.filter((id) => s.participants.includes(id)) : ORDER);
 
 export type AgentDetail = { agentId: string; items: Array<{ fixture: string; round: number; provider: string; model: string; decision: string; market: string | null; probability: number | null; confidence: number; rationale: string; evidence: string[]; failureReasons: string[]; objection?: string; response?: string }> };
 
@@ -55,8 +56,8 @@ export function NexusView({ state, mode, target, title, live, agentDetails }: { 
       </div>
 
       {/* Agents */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {ORDER.map((id) => <AgentPortrait key={id} a={state.agents[id]} live={animate} onOpen={() => setOpenAgent(id)} />)}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+        {shown(state).map((id) => <AgentPortrait key={id} a={state.agents[id]} live={animate} onOpen={() => setOpenAgent(id)} />)}
       </div>
 
       {/* Network */}
@@ -71,7 +72,7 @@ export function NexusView({ state, mode, target, title, live, agentDetails }: { 
         <div className="space-y-4">
           <Panel title={`Selecții acceptate (${state.accepted.length})`} tone="good">
             {state.accepted.length === 0 ? <p className="text-sm text-muted">Încă nicio selecție cu consens validat.</p> :
-              state.accepted.map((id) => { const f = state.fixtures[id]; return <Row key={id} title={f.match} sub={`${f.marketLabel ?? ''} · ${f.votesFor}/6 voturi`} value={odds(f.odds)} />; })}
+              state.accepted.map((id) => { const f = state.fixtures[id]; return <Row key={id} title={f.match} sub={`${f.marketLabel ?? ''} · ${f.votesFor}/${f.total ?? state.total} voturi`} value={odds(f.odds)} />; })}
             {state.assembly.length > 0 && <div className="mt-3 border-t border-line pt-3 text-xs text-muted">Asamblare: {state.assembly.map((s) => odds(s.odds)).join(' × ')} = <span className="font-bold text-text tabular">{odds(state.assembly.at(-1)?.running)}</span></div>}
           </Panel>
           <Panel title={`Respinse (${state.rejected.length})`} tone="bad">
@@ -122,8 +123,9 @@ function AgentPortrait({ a, live, onOpen }: { a: AgentView; live: boolean; onOpe
 }
 
 function Network({ state, animate, activeFx }: { state: NexusState; animate: boolean; activeFx: string[] }) {
-  const cx = 380, cy = 210, r = 135;
-  const nodes = ORDER.map((id, i) => { const ang = (-90 + i * 60) * (Math.PI / 180); return { id, x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang) }; });
+  const cx = 380, cy = 210, r = 150;
+  const ids = shown(state);
+  const nodes = ids.map((id, i) => { const ang = (-90 + (i * 360) / ids.length) * (Math.PI / 180); return { id, x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang) }; });
   return (
     <svg viewBox="0 0 760 420" className="h-auto w-full" role="img" aria-label="Rețeaua NEXUS: meciuri, agenți și nucleul de decizie">
       <defs>
@@ -142,8 +144,8 @@ function Network({ state, animate, activeFx }: { state: NexusState; animate: boo
         return (
           <g key={n.id}>
             <line x1={cx} y1={cy} x2={n.x} y2={n.y} stroke={m.accent} strokeOpacity={busy ? 0.9 : 0.25} strokeWidth={busy ? 2 : 1} className={busy && animate ? 'flow' : ''} />
-            <circle cx={n.x} cy={n.y} r={24} fill="#0a1228" stroke={m.accent} strokeWidth={a.status === 'IDLE' ? 1 : 2.5} opacity={a.status === 'IDLE' ? 0.6 : 1} />
-            <text x={n.x} y={n.y + 4} textAnchor="middle" fill={m.accent} fontSize="11" fontWeight="700">{m.name}</text>
+            <circle cx={n.x} cy={n.y} r={ids.length > 6 ? 21 : 24} fill="#0a1228" stroke={m.accent} strokeWidth={a.status === 'IDLE' ? 1 : 2.5} opacity={a.status === 'IDLE' ? 0.6 : 1} />
+            <text x={n.x} y={n.y + 4} textAnchor="middle" fill={m.accent} fontSize={ids.length > 6 ? 9.5 : 11} fontWeight="700">{m.name}</text>
             {a.status === 'DONE' && <circle cx={n.x + 18} cy={n.y - 18} r={5} fill="#34d399" />}
             {a.status === 'FAILED' && <circle cx={n.x + 18} cy={n.y - 18} r={5} fill="#fb7185" />}
           </g>

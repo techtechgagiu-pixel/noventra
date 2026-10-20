@@ -7,7 +7,7 @@ import { AGENT_META, OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
 type Sel = { position: number; fixture_id: string; market_key: string; market_label: string; odds: number; bookmaker: string; quote_observed_at: string; votes_for: number; model_probability: number | null; risk: string; snapshot: { match: string; home: string; away: string; league: string; kickoff: string; source: string }; outcome: string; home_score: number | null; away_score: number | null };
 export type TicketData = {
   id: string; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string;
-  summary: { analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
+  summary: { agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
   selections: Sel[];
   decisions: Array<{ fixture_id: string; outcome: string; market_key: string | null; votes_for: number; votes: Array<{ agentId: string; decision: string; marketKey: string | null; model: string; provider: string }>; reason: string }>;
   fixtures: Array<{ fixtureId: string; fixture: { home: string; away: string; league: string; kickoff: string } }>;
@@ -17,7 +17,7 @@ const RISK_RO: Record<string, string> = { LOW: 'Risc scăzut', MEDIUM: 'Risc med
 
 export function ticketText(t: TicketData) {
   const lines = [`BETMIND SIX — ${t.title}`, `Creat: ${fmtDateTime(t.createdAt)} (ora României)`, `Țintă: ${t.target} · Cotă reală: ${odds(t.actualOdds)} · ${t.legCount} meciuri`, ''];
-  t.selections.forEach((s) => lines.push(`${s.position}. ${s.snapshot.match} (${s.snapshot.league}) — ${fmtDateTime(s.snapshot.kickoff)}`, `   ${s.market_label} @ ${odds(s.odds)} · ${s.bookmaker} · cotă observată ${fmtDateTime(s.quote_observed_at)} · ${s.votes_for}/6 voturi`));
+  t.selections.forEach((s) => lines.push(`${s.position}. ${s.snapshot.match} (${s.snapshot.league}) — ${fmtDateTime(s.snapshot.kickoff)}`, `   ${s.market_label} @ ${odds(s.odds)} · ${s.bookmaker} · cotă observată ${fmtDateTime(s.quote_observed_at)} · ${s.votes_for}/${t.summary.agents ?? 6} voturi`));
   if (t.mixedBookmakers) lines.push('', 'Atenție: cotele provin de la bookmakeri diferiți; cota combinată poate să nu fie reproductibilă la un singur operator.');
   lines.push('', 'Cotele sunt cele observate la creare și se pot schimba. Analiza nu garantează rezultatul. 18+');
   return lines.join('\n');
@@ -52,7 +52,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
                   <p className="text-xs text-muted">{s.snapshot.league} · {fmtDateTime(s.snapshot.kickoff)}</p>
                   <p className="text-lg font-semibold">{s.snapshot.home} <span className="text-muted">vs</span> {s.snapshot.away}{s.home_score != null && s.outcome !== 'PENDING' && <span className="ml-2 text-sm text-muted">({s.home_score}–{s.away_score})</span>}</p>
                   <p className="mt-1 text-sm"><span className="font-semibold text-cyan">{s.market_label}</span> <span className="text-muted">· {s.market_key}</span></p>
-                  <p className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="chip">{s.votes_for}/6 voturi</span><span className="chip">{RISK_RO[s.risk]}</span><span className="chip">{s.bookmaker} · observat {fmtDateTime(s.quote_observed_at)}</span>{s.model_probability != null && <span className="chip">p estimat {Math.round(s.model_probability * 100)}%</span>}</p>
+                  <p className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="chip">{s.votes_for}/{t.summary.agents ?? 6} voturi</span><span className="chip">{RISK_RO[s.risk]}</span><span className="chip">{s.bookmaker} · observat {fmtDateTime(s.quote_observed_at)}</span>{s.model_probability != null && <span className="chip">p estimat {Math.round(s.model_probability * 100)}%</span>}</p>
                 </div>
                 <div className="text-right"><p className="font-display text-3xl font-bold tabular">{odds(s.odds)}</p>{s.outcome !== 'PENDING' && <p className={`text-xs font-bold ${s.outcome === 'WON' ? 'text-emerald' : s.outcome === 'LOST' ? 'text-rose' : 'text-muted'}`}>{s.outcome === 'WON' ? 'Câștigat' : s.outcome === 'LOST' ? 'Pierdut' : 'Anulat'}</p>}</div>
               </li>
@@ -92,10 +92,10 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
             <details key={d.fixture_id} className="card p-4">
               <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2">
                 <span className="font-semibold">{names[d.fixture_id] ?? d.fixture_id}</span>
-                <span className={`chip ${d.outcome === 'QUALIFIED' ? 'text-emerald' : 'text-muted'}`}>{d.outcome === 'QUALIFIED' ? `Calificat ${d.votes_for}/6` : d.outcome === 'NO_BET' ? 'NO BET' : d.outcome === 'REJECTED' ? 'Respins la validare' : 'Fără consens'}</span>
+                <span className={`chip ${d.outcome === 'QUALIFIED' ? 'text-emerald' : 'text-muted'}`}>{d.outcome === 'QUALIFIED' ? `Calificat ${d.votes_for}/${t.summary.agents ?? 6}` : d.outcome === 'NO_BET' ? 'NO BET' : d.outcome === 'REJECTED' ? 'Respins la validare' : 'Fără consens'}</span>
               </summary>
               <p className="mt-3 text-sm">{d.reason}</p>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                 {d.votes.map((v) => <div key={v.agentId} className="card-soft p-2 text-xs"><p className="font-bold" style={{ color: AGENT_META[v.agentId]?.accent }}>{AGENT_META[v.agentId]?.name}</p><p>{v.decision === 'BET_CANDIDATE' ? v.marketKey : 'NO BET'}</p><p className="truncate text-muted" title={v.model}>{v.model}</p></div>)}
               </div>
               {dossier && (

@@ -117,7 +117,7 @@ async function callGemini(ref: ModelRef, input: CallInput): Promise<RawResult> {
 /** Test hook: replace real network inference with a deterministic fake. Never set in production. */
 type FakeTransport = (ref: ModelRef, input: CallInput) => Promise<RawResult>;
 const ag = globalThis as unknown as { __bmFakeAi?: FakeTransport | null; __bmAiCalls?: number };
-export function setAiTransportForTests(t: FakeTransport | null) { ag.__bmFakeAi = t; }
+export function setAiTransportForTests(t: FakeTransport | null) { ag.__bmFakeAi = t; exhaustedModels().clear(); }
 /** Total inference attempts made by this process (real or fake). Used by tests to prove replay makes zero calls. */
 export const aiCallCount = () => ag.__bmAiCalls ?? 0;
 
@@ -185,23 +185,49 @@ export async function structuredCall<T>(opts: {
   };
 
   const transient = (e: unknown) => e instanceof ProviderUnavailableError && /\b5\d\d\b|high demand|UNAVAILABLE|overloaded/i.test(e.message);
-  try {
-    return await attempt(opts.primary, false);
-  } catch (error) {
-    const fallbackAllowed = opts.fallback && providerConfigured(opts.fallback.provider) &&
-      (error instanceof ProviderUnavailableError || (error instanceof RateLimitError && (error.daily || error.retryAfterMs > 120_000)) || error instanceof SchemaError);
-    if (fallbackAllowed) {
-      try { return await attempt(opts.fallback!, true); }
-      catch (fallbackError) {
-        // Both models temporarily overloaded: wait and retry the same unit later instead of abstaining.
-        if (transient(error) && transient(fallbackError)) throw new RateLimitError(opts.primary.provider, 30_000);
-        throw fallbackError;
+  // Candidate chain: primary → configured fallback → free reserve models. Exhausted models are skipped until their reset.
+  const chain: ModelRef[] = [opts.primary, ...(opts.fallback ? [opts.fallback] : []), ...RESERVE_MODELS]
+    .filter((m, i, all) => all.findIndex((x) => x.provider === m.provider && x.model === m.model) === i)
+    .filter((m) => providerConfigured(m.provider));
+  let shortestWait = Infinity;
+  let lastError: unknown = null;
+  for (let i = 0; i < chain.length; i++) {
+    const ref = chain[i];
+    const key = `${ref.provider}:${ref.model}`;
+    const exhausted = exhaustedModels();
+    const until = exhausted.get(key) ?? 0;
+    if (until > Date.now()) { shortestWait = Math.min(shortestWait, until - Date.now()); continue; }
+    try {
+      return await attempt(ref, i > 0);
+    } catch (error) {
+      lastError = error;
+      if (error instanceof RateLimitError) {
+        if (error.daily || error.retryAfterMs > 120_000) exhausted.set(key, Date.now() + Math.max(error.retryAfterMs, 60_000));
+        shortestWait = Math.min(shortestWait, error.retryAfterMs);
+        // A short per-minute limit on the primary: wait for it rather than spreading to other models.
+        if (!error.daily && error.retryAfterMs <= 120_000 && i === 0) throw error;
+        continue;
       }
+      if (transient(error)) { exhausted.set(key, Date.now() + 60_000); shortestWait = Math.min(shortestWait, 30_000); continue; }
+      if (error instanceof ProviderUnavailableError || error instanceof SchemaError) continue;
+      throw error;
     }
-    if (transient(error)) throw new RateLimitError(opts.primary.provider, 30_000);
-    throw error;
   }
+  if (Number.isFinite(shortestWait)) throw new RateLimitError(opts.primary.provider, Math.max(shortestWait, 5_000), shortestWait > 15 * 60_000);
+  throw lastError ?? new ProviderUnavailableError(opts.primary.provider, 'Niciun model disponibil.');
 }
+
+/** A manual resume gives every model a fresh chance (the provider's own answer decides again). */
+export function resetModelExhaustion() { exhaustedModels().clear(); }
+
+/** Free models used, in order, when an agent's own models are exhausted. The model actually used is always recorded. */
+export const RESERVE_MODELS: ModelRef[] = [
+  { provider: 'gemini', model: 'gemini-3.1-flash-lite' },
+  { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
+  { provider: 'gemini', model: 'gemini-3-flash-preview' },
+  { provider: 'groq', model: 'qwen/qwen3.8-27b' },
+];
+const exhaustedModels = () => ((globalThis as unknown as { __bmExhausted?: Map<string, number> }).__bmExhausted ??= new Map<string, number>());
 
 async function logCall(log: { jobId?: string | null; agentId?: string | null; stage: string }, ref: ModelRef, raw: RawResult | null, ok: boolean, schemaValid: boolean | null, latencyMs: number, error: string | null) {
   const tokens = (raw?.inputTokens ?? 0) + (raw?.outputTokens ?? 0);

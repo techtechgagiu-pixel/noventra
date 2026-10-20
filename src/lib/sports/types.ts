@@ -1,6 +1,6 @@
 export type FixtureStatus = 'pre' | 'in' | 'post' | 'postponed' | 'cancelled';
 
-export type MarketType = '1X2' | 'DOUBLE_CHANCE' | 'TOTAL' | 'HANDICAP';
+export type MarketType = '1X2' | 'DOUBLE_CHANCE' | 'TOTAL' | 'HANDICAP' | 'TEAM_TOTAL';
 
 /** A priced market selection, exactly as observed at the source. Never altered. */
 export type MarketQuote = {
@@ -9,6 +9,8 @@ export type MarketQuote = {
   marketType: MarketType;
   odds: number; // decimal
   line?: number;
+  /** Bookmaker of this specific price, when it differs from the snapshot's main bookmaker. */
+  bookmaker?: string;
 };
 
 export type OddsSnapshot = {

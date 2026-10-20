@@ -12,6 +12,10 @@ export const AGENT_META: Record<string, { name: string; title: string; accent: s
   alex: { name: 'Alex', title: 'Vânătorul de cote', accent: '#f87171', img: '/agents/alex.webp' },
   diana: { name: 'Diana', title: 'Tacticiana', accent: '#a78bfa', img: '/agents/diana.webp' },
   robert: { name: 'Robert', title: 'Managerul de risc', accent: '#cbd5e1', img: '/agents/robert.webp' },
+  ioana: { name: 'Ioana', title: 'Specialista în goluri', accent: '#f472b6', img: '/agents/ioana.webp' },
+  radu: { name: 'Radu', title: 'Analistul acasă/deplasare', accent: '#2dd4bf', img: '/agents/radu.webp' },
+  elena: { name: 'Elena', title: 'Statisticiana bayesiană', accent: '#facc15', img: '/agents/elena.webp' },
+  cosmin: { name: 'Cosmin', title: 'Analistul de piață', accent: '#fb923c', img: '/agents/cosmin.webp' },
 };
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) }, cache: 'no-store' });

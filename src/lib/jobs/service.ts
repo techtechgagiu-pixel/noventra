@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { config } from '../config';
 import { many, one, tx } from '../db';
-import { providerConfigured } from '../ai/router';
+import { providerConfigured, resetModelExhaustion } from '../ai/router';
 import { aiUsageToday } from '../usage';
 import { SLOTS, fixtureWindow, nextReset, periodKey, slotById, type SlotDefinition } from '../slots';
 import { recordEvent } from './events';
@@ -73,7 +73,7 @@ export async function createOrGetJob(userId: string, slotId: string, at = new Da
       `SELECT s.fixture_id FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.user_id=$1 AND t.slot=$2 AND t.period_key=$3`, [userId, sibling, key])).map((r) => r.fixture_id);
   }
   const seed = randomBytes(16).toString('hex');
-  const cfg = { windowStart: window.startDate, windowDays: window.days, top10Only: true, maxFixtures: slot.period === 'weekly' ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, batchSize: config.limits.batchSize, avoidFixtures };
+  const cfg = { windowStart: window.startDate, windowDays: window.days, top10Only: false, maxFixtures: slot.period === 'weekly' ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, batchSize: config.limits.batchSize, avoidFixtures };
   const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
   const created = await tx(async (c) => {
     const ins = await c.query(
@@ -102,6 +102,7 @@ export async function resumeJob(userId: string, jobId: string) {
   const job = await one<{ status: string }>('SELECT status FROM ticket_generation_jobs WHERE id=$1 AND user_id=$2', [jobId, userId]);
   if (!job) throw new SlotError('Analiza nu există.', 404);
   if (!['PAUSED', 'FAILED', 'WAITING'].includes(job.status)) return { resumed: false, status: job.status };
+  resetModelExhaustion();
   await tx(async (c) => {
     await c.query("UPDATE ticket_generation_jobs SET status='QUEUED', next_run_at=now(), attempt_count=0, last_error=NULL, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1", [jobId]);
     await recordEvent(jobId, { type: 'JOB_RESUMED', stage: 'QUEUED', payload: { by: 'user', note: 'Reluare a aceleiași analize, cu același seed și aceeași ordine a meciurilor.' } }, c);

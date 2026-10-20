@@ -30,7 +30,7 @@ export function installFakes(fixtures: Fixture[], ai: FakeAi) {
     const ids = [...input.user.matchAll(/"fixtureId":"([^"]+)"/g)].map((m) => m[1]);
     const unique = [...new Set(ids)];
     ai.calls.push({ ref, stage: input.user.startsWith('Runda') ? 'DEBATE' : agent === 'scout' ? 'SCOUT' : 'INITIAL' });
-    if (ai.failNext && ai.failNext > 0) { ai.failNext--; const { RateLimitError } = await import('../ai/router'); throw new RateLimitError('groq', 0, true); }
+    if (ai.failNext && ai.failNext > 0) { ai.failNext--; const { RateLimitError } = await import('../ai/router'); throw new RateLimitError('groq', 6 * 3600_000, true); }
     const usage = { inputTokens: 100, outputTokens: 50, resolvedModel: ref.model };
     if (agent === 'scout') return { text: JSON.stringify({ fixtures: unique.map((id) => ({ fixtureId: id, summary: 'DEMO rezumat', keyObservations: ['DEMO'] })) }), ...usage };
     const items = unique.map((id) => { const k = ai.pick(id, agent); return { fixtureId: id, decision: k ? 'BET_CANDIDATE' : 'NO_BET', marketKey: k, estimatedProbability: k ? 0.8 : null, confidence: 70, risk: 'LOW', evidence: ['DEMO'], counterarguments: [], missingData: [], failureReasons: ['DEMO'], rationale: 'DEMO', changed: false, objection: '', response: '' }; });

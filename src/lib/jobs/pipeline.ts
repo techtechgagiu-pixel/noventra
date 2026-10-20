@@ -8,7 +8,7 @@ import { optimizeTicket, type Candidate } from '../optimizer';
 import { buildDossier } from '../scout/dossier';
 import { teamHistory } from '../scout/history';
 import { slotById } from '../slots';
-import { espnLeagueDay, espnSummary, standingFor } from '../sports/espn';
+import { espnExtraMarkets, espnLeagueDay, espnSummary, mergeMarkets, standingFor } from '../sports/espn';
 import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sports/fixtures';
 import type { Fixture } from '../sports/types';
 import { modelFixture } from '../stats/engine';
@@ -68,7 +68,7 @@ async function discover(job: JobRow) {
   const order = [...prioritized, ...entries.filter((e) => !e.eligible)];
   await query('UPDATE ticket_generation_jobs SET candidate_order=$2, eligible_count=$3 WHERE id=$1', [job.id, JSON.stringify(order), eligible.length]);
   job.candidate_order = order;
-  await recordEvent(job.id, { type: 'POOL_BUILT', stage: 'SELECTING', payload: { totalFixtures: fixtures.length, eligible: eligible.length, sourceErrors: errors.slice(0, 10), window: { start: job.config.windowStart, days: job.config.windowDays }, leagues: 'TOP 10' } });
+  await recordEvent(job.id, { type: 'POOL_BUILT', stage: 'SELECTING', payload: { totalFixtures: fixtures.length, eligible: eligible.length, sourceErrors: errors.slice(0, 10), window: { start: job.config.windowStart, days: job.config.windowDays }, leagues: job.config.top10Only ? 'TOP 10' : 'TOP 10 + cupe europene + ligi extinse' } });
   const rejected = entries.filter((e) => !e.eligible);
   if (rejected.length) await recordEvent(job.id, { type: 'CANDIDATE_REJECTED', stage: 'SELECTING', payload: { count: rejected.length, items: rejected.slice(0, 60).map((r) => ({ fixtureId: r.fixtureId, match: `${r.home} – ${r.away}`, league: r.league, reason: r.reason })) } });
   await recordEvent(job.id, { type: 'CANDIDATE_SELECTED', stage: 'SELECTING', payload: { seed: job.seed.slice(0, 12), order: prioritized.map((e, i) => ({ rank: i + 1, fixtureId: e.fixtureId, match: `${e.home} – ${e.away}`, league: e.league, kickoff: e.kickoff })), batches: batches.length, batchSize: job.config.batchSize } });
@@ -112,7 +112,14 @@ async function freshFixture(f: Fixture): Promise<Fixture | null> {
   const day = await espnLeagueDay(league, yyyymmdd(localDate(new Date(f.kickoff))));
   const found = day.find((x) => x.id === f.id) ?? null;
   if (found) await persistFixtures([found]);
-  return found;
+  return found ? withExtraMarkets(found) : null;
+}
+
+/** Adds Bet365 / DraftKings-prop selections (each tagged with its bookmaker) to an ESPN fixture. */
+async function withExtraMarkets(f: Fixture): Promise<Fixture> {
+  if (f.provider !== 'espn' || !f.odds) return f;
+  const extra = await espnExtraMarkets(f).catch(() => []);
+  return { ...f, odds: { ...f.odds, markets: mergeMarkets(f.odds.markets, extra, f.odds.bookmaker) } };
 }
 
 // ── Batch steps ────────────────────────────────────────────────
@@ -125,7 +132,8 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
     const existing = new Set((await batchSnapshots(job, ids)).map((s) => s.fixture.id));
     for (const id of ids) {
       if (existing.has(id)) continue;
-      const f = await fixtureFromDb(id);
+      const stored = await fixtureFromDb(id);
+      const f = stored ? await withExtraMarkets(stored) : null;
       if (!f || !f.odds) { await recordEvent(job.id, { type: 'CANDIDATE_REJECTED', stage: 'SCOUT', fixtureId: id, payload: { reason: 'Datele meciului nu mai sunt disponibile' } }); continue; }
       const [home, away] = await Promise.all([teamHistory(f, 'home'), teamHistory(f, 'away')]);
       let standings: FixtureSnapshot['standings'] = { home: null, away: null };
@@ -220,9 +228,9 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       fixtureId: f.fixtureId, match: f.match, markets: f.markets.map((m) => ({ key: m.key, odds: m.odds, estimated: m.est, ev: m.ev })),
       yourPosition: prior.find((p) => p.fixture_id === f.fixtureId && p.agent_id === agent.id) ? summarize(prior.find((p) => p.fixture_id === f.fixtureId && p.agent_id === agent.id)!) : 'fără poziție (eroare anterioară)',
       others: prior.filter((p) => p.fixture_id === f.fixtureId && p.agent_id !== agent.id).map((p) => `${agentById(p.agent_id)?.name}: ${summarize(p)}`),
-      leadingCandidate: (() => { const t: Record<string, number> = {}; for (const p of prior.filter((x) => x.fixture_id === f.fixtureId && x.decision === 'BET_CANDIDATE' && x.market_key)) t[p.market_key!] = (t[p.market_key!] ?? 0) + 1; const top = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; return top ? `${top[0]} (${top[1]}/6 voturi)` : 'niciunul'; })(),
+      leadingCandidate: (() => { const t: Record<string, number> = {}; for (const p of prior.filter((x) => x.fixture_id === f.fixtureId && x.decision === 'BET_CANDIDATE' && x.market_key)) t[p.market_key!] = (t[p.market_key!] ?? 0) + 1; const top = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; return top ? `${top[0]} (${top[1]}/${VOTING_AGENTS.length} voturi)` : 'niciunul'; })(),
     }));
-    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Spune explicit dacă poți susține „leadingCandidate” (selecția cu cele mai multe voturi); un bilet are nevoie de minimum 4/6 voturi pe aceeași piață, dar nu vota împotriva propriei analize doar pentru consens. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
+    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Spune explicit dacă poți susține „leadingCandidate” (selecția cu cele mai multe voturi); o selecție intră pe bilet cu minimum ${config.limits.consensusThreshold}/${VOTING_AGENTS.length} voturi (un vot pentru o selecție mai strictă o susține și pe cea mai largă), dar nu vota împotriva propriei analize doar pentru consens. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
   }
   try {
     const res = round === 0
@@ -301,7 +309,7 @@ async function chooseDebate(job: JobRow, ids: string[], round: number) {
   for (const id of ids) {
     const pos = await latestPositions(job.id, id);
     const keys = snaps.find((s) => s.fixture.id === id)?.model.markets.map((m) => ({ key: m.key, odds: m.odds }));
-    if (round === 1 ? contested(pos, keys) : (() => { const c = consensus(pos, config.limits.consensusThreshold, 6, keys); return c.outcome !== 'QUALIFIED' && c.votesFor === config.limits.consensusThreshold - 1; })()) out.push(id);
+    if (round === 1 ? contested(pos, keys, config.limits.consensusThreshold, VOTING_AGENTS.length) : (() => { const c = consensus(pos, config.limits.consensusThreshold, VOTING_AGENTS.length, keys); return c.outcome !== 'QUALIFIED' && c.votesFor === config.limits.consensusThreshold - 1; })()) out.push(id);
   }
   return out;
 }
@@ -309,16 +317,17 @@ async function chooseDebate(job: JobRow, ids: string[], round: number) {
 async function stepVote(job: JobRow, ids: string[]) {
   await setStage(job, 'VOTING', job.checkpoint);
   const threshold = config.limits.consensusThreshold;
+  const N = VOTING_AGENTS.length;
   for (const s of await batchSnapshots(job, ids)) {
     const exists = await one('SELECT 1 FROM final_decisions WHERE job_id=$1 AND fixture_id=$2', [job.id, s.fixture.id]);
     if (exists) continue;
     const positions = await latestPositions(job.id, s.fixture.id);
     for (const p of positions) await recordEvent(job.id, { type: 'VOTE_SUBMITTED', stage: 'VOTING', agentId: p.agentId, fixtureId: s.fixture.id, payload: { decision: p.decision, marketKey: p.marketKey, round: p.round, model: `${p.provider}/${p.model}` } });
-    const c = consensus(positions, threshold, 6, s.model.markets.map((m) => ({ key: m.key, odds: m.odds })));
-    await recordEvent(job.id, { type: 'CONSENSUS_CALCULATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, ...c, threshold } });
+    const c = consensus(positions, threshold, VOTING_AGENTS.length, s.model.markets.map((m) => ({ key: m.key, odds: m.odds })));
+    await recordEvent(job.id, { type: 'CONSENSUS_CALCULATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, ...c, threshold, total: N } });
     const validation: Record<string, unknown> = {};
     let outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET' | 'REJECTED' = c.outcome;
-    let reason = c.outcome === 'QUALIFIED' ? '' : c.outcome === 'NO_BET' ? `${c.noBetVotes}/6 agenți au recomandat NO BET.` : `Consens insuficient: maximum ${c.votesFor}/6 voturi pentru aceeași selecție (prag ${threshold}/6).`;
+    let reason = c.outcome === 'QUALIFIED' ? '' : c.outcome === 'NO_BET' ? `${c.noBetVotes}/${N} agenți au recomandat NO BET.` : `Consens insuficient: maximum ${c.votesFor}/${N} voturi pentru aceeași selecție (prag ${threshold}/${N}).`;
     if (c.outcome === 'QUALIFIED' && c.marketKey) {
       const est = s.model.markets.find((m) => m.key === c.marketKey)!;
       const base = await fixtureFromDb(s.fixture.id);
@@ -330,20 +339,20 @@ async function stepVote(job: JobRow, ids: string[]) {
         fixtureStillPreMatch: !!fresh && fresh.status === 'pre' && Date.parse(fresh.kickoff) > Date.now() + MIN_LEAD_MS,
         oddsAvailable: !!freshQuote,
         oddsFresh: ageMin <= config.limits.oddsMaxAgeMinutes,
-        bookmakerIdentified: !!(fresh?.odds?.bookmaker),
+        bookmakerIdentified: !!(freshQuote?.bookmaker ?? fresh?.odds?.bookmaker),
         selectionConsistent: s.model.markets.some((m) => m.key === c.marketKey),
         probabilityPlausible: est.estimatedProbability !== null && est.estimatedProbability >= 0.25,
         evNotStronglyNegative: est.estimatedProbability !== null && freshQuote ? est.estimatedProbability * freshQuote.odds - 1 >= -0.12 : false,
         dataSufficient: s.dataQuality.historyHome >= 3 && s.dataQuality.historyAway >= 3,
       };
-      Object.assign(validation, checks, { originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt, bookmaker: fresh?.odds?.bookmaker ?? s.odds.bookmaker });
+      Object.assign(validation, checks, { originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt, bookmaker: freshQuote?.bookmaker ?? fresh?.odds?.bookmaker ?? s.odds.bookmaker });
       const failed = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
       await recordEvent(job.id, { type: 'ODDS_VALIDATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { checks, originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt } });
       if (failed.length) {
         outcome = 'REJECTED';
         const labels: Record<string, string> = { fixtureStillPreMatch: 'meciul nu mai este pre-meci', oddsAvailable: 'cota nu mai este disponibilă', oddsFresh: 'cota este prea veche', bookmakerIdentified: 'bookmaker neidentificat', selectionConsistent: 'selecție inconsistentă', probabilityPlausible: 'probabilitate estimată prea mică', evNotStronglyNegative: 'valoare așteptată clar negativă', dataSufficient: 'istoric insuficient' };
-        reason = `Consens ${c.votesFor}/6, dar validarea a respins selecția: ${failed.map((f) => labels[f]).join(', ')}.`;
-      } else reason = `Consens ${c.votesFor}/6 pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.`;
+        reason = `Consens ${c.votesFor}/${N}, dar validarea a respins selecția: ${failed.map((f) => labels[f]).join(', ')}.`;
+      } else reason = `Consens ${c.votesFor}/${N} pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.`;
     }
     await query('INSERT INTO final_decisions(job_id, fixture_id, outcome, market_key, votes_for, votes, validation, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (job_id, fixture_id) DO NOTHING',
       [job.id, s.fixture.id, outcome, c.marketKey, c.votesFor, JSON.stringify(positions), JSON.stringify(validation), reason]);
@@ -363,7 +372,7 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
     if (!s) return [];
     const est = s.model.markets.find((m) => m.key === r.market_key)!;
     const risk = riskClass(est.estimatedProbability, s.model.uncertainty);
-    const quality = (r.votes_for / 6) * (s.model.uncertainty === 'scăzută' ? 1 : s.model.uncertainty === 'medie' ? 0.85 : 0.65) * (est.estimatedProbability ?? 0.3);
+    const quality = (r.votes_for / VOTING_AGENTS.length) * (s.model.uncertainty === 'scăzută' ? 1 : s.model.uncertainty === 'medie' ? 0.85 : 0.65) * (est.estimatedProbability ?? 0.3);
     return [{ fixtureId: r.fixture_id, teams: [s.fixture.home, s.fixture.away], odds: r.validation.currentOdds, bookmaker: r.validation.bookmaker, quality, risk, marketKey: r.market_key, label: est.label, observedAt: r.validation.observedAt, probability: est.estimatedProbability, riskLabel: risk, snapshot: s }];
   });
 }
@@ -387,7 +396,7 @@ async function build(job: JobRow) {
   const chosen = result.status === 'COMPLETED' ? result.legs : [];
   const byId = new Map(cands.map((c) => [c.fixtureId, c]));
   const summary = {
-    analyzed, qualified: cands.length, eligible: job.eligible_count, reason: generation === 'NO_BET' ? `Niciun meci analizat nu a primit consens validat (${analyzed} meciuri analizate).` : result.reason,
+    analyzed, qualified: cands.length, eligible: job.eligible_count, agents: VOTING_AGENTS.length, threshold: config.limits.consensusThreshold, reason: generation === 'NO_BET' ? `Niciun meci analizat nu a primit consens validat (${analyzed} meciuri analizate).` : result.reason,
     closest: result.closest ? { totalOdds: result.closest.totalOdds, legs: result.closest.legs.map((l) => ({ fixtureId: l.fixtureId, match: byId.get(l.fixtureId)?.teams.join(' – '), label: byId.get(l.fixtureId)?.label, odds: l.odds })) } : null,
     mixedBookmakers: result.mixedBookmakers,
   };

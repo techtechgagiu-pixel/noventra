@@ -5,9 +5,11 @@ export type NexusEvent = { seq: number; type: string; stage: string; fixtureId: 
 
 export type AgentStatus = 'IDLE' | 'ANALYZING' | 'DEBATING' | 'DONE' | 'FAILED' | 'WAITING';
 export type AgentView = { id: string; status: AgentStatus; model: string | null; activeFixtures: string[]; lastConclusion: string | null; round: number; usedFallback: boolean };
-export type FixtureView = { id: string; match: string; league?: string; kickoff?: string; state: 'QUEUED' | 'RESEARCH' | 'ANALYSIS' | 'DEBATE' | 'VOTING' | 'ACCEPTED' | 'REJECTED'; marketLabel?: string | null; odds?: number | null; votesFor?: number; reason?: string };
+export type FixtureView = { id: string; match: string; league?: string; kickoff?: string; state: 'QUEUED' | 'RESEARCH' | 'ANALYSIS' | 'DEBATE' | 'VOTING' | 'ACCEPTED' | 'REJECTED'; marketLabel?: string | null; odds?: number | null; votesFor?: number; total?: number; reason?: string };
 
 export type NexusState = {
+  total: number;
+  participants: string[];
   stage: string;
   status: 'IDLE' | 'QUEUED' | 'FETCHING' | 'ANALYZING' | 'DEBATING' | 'VOTING' | 'VALIDATING' | 'COMPLETED' | 'FAILED' | 'PAUSED';
   agents: Record<string, AgentView>;
@@ -28,11 +30,12 @@ export type NexusState = {
   seed: string | null;
 };
 
-const VOTERS = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert'];
-const NAMES: Record<string, string> = { victor: 'Victor', andrei: 'Andrei', mihai: 'Mihai', alex: 'Alex', diana: 'Diana', robert: 'Robert', scout: 'SCOUT' };
+const VOTERS = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin'];
+const NAMES: Record<string, string> = { victor: 'Victor', andrei: 'Andrei', mihai: 'Mihai', alex: 'Alex', diana: 'Diana', robert: 'Robert', ioana: 'Ioana', radu: 'Radu', elena: 'Elena', cosmin: 'Cosmin', scout: 'SCOUT' };
 
 export function initialState(): NexusState {
   return {
+    total: 10, participants: [],
     stage: 'QUEUED', status: 'QUEUED',
     agents: Object.fromEntries(VOTERS.map((id) => [id, { id, status: 'IDLE', model: null, activeFixtures: [], lastConclusion: null, round: 0, usedFallback: false }])),
     scout: { status: 'IDLE', message: null, model: null, dossiers: 0 },
@@ -57,7 +60,7 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
       s.stage = p.to;
       s.status = p.to === 'SELECTING' || p.to === 'SCOUT' ? 'FETCHING' : p.to === 'ANALYSIS' || p.to === 'STATS' ? 'ANALYZING' : p.to === 'DEBATE' ? 'DEBATING' : p.to === 'VOTING' ? 'VOTING' : p.to === 'BUILDING' ? 'VALIDATING' : s.status;
       break;
-    case 'POOL_BUILT': s.pool = { total: p.totalFixtures, eligible: p.eligible }; log(`${p.totalFixtures} meciuri găsite în TOP 10, ${p.eligible} eligibile.`); break;
+    case 'POOL_BUILT': s.pool = { total: p.totalFixtures, eligible: p.eligible }; log(`${p.totalFixtures} meciuri găsite (${p.leagues ?? "TOP 10"}), ${p.eligible} eligibile.`); break;
     case 'CANDIDATE_REJECTED':
       if (Array.isArray(p.items)) { s.rejectedAtDiscovery = p.items.map((i: any) => ({ match: i.match, reason: i.reason })); log(`${p.count} meciuri excluse (fără cote, începute etc.).`, 'warn'); }
       else if (e.fixtureId) { setFx(e.fixtureId, { state: 'REJECTED', reason: p.reason }); s.rejected = [...new Set([...s.rejected, e.fixtureId])]; }
@@ -73,7 +76,8 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
     case 'SCOUT_COMPLETED': s.scout = { ...s.scout, status: 'DONE', message: p.message, model: p.model ?? s.scout.model, dossiers: s.scout.dossiers + 1 }; s.batchFraction = Math.max(s.batchFraction, 0.15); log(`SCOUT: dosar istoric pentru ${p.match} (${p.homeSample}+${p.awaySample} meciuri).`); break;
     case 'STATS_COMPLETED': s.batchFraction = Math.max(s.batchFraction, 0.25); log(`Model statistic: ${p.match} — λ ${p.lambdaHome}–${p.lambdaAway}, incertitudine ${p.uncertainty}.`); break;
     case 'AGENT_STARTED': {
-      const id = e.agentId!; const debating = (p.round ?? 0) > 0;
+      const id = e.agentId!;
+      if (VOTERS.includes(id) && !s.participants.includes(id)) s.participants = [...s.participants, id]; const debating = (p.round ?? 0) > 0;
       setAgent(id, { status: debating ? 'DEBATING' : 'ANALYZING', model: `${p.provider}/${p.model}`, activeFixtures: p.fixtures ?? [], round: p.round ?? 0 });
       for (const f of p.fixtures ?? []) setFx(f, { state: debating ? 'DEBATE' : 'ANALYSIS' });
       log(`${NAMES[id]} ${debating ? `intră în dezbatere (runda ${p.round})` : 'analizează'} — ${p.model}.`);
@@ -86,7 +90,7 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
       const id = e.agentId!;
       setAgent(id, { status: 'DONE', activeFixtures: [], model: `${p.provider}/${p.model}`, usedFallback: !!p.usedFallback });
       const done = Object.values(s.agents).filter((a) => a.status === 'DONE' || a.status === 'FAILED').length;
-      s.batchFraction = Math.max(s.batchFraction, (p.round ?? 0) === 0 ? 0.25 + 0.5 * (done / 6) : 0.8);
+      s.batchFraction = Math.max(s.batchFraction, (p.round ?? 0) === 0 ? 0.25 + 0.5 * (done / Object.keys(s.agents).length) : 0.8);
       if (p.usedFallback) log(`${NAMES[id]}: modelul principal indisponibil, a rulat rezerva ${p.model}.`, 'warn');
       break;
     }
@@ -94,8 +98,8 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
     case 'DEBATE_STARTED': for (const a of VOTERS) setAgent(a, { status: 'IDLE' }); log(`Dezbatere runda ${p.round}: ${p.fixtures?.length ?? 0} meciuri disputate.`); break;
     case 'DEBATE_SKIPPED': log(`Dezbaterea (runda ${p.round}) nu a fost necesară: ${p.reason}`); break;
     case 'VOTE_SUBMITTED': for (const a of VOTERS) if (s.agents[a].status !== 'FAILED') setAgent(a, { status: 'DONE' }); if (e.fixtureId) setFx(e.fixtureId, { state: 'VOTING' }); break;
-    case 'CONSENSUS_CALCULATED': s.batchFraction = Math.max(s.batchFraction, 0.9); log(`${p.match}: ${p.outcome === 'QUALIFIED' ? `consens ${p.votesFor}/6` : p.outcome === 'NO_BET' ? `NO BET (${p.noBetVotes}/6)` : `fără consens (max ${p.votesFor}/6)`}.`, p.outcome === 'QUALIFIED' ? 'good' : 'info'); break;
-    case 'SELECTION_ACCEPTED': setFx(e.fixtureId!, { state: 'ACCEPTED', marketLabel: p.marketLabel, odds: p.odds, votesFor: p.votesFor, reason: p.reason }); s.accepted = [...new Set([...s.accepted, e.fixtureId!])]; log(`✓ ${p.match}: ${p.marketLabel} @ ${p.odds}`, 'good'); break;
+    case 'CONSENSUS_CALCULATED': s.total = p.total ?? 6; s.batchFraction = Math.max(s.batchFraction, 0.9); log(`${p.match}: ${p.outcome === 'QUALIFIED' ? `consens ${p.votesFor}/${p.total ?? 6}` : p.outcome === 'NO_BET' ? `NO BET (${p.noBetVotes}/${p.total ?? 6})` : `fără consens (max ${p.votesFor}/${p.total ?? 6})`}.`, p.outcome === 'QUALIFIED' ? 'good' : 'info'); break;
+    case 'SELECTION_ACCEPTED': setFx(e.fixtureId!, { state: 'ACCEPTED', marketLabel: p.marketLabel, odds: p.odds, votesFor: p.votesFor, reason: p.reason, total: s.total }); s.accepted = [...new Set([...s.accepted, e.fixtureId!])]; log(`✓ ${p.match}: ${p.marketLabel} @ ${p.odds}`, 'good'); break;
     case 'SELECTION_REJECTED': setFx(e.fixtureId!, { state: 'REJECTED', marketLabel: p.marketLabel, reason: p.reason, votesFor: p.votesFor }); s.rejected = [...new Set([...s.rejected, e.fixtureId!])]; break;
     case 'OPTIMIZATION_COMPLETED': s.assembly = p.steps ?? []; log(`Optimizare: ${p.reason}`, p.status === 'COMPLETED' ? 'good' : 'warn'); break;
     case 'TICKET_FINALIZED': s.final = { generation: p.generation, totalOdds: p.totalOdds, legs: p.legs, reason: p.reason, target: p.target }; s.status = 'COMPLETED'; s.stage = 'DONE'; for (const a of VOTERS) if (s.agents[a].status !== 'FAILED') setAgent(a, { status: 'DONE', activeFixtures: [] }); log(p.generation === 'COMPLETED' ? `Bilet finalizat: cota ${p.totalOdds} din ${p.legs} meciuri.` : p.generation === 'NO_BET' ? 'Rezultat: NO BET.' : 'Bilet incomplet.', p.generation === 'COMPLETED' ? 'good' : 'warn'); break;

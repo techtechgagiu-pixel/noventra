@@ -51,7 +51,7 @@ async function processOne(): Promise<boolean> {
 async function handleError(job: JobRow, error: Error) {
   const msg = error.message.slice(0, 500);
   console.error(JSON.stringify({ event: 'job_error', jobId: job.id, stage: job.stage, message: msg }));
-  if (error instanceof RateLimitError && !error.daily) {
+  if (error instanceof RateLimitError && (!error.daily || error.retryAfterMs <= 15 * 60_000)) {
     const waitMs = Math.min(Math.max(error.retryAfterMs, 5_000), 15 * 60_000);
     await query("UPDATE ticket_generation_jobs SET status='WAITING', next_run_at=now() + ($2 || ' milliseconds')::interval, last_error=$3, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1", [job.id, String(waitMs), msg]);
     await recordEvent(job.id, { type: 'JOB_WAITING', stage: job.stage, payload: { reason: msg, provider: error.provider, retryInSeconds: Math.ceil(waitMs / 1000) } });
