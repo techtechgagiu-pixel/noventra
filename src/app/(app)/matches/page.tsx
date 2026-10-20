@@ -1,4 +1,7 @@
-import { MatchesList } from '@/components/matches-list';
-export default function Matches() {
-  return <div className="space-y-4"><h1 className="font-display text-3xl font-bold">Meciuri — 25 de competiții</h1><MatchesList /></div>;
+import { redirect } from 'next/navigation';
+
+export const dynamic = 'force-dynamic';
+/** Kept only so old links keep working: everything lives on the single page now. */
+export default async function Legacy() {
+  redirect('/');
 }

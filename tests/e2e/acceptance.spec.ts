@@ -11,16 +11,16 @@ test('daily COTĂ 5 ticket: create → live NEXUS → auto-open result → locke
   expect((await (await page.request.get('/api/test/stats')).json()).aiCalls).toBe(s0.aiCalls);
 
   await page.getByRole('button', { name: /CREEAZĂ BILETUL/ }).first().click();
-  await expect(page).toHaveURL(/\/nexus\?job=/);
+  await expect(page).toHaveURL(/tab=analiza&job=/);
   // The final ticket opens automatically.
-  await page.waitForURL(/\/tickets\/[0-9a-f-]{36}\?fresh=1/, { timeout: 90_000 });
+  await page.waitForURL(/tab=bilete&ticket=[0-9a-f-]{36}&fresh=1/, { timeout: 90_000 });
   await expect(page.getByText('COPIAZĂ BILETUL')).toBeVisible();
-  const url = page.url().split('?')[0];
+  const ticketId = new URL(page.url()).searchParams.get('ticket')!;
   await page.reload();
   await expect(page.getByText('COTĂ 5 — BILETUL A').first()).toBeVisible();
 
   // Locked for today.
-  await page.goto('/dashboard');
+  await page.goto('/?tab=bilete');
   await expect(page.getByRole('button', { name: 'VEZI BILETUL' })).toHaveCount(1);
   const gen = await page.request.post('/api/ticket-slots/FIVE_A/generate', { headers: { origin: 'http://localhost:3200' } });
   expect((await gen.json()).created).toBe(false);
@@ -29,7 +29,7 @@ test('daily COTĂ 5 ticket: create → live NEXUS → auto-open result → locke
   const before = await (await page.request.get('/api/test/stats')).json();
   const generateCalls: string[] = [];
   page.on('request', (r) => { if (/generate|resume/.test(r.url())) generateCalls.push(r.url()); });
-  await page.goto(`${url.replace(/^https?:\/\/[^/]+/, '')}/replay`);
+  await page.goto(`/?tab=analiza&replay=${ticketId}`);
   await expect(page.getByText('REPLAY — ANALIZĂ SALVATĂ')).toBeVisible();
   await page.getByRole('button', { name: '4×' }).click();
   await page.getByRole('button', { name: 'Final' }).click();
@@ -51,7 +51,8 @@ test('another user cannot open the ticket', async ({ page, browser }) => {
   expect(list.tickets).toBeDefined();
 });
 
-test('private API requires login', async ({ request }) => {
-  expect((await request.get('/api/ticket-slots')).status()).toBe(401);
-  expect((await request.post('/api/ticket-slots/FIVE_A/generate', { headers: { origin: 'http://localhost:3200' } })).status()).toBe(401);
+test('single-owner app: no login wall, old links still lead to the single page', async ({ request }) => {
+  expect((await request.get('/api/ticket-slots')).status()).toBe(200);
+  const r = await request.get('/dashboard', { maxRedirects: 0 });
+  expect([307, 308]).toContain(r.status());
 });

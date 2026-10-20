@@ -1,5 +1,10 @@
 # PRIMUL 11 (formerly BETMIND SIX · NEXUS 5.0)
 
+> Since 2026-10-20: **single-owner app, no login.** Every request acts as the owner account (`OWNER_EMAIL`, default the first
+> `ADMIN_EMAILS` entry); tickets from former Google accounts were merged into it. The UI is one page (`/`) with three tabs —
+> `?tab=bilete` (slots, `&ticket=<id>`), `?tab=analiza` (live NEXUS `&job=<id>`, replay `&replay=<ticketId>`), `?tab=istoric`.
+> Old routes (/dashboard, /tickets/…, /nexus, …) redirect there. Agents run in parallel within a batch (batch size 4).
+
 **Six Minds. One Decision.** — analiză de fotbal cu șase agenți AI, pe date reale, cu replay complet al deciziilor.
 
 - Producție (nouă): https://nexus.noventra.ro · Render Free (Frankfurt) · Neon PostgreSQL Free (Frankfurt)

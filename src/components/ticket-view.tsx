@@ -125,8 +125,8 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
         {completed && <button onClick={copySb} className="btn btn-ghost px-5 py-3">{copiedSb ? <Check size={16} /> : <ClipboardCopy size={16} />} {copiedSb ? 'COPIAT' : 'COPIAZĂ PENTRU SUPERBET'}</button>}
         {completed && <button onClick={download} className="btn btn-ghost px-5 py-3"><Download size={16} /> DESCARCĂ TXT</button>}
         <a href="#analiza" className="btn btn-ghost px-5 py-3"><ListChecks size={16} /> VEZI ANALIZA</a>
-        <Link href={`/tickets/${t.id}/replay`} className="btn btn-gold px-5 py-3"><PlayCircle size={16} /> VEZI CUM A FOST CREAT</Link>
-        <Link href="/tickets" className="btn btn-ghost px-5 py-3"><History size={16} /> BILETELE MELE</Link>
+        <Link href={`/?tab=analiza&replay=${t.id}`} className="btn btn-gold px-5 py-3"><PlayCircle size={16} /> VEZI CUM A FOST CREAT</Link>
+        <Link href="/?tab=istoric" className="btn btn-ghost px-5 py-3"><History size={16} /> BILETELE MELE</Link>
       </div>
 
       <section id="analiza" className="space-y-3">

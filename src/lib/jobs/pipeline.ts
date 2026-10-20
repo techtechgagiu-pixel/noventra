@@ -133,11 +133,11 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
     await recordEvent(job.id, { type: 'BATCH_STARTED', stage: 'SCOUT', payload: { batch: cp.batchIndex + 1, of: cp.batches.length, fixtures: ids } });
     await recordEvent(job.id, { type: 'SCOUT_STARTED', stage: 'SCOUT', payload: { message: 'SCOUT analizează statisticile meciurilor anterioare.', mode: 'statistics', fixtures: ids.length } });
     const existing = new Set((await batchSnapshots(job, ids)).map((s) => s.fixture.id));
-    for (const id of ids) {
-      if (existing.has(id)) continue;
+    // Fixtures of a batch are prepared in parallel (history, standings, news are independent).
+    await Promise.all(ids.filter((id) => !existing.has(id)).map(async (id) => {
       const stored = await fixtureFromDb(id);
       const f = stored ? await withExtraMarkets(stored) : null;
-      if (!f || !f.odds) { await recordEvent(job.id, { type: 'CANDIDATE_REJECTED', stage: 'SCOUT', fixtureId: id, payload: { reason: 'Datele meciului nu mai sunt disponibile' } }); continue; }
+      if (!f || !f.odds) { await recordEvent(job.id, { type: 'CANDIDATE_REJECTED', stage: 'SCOUT', fixtureId: id, payload: { reason: 'Datele meciului nu mai sunt disponibile' } }); return; }
       const [home, away] = await Promise.all([teamHistory(f, 'home'), teamHistory(f, 'away')]);
       let standings: FixtureSnapshot['standings'] = { home: null, away: null };
       if (f.provider === 'espn') {
@@ -163,7 +163,7 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
       };
       await query('INSERT INTO fixture_snapshots(fixture_id, job_id, payload, data_quality) VALUES ($1,$2,$3,$4)', [f.id, job.id, JSON.stringify(snapshot), JSON.stringify(snapshot.dataQuality)]);
       await query('INSERT INTO scout_dossiers(job_id, fixture_id, mode, dossier) VALUES ($1,$2,$3,$4) ON CONFLICT (job_id, fixture_id) DO NOTHING', [job.id, f.id, 'statistics', JSON.stringify(dossier)]);
-    }
+    }));
     cp.batchStep = 'SCOUT';
     await save(job);
     return;
@@ -331,13 +331,16 @@ async function stepAgents(job: JobRow, ids: string[], round: number, deadline: n
     await setStage(job, 'DEBATE', cp);
     await recordEvent(job.id, { type: 'DEBATE_STARTED', stage: 'DEBATE', payload: { round, fixtures: targetIds } });
   } else if (round === 0 && !cp.agentsDone.length) await setStage(job, 'ANALYSIS', cp);
-  for (const agent of VOTING_AGENTS) {
-    if (cp.agentsDone.includes(agent.id)) continue;
-    if (Date.now() > deadline) return false;
+  // All pending agents work at the same time (independent analyses); each one is checkpointed as it finishes.
+  if (Date.now() > deadline) return false;
+  const pending = VOTING_AGENTS.filter((a) => !cp.agentsDone.includes(a.id));
+  const results = await Promise.allSettled(pending.map(async (agent) => {
     await runAgent(job, agent, targetIds, round);
     cp.agentsDone.push(agent.id);
-    await save(job);
-  }
+  }));
+  await save(job);
+  const failure = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failure) throw failure.reason; // rate/budget limits: finished agents stay done, the rest resume later
   cp.agentsDone = [];
   return true;
 }

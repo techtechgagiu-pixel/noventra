@@ -29,13 +29,13 @@ export function SlotCards({ initial }: { initial: Slot[] }) {
 
   async function act(s: Slot) {
     setError(null);
-    if (s.action === 'VIEW_TICKET' || s.action === 'VIEW_RESULT') return router.push(`/tickets/${s.ticket!.id}`);
-    if (s.action === 'VIEW_ANALYSIS') return router.push(`/nexus?job=${s.job!.id}`);
+    if (s.action === 'VIEW_TICKET' || s.action === 'VIEW_RESULT') return router.push(`/?tab=bilete&ticket=${s.ticket!.id}`);
+    if (s.action === 'VIEW_ANALYSIS') return router.push(`/?tab=analiza&job=${s.job!.id}`);
     setBusy(s.slot.id);
     try {
-      if (s.action === 'RESUME') { await api(`/api/jobs/${s.job!.id}/resume`, { method: 'POST' }); router.push(`/nexus?job=${s.job!.id}`); return; }
+      if (s.action === 'RESUME') { await api(`/api/jobs/${s.job!.id}/resume`, { method: 'POST' }); router.push(`/?tab=analiza&job=${s.job!.id}`); return; }
       const r = await api<{ jobId: string }>(`/api/ticket-slots/${s.slot.id}/generate`, { method: 'POST' });
-      router.push(`/nexus?job=${r.jobId}`);
+      router.push(`/?tab=analiza&job=${r.jobId}`);
     } catch (e) { setError((e as Error).message); setBusy(null); }
   }
 

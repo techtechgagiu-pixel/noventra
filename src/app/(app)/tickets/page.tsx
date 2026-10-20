@@ -1,10 +1,7 @@
-import { currentUser } from '@/lib/auth';
-import { listTickets } from '@/lib/views';
-import { TicketArchive } from '@/components/ticket-archive';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
-export default async function Tickets() {
-  const user = (await currentUser())!;
-  const tickets = await listTickets(user.id);
-  return <TicketArchive tickets={JSON.parse(JSON.stringify(tickets))} />;
+/** Kept only so old links keep working: everything lives on the single page now. */
+export default async function Legacy() {
+  redirect('/?tab=istoric');
 }

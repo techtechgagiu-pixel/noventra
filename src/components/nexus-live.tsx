@@ -61,7 +61,7 @@ export function NexusLive({ jobId, initialMeta, initialEvents }: { jobId: string
 
   // Mandatory: open the final result automatically.
   useEffect(() => {
-    if (TERMINAL.includes(meta.status) && meta.ticketId) { const t = setTimeout(() => router.push(`/tickets/${meta.ticketId}?fresh=1`), 1800); return () => clearTimeout(t); }
+    if (TERMINAL.includes(meta.status) && meta.ticketId) { const t = setTimeout(() => router.push(`/?tab=bilete&ticket=${meta.ticketId}&fresh=1`), 1800); return () => clearTimeout(t); }
   }, [meta.status, meta.ticketId, router]);
 
   async function resume() { await api(`/api/jobs/${jobId}/resume`, { method: 'POST' }).catch(() => {}); setMeta({ ...meta, status: 'QUEUED' }); }

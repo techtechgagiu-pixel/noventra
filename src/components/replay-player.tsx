@@ -35,7 +35,7 @@ export function ReplayPlayer({ events, title, target, ticketId, partial }: { eve
             {[1, 2, 4].map((s) => <button key={s} onClick={() => setSpeed(s)} className={`px-3 py-1.5 text-sm ${speed === s ? 'bg-panel-2 font-bold text-cyan' : 'text-muted'}`} aria-pressed={speed === s}>{s}×</button>)}
           </div>
           <span className="ml-auto text-xs tabular text-muted">Pas {cursor}/{events.length}</span>
-          <Link href={`/tickets/${ticketId}`} className="btn btn-ghost px-3 py-2 text-sm">Înapoi la bilet</Link>
+          <Link href={`/?tab=istoric&ticket=${ticketId}`} className="btn btn-ghost px-3 py-2 text-sm">Înapoi la bilet</Link>
         </div>
         <input type="range" min={0} max={events.length} value={cursor} onChange={(e) => { setPlaying(false); setCursor(Number(e.target.value)); }} aria-label="Cronologie" className="w-full accent-cyan" />
         <div className="flex flex-wrap gap-1.5">

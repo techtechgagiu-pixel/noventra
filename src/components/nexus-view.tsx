@@ -56,7 +56,7 @@ export function NexusView({ state, mode, target, title, live, agentDetails }: { 
       </div>
 
       {/* Agents */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 lg:grid-cols-6">
         {shown(state).map((id) => <AgentPortrait key={id} a={state.agents[id]} live={animate} onOpen={() => setOpenAgent(id)} />)}
       </div>
 
@@ -106,17 +106,17 @@ function AgentPortrait({ a, live, onOpen }: { a: AgentView; live: boolean; onOpe
   const busy = a.status === 'ANALYZING' || a.status === 'DEBATING';
   return (
     <button onClick={onOpen} className="card group overflow-hidden text-left" style={{ ['--ring' as string]: `${m.accent}88` }} aria-label={`${m.name}, ${m.title}: ${STATUS_LABEL[a.status]}`}>
-      <div className={`relative aspect-[3/4] overflow-hidden ${busy && live ? 'working' : ''}`} style={{ borderBottom: `2px solid ${m.accent}` }}>
+      <div className={`relative aspect-square overflow-hidden sm:aspect-[3/4] ${busy && live ? 'working' : ''}`} style={{ borderBottom: `2px solid ${m.accent}` }}>
         <img src={m.img} alt="" className={`h-full w-full object-cover object-top transition duration-500 ${a.status === 'IDLE' ? 'opacity-60 grayscale-[.4]' : 'opacity-100'} group-hover:scale-105`} />
-        <span className="chip absolute left-2 top-2 bg-ink/70 backdrop-blur" style={{ color: m.accent, borderColor: `${m.accent}66` }}>
+        <span className="chip absolute left-1 top-1 bg-ink/70 px-1.5 py-0.5 text-[10px] backdrop-blur sm:left-2 sm:top-2 sm:text-xs" style={{ color: m.accent, borderColor: `${m.accent}66` }}>
           {busy && live && <Loader2 size={11} className="animate-spin" aria-hidden />}{STATUS_LABEL[a.status]}
         </span>
       </div>
-      <div className="p-3">
-        <p className="font-display font-bold" style={{ color: m.accent }}>{m.name}</p>
-        <p className="text-xs text-muted">{m.title}</p>
-        <p className="mt-1 truncate text-[11px] text-muted" title={a.model ?? ''}>{a.model ?? 'model nealocat încă'}{a.usedFallback ? ' (rezervă)' : ''}</p>
-        <p className="mt-1 line-clamp-2 min-h-8 text-xs">{a.lastConclusion ?? '—'}</p>
+      <div className="p-2 sm:p-3">
+        <p className="truncate font-display text-sm font-bold sm:text-base" style={{ color: m.accent }}>{m.name}</p>
+        <p className="hidden text-xs text-muted sm:block">{m.title}</p>
+        <p className="mt-1 hidden truncate text-[11px] text-muted sm:block" title={a.model ?? ''}>{a.model ?? 'model nealocat încă'}{a.usedFallback ? ' (rezervă)' : ''}</p>
+        <p className="mt-1 line-clamp-2 text-[11px] sm:min-h-8 sm:text-xs">{a.lastConclusion ?? '—'}</p>
       </div>
     </button>
   );

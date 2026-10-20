@@ -24,7 +24,7 @@ export const config = {
     maxConcurrentJobs: num('MAX_CONCURRENT_ANALYSES', 2),
     maxFixturesDaily: num('MAX_FIXTURES_PER_JOB', 30),
     maxFixturesWeekly: num('MAX_FIXTURES_WEEKLY_JOB', 48),
-    batchSize: num("ANALYSIS_BATCH_SIZE", 3),
+    batchSize: num("ANALYSIS_BATCH_SIZE", 4),
     debateRounds: Math.min(2, num('DEBATE_ROUNDS', 2)),
     maxOutputTokens: num('AI_MAX_OUTPUT_TOKENS', 2200),
     consensusThreshold: num('CONSENSUS_THRESHOLD', 3),
