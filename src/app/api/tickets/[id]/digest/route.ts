@@ -4,7 +4,7 @@ import { one } from '@/lib/db';
 import { buildDigest } from '@/lib/digest';
 
 export const dynamic = 'force-dynamic';
-/** Explicit click only ("GENEREAZĂ REZUMATUL") for tickets created before digests existed. Never regenerates. */
+/** Explicit click only ("GENEREAZĂ REZUMATUL") for tickets created before digests existed. `?regen=1` rewrites it on request. */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!sameOrigin(req)) return fail('Cerere respinsă (origine necunoscută).', 403);
   const user = await requireUser(req);
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!isUuid(id)) return fail('Identificator invalid.', 400);
   const t = await one<{ job_id: string; summary: { digest?: unknown } }>('SELECT job_id, summary FROM tickets WHERE id=$1 AND user_id=$2', [id, user.id]);
   if (!t) return fail('Biletul nu există.', 404);
-  if (t.summary.digest) return json({ digest: t.summary.digest });
+  if (t.summary.digest && req.nextUrl.searchParams.get('regen') !== '1') return json({ digest: t.summary.digest });
   const digest = await buildDigest(id, t.job_id);
   return digest ? json({ digest }) : fail('Biletul nu are selecții de rezumat.', 400);
 }
