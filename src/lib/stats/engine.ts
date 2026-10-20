@@ -27,18 +27,32 @@ export function scoreMatrix(lambdaHome: number, lambdaAway: number, maxGoals = 1
 }
 
 /** Probability that a canonical market selection wins under the score matrix. */
+/** Whether a canonical selection wins for a given final score (null = unknown market). */
+export function selectionWins(key: string, hg: number, ag: number): boolean | null {
+  const parts = key.split(':');
+  switch (parts[0]) {
+    case '1X2': return parts[1] === 'HOME' ? hg > ag : parts[1] === 'AWAY' ? ag > hg : hg === ag;
+    case 'DC': return parts[1] === '1X' ? hg >= ag : parts[1] === 'X2' ? ag >= hg : hg !== ag;
+    case 'TOTAL': { const line = Number(parts[2]); return parts[1] === 'OVER' ? hg + ag > line : hg + ag < line; }
+    case 'AH': { const line = Number(parts[2]); return parts[1] === 'HOME' ? hg + line > ag : ag + line > hg; }
+    default: return null;
+  }
+}
+
+/** a ⇒ b: every scoreline (0–10 goals each) on which `a` wins also makes `b` win. Used to normalise votes. */
+export function selectionImplies(a: string, b: string): boolean {
+  if (a === b) return true;
+  for (let i = 0; i <= 10; i++) for (let j = 0; j <= 10; j++) {
+    const wa = selectionWins(a, i, j), wb = selectionWins(b, i, j);
+    if (wa === null || wb === null) return false;
+    if (wa && !wb) return false;
+  }
+  return true;
+}
+
 export function marketProbability(matrix: ScoreMatrix, key: string): number | null {
   let p = 0;
-  const parts = key.split(':');
-  const test = (hg: number, ag: number): boolean | null => {
-    switch (parts[0]) {
-      case '1X2': return parts[1] === 'HOME' ? hg > ag : parts[1] === 'AWAY' ? ag > hg : hg === ag;
-      case 'DC': return parts[1] === '1X' ? hg >= ag : parts[1] === 'X2' ? ag >= hg : hg !== ag;
-      case 'TOTAL': { const line = Number(parts[2]); return parts[1] === 'OVER' ? hg + ag > line : hg + ag < line; }
-      case 'AH': { const line = Number(parts[2]); return parts[1] === 'HOME' ? hg + line > ag : ag + line > hg; }
-      default: return null;
-    }
-  };
+  const test = (hg: number, ag: number) => selectionWins(key, hg, ag);
   for (let i = 0; i < matrix.length; i++) for (let j = 0; j < matrix[i].length; j++) {
     const r = test(i, j);
     if (r === null) return null;

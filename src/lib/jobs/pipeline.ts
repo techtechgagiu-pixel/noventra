@@ -297,9 +297,11 @@ async function stepAgents(job: JobRow, ids: string[], round: number, deadline: n
 
 async function chooseDebate(job: JobRow, ids: string[], round: number) {
   const out: string[] = [];
+  const snaps = await batchSnapshots(job, ids);
   for (const id of ids) {
     const pos = await latestPositions(job.id, id);
-    if (round === 1 ? contested(pos) : (() => { const c = consensus(pos, config.limits.consensusThreshold); return c.outcome !== 'QUALIFIED' && c.votesFor === config.limits.consensusThreshold - 1; })()) out.push(id);
+    const keys = snaps.find((s) => s.fixture.id === id)?.model.markets.map((m) => ({ key: m.key, odds: m.odds }));
+    if (round === 1 ? contested(pos, keys) : (() => { const c = consensus(pos, config.limits.consensusThreshold, 6, keys); return c.outcome !== 'QUALIFIED' && c.votesFor === config.limits.consensusThreshold - 1; })()) out.push(id);
   }
   return out;
 }
@@ -312,7 +314,7 @@ async function stepVote(job: JobRow, ids: string[]) {
     if (exists) continue;
     const positions = await latestPositions(job.id, s.fixture.id);
     for (const p of positions) await recordEvent(job.id, { type: 'VOTE_SUBMITTED', stage: 'VOTING', agentId: p.agentId, fixtureId: s.fixture.id, payload: { decision: p.decision, marketKey: p.marketKey, round: p.round, model: `${p.provider}/${p.model}` } });
-    const c = consensus(positions, threshold);
+    const c = consensus(positions, threshold, 6, s.model.markets.map((m) => ({ key: m.key, odds: m.odds })));
     await recordEvent(job.id, { type: 'CONSENSUS_CALCULATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, ...c, threshold } });
     const validation: Record<string, unknown> = {};
     let outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET' | 'REJECTED' = c.outcome;
@@ -341,7 +343,7 @@ async function stepVote(job: JobRow, ids: string[]) {
         outcome = 'REJECTED';
         const labels: Record<string, string> = { fixtureStillPreMatch: 'meciul nu mai este pre-meci', oddsAvailable: 'cota nu mai este disponibilă', oddsFresh: 'cota este prea veche', bookmakerIdentified: 'bookmaker neidentificat', selectionConsistent: 'selecție inconsistentă', probabilityPlausible: 'probabilitate estimată prea mică', evNotStronglyNegative: 'valoare așteptată clar negativă', dataSufficient: 'istoric insuficient' };
         reason = `Consens ${c.votesFor}/6, dar validarea a respins selecția: ${failed.map((f) => labels[f]).join(', ')}.`;
-      } else reason = `Consens ${c.votesFor}/6 pentru „${est.label}”; validare trecută.`;
+      } else reason = `Consens ${c.votesFor}/6 pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.`;
     }
     await query('INSERT INTO final_decisions(job_id, fixture_id, outcome, market_key, votes_for, votes, validation, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (job_id, fixture_id) DO NOTHING',
       [job.id, s.fixture.id, outcome, c.marketKey, c.votesFor, JSON.stringify(positions), JSON.stringify(validation), reason]);

@@ -11,7 +11,7 @@ describe('voting', () => {
     expect(c).toMatchObject({ outcome: 'QUALIFIED', marketKey: '1X2:HOME', votesFor: 4 });
   });
   it('3/6 is NO CONSENSUS; 4 NO_BET is NO BET; failed agents are abstentions, not votes', () => {
-    expect(consensus([pos('a', '1X2:HOME'), pos('b', '1X2:HOME'), pos('c', '1X2:HOME'), pos('d', 'DC:1X'), pos('e', null), pos('f', null)], 4).outcome).toBe('NO_CONSENSUS');
+    expect(consensus([pos('a', '1X2:HOME'), pos('b', '1X2:HOME'), pos('c', '1X2:HOME'), pos('d', 'TOTAL:OVER:2.5'), pos('e', null), pos('f', null)], 4).outcome).toBe('NO_CONSENSUS');
     expect(consensus([pos('a', null), pos('b', null), pos('c', null), pos('d', null), pos('e', '1X2:HOME')], 4)).toMatchObject({ outcome: 'NO_BET', abstentions: 1 });
     expect(consensus([pos('a', '1X2:HOME'), pos('b', '1X2:HOME'), pos('c', '1X2:HOME')], 4).outcome).toBe('NO_CONSENSUS');
   });
@@ -59,5 +59,25 @@ describe('SCOUT', () => {
     expect(classes).toContain('POSSIBLE FORTUITOUS INFLUENCE');
     expect(classes).toContain('INSUFFICIENT EVIDENCE');
     expect(d.shotsOnTargetFor).toBe(1); // average over available values only, missing ≠ 0
+  });
+});
+
+describe('logical vote normalisation', () => {
+  const keys = [{ key: '1X2:AWAY', odds: 2.15 }, { key: 'DC:X2', odds: 1.4 }, { key: 'AH:AWAY:1.5', odds: 1.2 }, { key: 'TOTAL:UNDER:2.5', odds: 1.9 }];
+  it('a vote for "Away wins" also supports "Draw or Away" and "+1.5"', async () => {
+    const { selectionImplies } = await import('@/lib/stats/engine');
+    expect(selectionImplies('1X2:AWAY', 'DC:X2')).toBe(true);
+    expect(selectionImplies('DC:X2', '1X2:AWAY')).toBe(false);
+    expect(selectionImplies('1X2:AWAY', 'AH:AWAY:1.5')).toBe(true);
+    expect(selectionImplies('TOTAL:UNDER:2.5', 'DC:X2')).toBe(false);
+  });
+  it('qualifies the most specific key that reaches 4/6 and reports supporters', () => {
+    const c = consensus([pos('a', '1X2:AWAY'), pos('b', '1X2:AWAY'), pos('c', 'DC:X2'), pos('d', 'DC:X2'), pos('e', null), pos('f', 'TOTAL:UNDER:2.5')], 4, 6, keys);
+    expect(c).toMatchObject({ outcome: 'QUALIFIED', marketKey: 'DC:X2', votesFor: 4, directVotes: 2 });
+    expect(c.supporters.sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
+  it('never counts unrelated markets together', () => {
+    const c = consensus([pos('a', '1X2:AWAY'), pos('b', 'TOTAL:UNDER:2.5'), pos('c', 'TOTAL:UNDER:2.5'), pos('d', '1X2:AWAY'), pos('e', null), pos('f', null)], 4, 6, keys);
+    expect(c.outcome).toBe('NO_CONSENSUS');
   });
 });

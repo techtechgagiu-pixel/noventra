@@ -1,3 +1,4 @@
+import { selectionImplies } from '../stats/engine';
 import type { Prediction, Revision } from '../ai/agents';
 import type { FixtureSnapshot } from './types';
 
@@ -37,27 +38,36 @@ export function canonicalMarket(key: string | null, validKeys: Set<string>): str
   return a && validKeys.has(a) ? a : null;
 }
 
-export type ConsensusResult = { outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET'; marketKey: string | null; votesFor: number; noBetVotes: number; abstentions: number; tally: Record<string, number> };
+export type ConsensusResult = { outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET'; marketKey: string | null; votesFor: number; directVotes: number; noBetVotes: number; abstentions: number; tally: Record<string, number>; supporters: string[] };
 
-export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 6): ConsensusResult {
-  const tally: Record<string, number> = {};
-  let noBet = 0;
-  for (const p of positions) {
-    if (p.decision === 'BET_CANDIDATE' && p.marketKey) tally[p.marketKey] = (tally[p.marketKey] ?? 0) + 1;
-    else noBet++;
-  }
+/**
+ * One vote per agent. Votes are normalised logically: a vote for a stricter selection also supports every
+ * selection it implies (e.g. "Away wins" ⇒ "Draw or Away"), because an agent backing the former necessarily backs the latter.
+ * Among keys reaching the threshold, the most specific one (highest odds = fewest implied outcomes) is chosen.
+ */
+export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 6, availableKeys?: Array<{ key: string; odds: number }>): ConsensusResult {
+  const bets = positions.filter((p) => p.decision === 'BET_CANDIDATE' && p.marketKey);
+  const noBet = positions.length - bets.length;
   const abstentions = totalAgents - positions.length;
-  const [topKey, topVotes] = Object.entries(tally).sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
-  if (topKey && topVotes >= threshold) return { outcome: 'QUALIFIED', marketKey: topKey, votesFor: topVotes, noBetVotes: noBet, abstentions, tally };
-  if (noBet >= threshold) return { outcome: 'NO_BET', marketKey: null, votesFor: topVotes, noBetVotes: noBet, abstentions, tally };
-  return { outcome: 'NO_CONSENSUS', marketKey: topKey, votesFor: topVotes, noBetVotes: noBet, abstentions, tally };
+  const tally: Record<string, number> = {};
+  for (const b of bets) tally[b.marketKey!] = (tally[b.marketKey!] ?? 0) + 1;
+  const keys = availableKeys ?? [...new Set(bets.map((b) => b.marketKey!))].map((key) => ({ key, odds: 0 }));
+  const support = keys.map((k) => {
+    const supporters = bets.filter((b) => selectionImplies(b.marketKey!, k.key)).map((b) => b.agentId);
+    return { key: k.key, odds: k.odds, supporters, direct: tally[k.key] ?? 0 };
+  }).filter((s) => s.supporters.length > 0)
+    .sort((a, b) => b.supporters.length - a.supporters.length || b.odds - a.odds || b.direct - a.direct);
+  const qualified = support.filter((s) => s.supporters.length >= threshold).sort((a, b) => b.odds - a.odds || b.direct - a.direct || a.supporters.length - b.supporters.length)[0];
+  const top = qualified ?? support[0];
+  if (qualified) return { outcome: 'QUALIFIED', marketKey: qualified.key, votesFor: qualified.supporters.length, directVotes: qualified.direct, noBetVotes: noBet, abstentions, tally, supporters: qualified.supporters };
+  if (noBet >= threshold) return { outcome: 'NO_BET', marketKey: null, votesFor: top?.supporters.length ?? 0, directVotes: top?.direct ?? 0, noBetVotes: noBet, abstentions, tally, supporters: top?.supporters ?? [] };
+  return { outcome: 'NO_CONSENSUS', marketKey: top?.key ?? null, votesFor: top?.supporters.length ?? 0, directVotes: top?.direct ?? 0, noBetVotes: noBet, abstentions, tally, supporters: top?.supporters ?? [] };
 }
 
 /** Fixtures that deserve a debate: a plausible consensus that is not already unanimous. */
-export function contested(positions: FinalPosition[]) {
-  const c = consensus(positions, 99);
-  const top = Object.values(c.tally).sort((a, b) => b - a)[0] ?? 0;
-  return top >= 2 && top < 6;
+export function contested(positions: FinalPosition[], availableKeys?: Array<{ key: string; odds: number }>) {
+  const c = consensus(positions, 99, 6, availableKeys);
+  return c.votesFor >= 2 && c.votesFor < 6;
 }
 
 export function toPosition(agentId: string, p: Prediction | Revision, round: number, provider: string, model: string, validKeys: Set<string>): FinalPosition {
