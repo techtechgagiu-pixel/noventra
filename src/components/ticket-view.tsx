@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { AlertTriangle, Check, ClipboardCopy, Download, History, ListChecks, PlayCircle } from 'lucide-react';
 import { AGENT_META, OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
+import { superbetPick } from '@/lib/superbet-format';
 
 type Sel = { position: number; fixture_id: string; market_key: string; market_label: string; odds: number; bookmaker: string; quote_observed_at: string; votes_for: number; model_probability: number | null; risk: string; snapshot: { match: string; home: string; away: string; league: string; kickoff: string; source: string }; outcome: string; home_score: number | null; away_score: number | null };
 export type TicketData = {
@@ -23,11 +24,25 @@ export function ticketText(t: TicketData) {
   return lines.join('\n');
 }
 
+/** Plain text to rebuild the ticket by hand in the Superbet app (search team → market → pick). */
+export function superbetText(t: TicketData) {
+  const lines = [`PRIMUL 11 — ${t.title} — pentru Superbet`, `${t.legCount} meciuri · cota la noi ${odds(t.actualOdds)}`, ''];
+  t.selections.forEach((s) => {
+    const p = superbetPick(s.market_key, s.snapshot.home, s.snapshot.away);
+    lines.push(`${s.position}. ${s.snapshot.home} – ${s.snapshot.away} · ${fmtDateTime(s.snapshot.kickoff)}`,
+      `   Caută: ${s.snapshot.home} → ${p.market} → ${p.pick}${p.note ? ` (${p.note})` : ''} · cota la noi ${odds(s.odds)}`);
+  });
+  lines.push('', 'Cotele Superbet pot fi diferite; verifică totalul înainte. Codul biletului îl generezi din Superbet. 18+');
+  return lines.join('\n');
+}
+
 export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
   const [copied, setCopied] = useState(false);
+  const [copiedSb, setCopiedSb] = useState(false);
+  const copySb = async () => { await navigator.clipboard.writeText(superbetText(t)); setCopiedSb(true); setTimeout(() => setCopiedSb(false), 2000); };
   const completed = t.generationStatus === 'COMPLETED';
   const copy = async () => { await navigator.clipboard.writeText(ticketText(t)); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const download = () => { const url = URL.createObjectURL(new Blob([ticketText(t)], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = `betmind-${t.title.replace(/\W+/g, '-').toLowerCase()}-${t.createdAt.slice(0, 10)}.txt`; a.click(); URL.revokeObjectURL(url); };
+  const download = () => { const url = URL.createObjectURL(new Blob([ticketText(t)], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = `primul11-${t.title.replace(/\W+/g, '-').toLowerCase()}-${t.createdAt.slice(0, 10)}.txt`; a.click(); URL.revokeObjectURL(url); };
   const names = Object.fromEntries(t.fixtures.map((f) => [f.fixtureId, `${f.fixture.home} – ${f.fixture.away}`]));
   return (
     <div className="space-y-6">
@@ -52,6 +67,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
                   <p className="text-xs text-muted">{s.snapshot.league} · {fmtDateTime(s.snapshot.kickoff)}</p>
                   <p className="text-lg font-semibold">{s.snapshot.home} <span className="text-muted">vs</span> {s.snapshot.away}{s.home_score != null && s.outcome !== 'PENDING' && <span className="ml-2 text-sm text-muted">({s.home_score}–{s.away_score})</span>}</p>
                   <p className="mt-1 text-sm"><span className="font-semibold text-cyan">{s.market_label}</span> <span className="text-muted">· {s.market_key}</span></p>
+                  {(() => { const p = superbetPick(s.market_key, s.snapshot.home, s.snapshot.away); return <p className="text-xs text-muted">Pe Superbet: <span className="text-text">{p.market} → {p.pick}</span>{p.note ? ` (${p.note})` : ''}</p>; })()}
                   <p className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="chip">{s.votes_for}/{t.summary.agents ?? 6} voturi</span><span className="chip">{RISK_RO[s.risk]}</span><span className="chip">{s.bookmaker} · observat {fmtDateTime(s.quote_observed_at)}</span>{s.model_probability != null && <span className="chip">p estimat {Math.round(s.model_probability * 100)}%</span>}</p>
                 </div>
                 <div className="text-right"><p className="font-display text-3xl font-bold tabular">{odds(s.odds)}</p>{s.outcome !== 'PENDING' && <p className={`text-xs font-bold ${s.outcome === 'WON' ? 'text-emerald' : s.outcome === 'LOST' ? 'text-rose' : 'text-muted'}`}>{s.outcome === 'WON' ? 'Câștigat' : s.outcome === 'LOST' ? 'Pierdut' : 'Anulat'}</p>}</div>
@@ -77,6 +93,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
 
       <div className="flex flex-wrap gap-3">
         {completed && <button onClick={copy} className="btn btn-primary px-5 py-3">{copied ? <Check size={16} /> : <ClipboardCopy size={16} />} {copied ? 'COPIAT' : 'COPIAZĂ BILETUL'}</button>}
+        {completed && <button onClick={copySb} className="btn btn-ghost px-5 py-3">{copiedSb ? <Check size={16} /> : <ClipboardCopy size={16} />} {copiedSb ? 'COPIAT' : 'COPIAZĂ PENTRU SUPERBET'}</button>}
         {completed && <button onClick={download} className="btn btn-ghost px-5 py-3"><Download size={16} /> DESCARCĂ TXT</button>}
         <a href="#analiza" className="btn btn-ghost px-5 py-3"><ListChecks size={16} /> VEZI ANALIZA</a>
         <Link href={`/tickets/${t.id}/replay`} className="btn btn-gold px-5 py-3"><PlayCircle size={16} /> VEZI CUM A FOST CREAT</Link>
