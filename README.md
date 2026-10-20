@@ -31,7 +31,9 @@ Pipeline per job (checkpointed, idempotent units, `src/lib/jobs/pipeline.ts`):
    shots on target, de-margined market probabilities, blended estimate, EV = p × odds − 1. LLMs never compute numbers.
 4. **Six independent agents** — same factual snapshot, strict JSON schemas (Zod), no access to each other's first answer.
 5. **Debate** — up to 2 rounds, only for contested fixtures (round 2 only when one vote short).
-6. **Vote + validation** — 4/6 on the same canonical market key, then freshness/odds/kickoff/probability/EV/data checks.
+6. **Vote + validation** — one vote per agent, ≥4/6 on the same canonical market. Votes are normalised by logical
+   implication on the score grid (a vote for "Away wins" also supports "Draw or Away"); the most specific market reaching 4/6
+   is chosen and direct vs. implied supporters are recorded. Then freshness/odds/kickoff/probability/EV/data checks.
    Consensus never overrides validation.
 7. **Optimizer** (`src/lib/optimizer.ts`) — bounded beam search in log-odds space, ±15% tolerance, never alters prices,
    flags mixed bookmakers; weekly requires exactly 12 distinct fixtures or returns an honest INCOMPLETE.
