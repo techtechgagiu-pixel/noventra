@@ -16,6 +16,7 @@ import { localDate, yyyymmdd } from '../time';
 import { agentFacts, characterViolation, newsFacts, consensus, contested, riskClass, toPosition, type FinalPosition } from './analysis';
 import { agentTrackRecord, trackRecordText } from '../track-record';
 import { teamNews } from '../news/google-news';
+import { buildDigest } from '../digest';
 import { recordEvent } from './events';
 import type { CandidateEntry, Checkpoint, FixtureSnapshot, Stage } from './types';
 
@@ -464,6 +465,10 @@ async function build(job: JobRow) {
   });
   await recordEvent(job.id, { type: 'TICKET_FINALIZED', stage: 'DONE', payload: { generation, totalOdds: chosen.length ? result.totalOdds : null, legs: chosen.length, target: Number(job.target_odds), reason: summary.reason, mixedBookmakers: result.mixedBookmakers } });
   job.status = generation;
+  if (chosen.length) {
+    const tid = await one<{ id: string }>('SELECT id FROM tickets WHERE job_id=$1', [job.id]);
+    if (tid) await buildDigest(tid.id, job.id).catch(() => null);
+  }
 }
 
 /**
