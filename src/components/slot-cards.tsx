@@ -5,7 +5,7 @@ import { CalendarClock, Loader2, Sparkles } from 'lucide-react';
 import { api, fmtDateTime, fmtDay, odds, STATUS_RO } from '@/lib/format';
 
 type Slot = {
-  slot: { id: string; title: string; subtitle: string; target: number; period: 'daily' | 'weekly'; requiredLegs: number | null; variant: string };
+  slot: { id: string; title: string; subtitle: string; policy?: { minOdds: number; maxOdds: number; minLegs: number }; target: number; period: 'daily' | 'weekly'; requiredLegs: number | null; variant: string };
   periodKey: string; nextReset: string;
   job: null | { id: string; status: string; stage: string; createdAt: string; lastError: string | null };
   ticket: null | { id: string; generationStatus: string; actualOdds: number | null; legCount: number; createdAt: string; outcomeStatus: string };
@@ -69,7 +69,7 @@ function Card({ s, busy, onAct, wide }: { s: Slot; busy: boolean; onAct: () => v
           <h3 className="mt-1 font-display text-lg font-bold">{s.slot.title}</h3>
           <div className="mt-2 flex items-end gap-3">
             <span className="font-display text-6xl font-bold leading-none tabular" style={{ color: accent }}>{s.slot.target}</span>
-            <span className="pb-1 text-sm text-muted">cotă țintă{s.slot.requiredLegs ? ` · exact ${s.slot.requiredLegs} meciuri` : ' · meciuri alese automat'}</span>
+            <span className="pb-1 text-sm text-muted">cotă țintă{s.slot.requiredLegs ? ` · exact ${s.slot.requiredLegs} meciuri` : s.slot.policy ? ` · min. ${s.slot.policy.minLegs} meciuri, cote ${s.slot.policy.minOdds.toFixed(2)}–${s.slot.policy.maxOdds.toFixed(2)}` : ' · meciuri alese automat'}</span>
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
             <dt className="text-muted">Stare</dt><dd className="font-medium">{running && <Loader2 size={13} className="mr-1 inline animate-spin" aria-hidden />}{state}</dd>

@@ -5,7 +5,7 @@ import { CheckCircle2, CircleSlash, Database, Loader2, Search, X } from 'lucide-
 import { AGENT_META, fmtTime, odds } from '@/lib/format';
 import { STAGE_ORDER, progress, type AgentView, type NexusState } from '@/lib/nexus-state';
 
-const STAGE_LABELS: Record<string, string> = { SELECTING: 'Alegerea meciurilor', SCOUT: 'Cercetarea SCOUT', STATS: 'Calculele statistice', ANALYSIS: 'Analiza celor șase agenți', DEBATE: 'Dezbaterea', VOTING: 'Votarea și validarea', BUILDING: 'Construirea biletului' };
+const STAGE_LABELS: Record<string, string> = { SELECTING: 'Alegerea meciurilor', SCOUT: 'Cercetarea SCOUT', STATS: 'Calculele statistice', ANALYSIS: 'Analiza celor zece agenți', DEBATE: 'Dezbaterea', VOTING: 'Votarea și validarea', BUILDING: 'Construirea biletului' };
 const STATUS_LABEL: Record<string, string> = { IDLE: 'În așteptare', ANALYZING: 'Analizează', DEBATING: 'Dezbate', DONE: 'Gata', FAILED: 'Abținere (eroare)', WAITING: 'Așteaptă limita' };
 const ORDER = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin'];
 const shown = (s: NexusState) => (s.participants.length >= 6 && s.participants.length < ORDER.length && !!s.final ? ORDER.filter((id) => s.participants.includes(id)) : ORDER);

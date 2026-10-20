@@ -11,7 +11,7 @@ export const STAGES: { id: Stage; label: string }[] = [
   { id: 'SELECTING', label: 'Alegerea meciurilor' },
   { id: 'SCOUT', label: 'Cercetarea SCOUT' },
   { id: 'STATS', label: 'Calculele statistice' },
-  { id: 'ANALYSIS', label: 'Analiza celor șase agenți' },
+  { id: 'ANALYSIS', label: 'Analiza celor zece agenți' },
   { id: 'DEBATE', label: 'Dezbaterea' },
   { id: 'VOTING', label: 'Votarea și validarea' },
   { id: 'BUILDING', label: 'Construirea biletului' },

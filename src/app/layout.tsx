@@ -7,7 +7,7 @@ const grotesk = Space_Grotesk({ subsets: ['latin', 'latin-ext'], variable: '--fo
 
 export const metadata: Metadata = {
   title: 'BETMIND SIX · NEXUS',
-  description: 'Six Minds. One Decision. Analiză de fotbal cu șase agenți AI, pe date reale.',
+  description: 'Six Minds. One Decision. Analiză de fotbal cu zece agenți AI, pe date reale.',
   icons: { icon: '/favicon.svg' },
 };
 export const viewport: Viewport = { themeColor: '#060b18', width: 'device-width', initialScale: 1 };
