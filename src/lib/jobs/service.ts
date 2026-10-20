@@ -68,7 +68,7 @@ export async function createOrGetJob(userId: string, slotId: string, at = new Da
   const window = fixtureWindow(slot, at);
   let avoidFixtures: string[] = [];
   if (slot.variant === 'B') {
-    const sibling = slot.id === 'FIVE_B' ? 'FIVE_A' : 'TEN_A';
+    const sibling = slot.id === 'FIVE_B' ? 'FIVE_A' : 'TWO_A';
     avoidFixtures = (await many<{ fixture_id: string }>(
       `SELECT s.fixture_id FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.user_id=$1 AND t.slot=$2 AND t.period_key=$3`, [userId, sibling, key])).map((r) => r.fixture_id);
   }

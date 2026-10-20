@@ -12,9 +12,21 @@ Five generation slots per user, locked server-side by a unique `(user, slot, per
 
 | Slot | Target | Period | Legs |
 |---|---|---|---|
-| `FIVE_A`, `FIVE_B` | 5 | Romanian calendar day | AUTO (2–5) |
-| `TEN_A`, `TEN_B` | 10 | Romanian calendar day | AUTO (2–7) |
-| `WEEKLY_100` | 100 | ISO week (Mon 00:00 Bucharest) | exactly 12 distinct fixtures |
+| `FIVE_A`, `FIVE_B` | 5 | Romanian calendar day | AUTO 3–7, each leg 1.15–1.65, engine p ≥ 60% |
+| `TWO_A`, `TWO_B` | 2 | Romanian calendar day | AUTO 2–4, each leg 1.12–1.45, engine p ≥ 68% |
+| `WEEKLY_100` | 100 | ISO week (Mon 00:00 Bucharest) | exactly 12 distinct fixtures, each leg 1.20–1.85, p ≥ 55% |
+
+(`TEN_A`/`TEN_B` — COTĂ 10 — were retired; old rows remain readable as history.)
+
+### Prudence and agent character (deterministic, `src/lib/slots.ts`, `src/lib/jobs/analysis.ts`)
+- Each agent has a code-enforced `maxOdds` / `minProbability` (Victor 1.55/68%, Robert 1.50/70% … Alex 2.50/45%). Agents only
+  see prices inside `min(agent cap, ticket cap)`; a vote outside the agent's character or the ticket rules is recorded as
+  `VOTE_SET_ASIDE` and not counted.
+- Consensus: ≥ 3/10 supporters after logical normalisation; the key backed by the MOST agents wins (ties → lower price),
+  so "Draw or Away" backed by 7 beats "Away" backed by 5. If Victor and Robert both refuse, 5/10 is required.
+- Optimizer: among combinations within ±15% of the target, maximises the probability that every leg wins.
+- Track record ("training" without fine-tuning): every agent pick is settled after the match (`agent_predictions.outcome`);
+  each agent receives its own verified hit rate, odds buckets and calibration gap in later prompts (`src/lib/track-record.ts`).
 
 AI runs **only** after `POST /api/ticket-slots/:slot/generate` (the CREEAZĂ BILETUL button). Page loads, ticket views,
 replay, fixture sync and settlement never call a model (covered by tests).

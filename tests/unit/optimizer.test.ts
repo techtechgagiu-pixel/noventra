@@ -41,3 +41,17 @@ describe('ticket optimizer', () => {
     expect(r2.status).toBe('INCOMPLETE');
   });
 });
+
+describe('prudent tickets', () => {
+  const c = (id: string, odds: number, p?: number): Candidate => ({ fixtureId: id, teams: [id + 'h', id + 'a'], odds, bookmaker: 'DK', quality: 0.5, risk: 'LOW', probability: p ?? null });
+  it('cotă 5 is never 2 big prices: with maxLegOdds 1.65 and minLegs 3 it uses small prices', () => {
+    const r = optimizeTicket({ candidates: [c('big1', 2.0, 0.52), c('big2', 2.8, 0.36), c('a', 1.36, 0.7), c('b', 1.45, 0.66), c('d', 1.5, 0.64), c('e', 1.6, 0.6), c('f', 1.3, 0.74)], target: 5, requiredLegs: null, tolerance: 0.15, minLegs: 3, maxLegs: 7, maxLegOdds: 1.65 });
+    expect(r.status).toBe('COMPLETED');
+    expect(r.legs.length).toBeGreaterThanOrEqual(3);
+    expect(r.legs.every((l) => l.odds <= 1.65)).toBe(true);
+  });
+  it('prefers the combination with the higher chance that every leg wins', () => {
+    const r = optimizeTicket({ candidates: [c('x', 1.4, 0.75), c('y', 1.45, 0.6), c('z', 1.42, 0.74)], target: 2, requiredLegs: null, tolerance: 0.15, minLegs: 2, maxLegs: 4, maxLegOdds: 1.45 });
+    expect(r.legs.map((l) => l.fixtureId).sort()).toEqual(['x', 'z']);
+  });
+});

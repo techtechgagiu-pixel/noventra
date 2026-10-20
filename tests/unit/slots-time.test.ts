@@ -3,10 +3,11 @@ import { SLOTS, fixtureWindow, nextReset, periodKey, slotById } from '@/lib/slot
 import { isoWeekStart, localDate, localMidnightUtc } from '@/lib/time';
 
 describe('ticket slots', () => {
-  it('exactly five slots: 2× cotă 5, 2× cotă 10, 1× weekly 100 with 12 legs', () => {
+  it('exactly five slots: 2× cotă 5, 2× cotă 2, 1× weekly 100 with 12 legs', () => {
     expect(SLOTS).toHaveLength(5);
     expect(SLOTS.filter((s) => s.target === 5 && s.period === 'daily')).toHaveLength(2);
-    expect(SLOTS.filter((s) => s.target === 10 && s.period === 'daily')).toHaveLength(2);
+    expect(SLOTS.filter((s) => s.target === 2 && s.period === 'daily')).toHaveLength(2);
+    for (const s of SLOTS.filter((x) => x.target === 5)) expect(s.policy).toMatchObject({ maxOdds: 1.65, minLegs: 3 });
     const w = SLOTS.filter((s) => s.period === 'weekly');
     expect(w).toHaveLength(1);
     expect(w[0]).toMatchObject({ id: 'WEEKLY_100', target: 100, requiredLegs: 12 });
@@ -28,7 +29,7 @@ describe('ticket slots', () => {
   });
   it('fixture windows: daily today+4 days, weekly 7 days from creation', () => {
     const at = new Date('2026-10-22T08:00:00Z');
-    expect(fixtureWindow(slotById('TEN_B')!, at)).toMatchObject({ startDate: '2026-10-22', endDateExclusive: '2026-10-27', days: 5 });
+    expect(fixtureWindow(slotById('TWO_B')!, at)).toMatchObject({ startDate: '2026-10-22', endDateExclusive: '2026-10-27', days: 5 });
     expect(fixtureWindow(slotById('WEEKLY_100')!, at)).toMatchObject({ startDate: '2026-10-22', endDateExclusive: '2026-10-29', days: 7 });
   });
   it('local midnight conversion handles DST', () => {

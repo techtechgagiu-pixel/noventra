@@ -9,6 +9,7 @@ export type Candidate = {
   bookmaker: string;
   quality: number; // 0..1 — consensus strength × data quality
   risk: 'LOW' | 'MEDIUM' | 'HIGH';
+  probability?: number | null; // stats-engine probability that this leg wins
 };
 
 export type OptimizerResult = {
@@ -23,17 +24,21 @@ export type OptimizerResult = {
 
 const BEAM = 200;
 
-export function optimizeTicket(input: { candidates: Candidate[]; target: number; requiredLegs: number | null; tolerance: number; avoidFixtures?: Set<string>; maxLegs?: number }): OptimizerResult {
+/**
+ * Among combinations within tolerance of the target, the SAFEST one wins: highest estimated probability that
+ * every leg wins (product of leg probabilities). `maxLegOdds` and `minLegs` keep tickets made of small prices.
+ */
+export function optimizeTicket(input: { candidates: Candidate[]; target: number; requiredLegs: number | null; tolerance: number; avoidFixtures?: Set<string>; maxLegs?: number; minLegs?: number; maxLegOdds?: number }): OptimizerResult {
   const goal = Math.log(input.target);
   const tol = Math.log(1 + input.tolerance);
-  const unique = dedupe(input.candidates);
+  const unique = dedupe(input.candidates.filter((c) => !input.maxLegOdds || c.odds <= input.maxLegOdds + 1e-9));
   const maxLegs = input.requiredLegs ?? Math.min(input.maxLegs ?? (input.target <= 5 ? 5 : 7), unique.length);
-  const minLegs = input.requiredLegs ?? 2;
+  const minLegs = input.requiredLegs ?? Math.max(2, input.minLegs ?? 2);
   if (input.requiredLegs && unique.length < input.requiredLegs) {
     return { status: 'INCOMPLETE', legs: [], totalOdds: 0, withinTolerance: false, mixedBookmakers: false, closest: unique.length ? { legs: unique, totalOdds: product(unique) } : null, reason: `Sunt necesare exact ${input.requiredLegs} selecții calificate din meciuri distincte; au fost disponibile ${unique.length}.` };
   }
   if (unique.length < minLegs) {
-    return { status: 'INCOMPLETE', legs: [], totalOdds: 0, withinTolerance: false, mixedBookmakers: false, closest: unique.length ? { legs: unique, totalOdds: product(unique) } : null, reason: `Prea puține selecții calificate (${unique.length}) pentru un bilet combinat.` };
+    return { status: 'INCOMPLETE', legs: [], totalOdds: 0, withinTolerance: false, mixedBookmakers: false, closest: unique.length ? { legs: unique, totalOdds: product(unique) } : null, reason: `Prea puține selecții calificate cu cote mici (${unique.length}); biletul cere minimum ${minLegs} meciuri.` };
   }
   // Order: higher quality first so the beam keeps strong legs.
   const items = [...unique].sort((a, b) => b.quality - a.quality || a.odds - b.odds);
@@ -61,7 +66,8 @@ export function optimizeTicket(input: { candidates: Candidate[]; target: number;
     const legs = s.idx.length;
     const overlap = s.idx.filter((i) => avoid.has(items[i].fixtureId)).length;
     const books = new Set(s.idx.map((i) => items[i].bookmaker)).size;
-    return (dist <= tol ? 0 : 10 + dist * 10) + (input.requiredLegs ? 0 : legs * 0.08) - (s.quality / legs) * 0.3 + overlap * 0.15 + (books - 1) * 0.05;
+    const logWin = s.idx.reduce((sum, i) => sum + Math.log(legProbability(items[i])), 0); // ≤ 0; closer to 0 = safer
+    return (dist <= tol ? 0 : 10 + dist * 10) - logWin - (s.quality / legs) * 0.1 + overlap * 0.15 + (books - 1) * 0.05;
   };
   const best = [...pool].sort((a, b) => score(a) - score(b))[0];
   const legs = best.idx.map((i) => items[i]);
@@ -88,6 +94,8 @@ function prune<T extends { log: number; idx: number[]; quality: number }>(states
   }
   return kept;
 }
+
+const legProbability = (c: Candidate) => Math.min(0.97, Math.max(0.05, c.probability ?? 0.95 / c.odds));
 
 function dedupe(c: Candidate[]) {
   const best = new Map<string, Candidate>();

@@ -42,7 +42,8 @@ describe('slot locking', () => {
 describe('daily ticket end-to-end (DEMO data, fake AI transport)', () => {
   it('generates, persists, locks, and replays with zero AI calls', async () => {
     const ai: FakeAi = { calls: [], pick: (id) => (['demo:0', 'demo:1', 'demo:2', 'demo:3', 'demo:4'].includes(id) ? '1X2:HOME' : null) };
-    installFakes(demoFixtures(9), ai);
+    // Prudent COTĂ 5: small prices only (≤ 1.65), at least 3 legs.
+    installFakes(demoFixtures(9, (i) => ({ home: 1.4 + (i % 3) * 0.1, draw: 4.2, away: 6.5, dc: 1.1 })), ai);
     const u = await makeUser();
     const before = aiCallCount();
     const { jobId } = await createOrGetJob(u, 'FIVE_A');
@@ -80,15 +81,15 @@ describe('daily ticket end-to-end (DEMO data, fake AI transport)', () => {
   it('NO BET is a terminal, saved outcome that consumes the slot', async () => {
     installFakes(demoFixtures(6), { calls: [], pick: () => null });
     const u = await makeUser();
-    const { jobId } = await createOrGetJob(u, 'TEN_B');
+    const { jobId } = await createOrGetJob(u, 'TWO_B');
     expect(await drain(jobId)).toBe('NO_BET');
-    expect((await slotStates(u)).find((s) => s.slot.id === 'TEN_B')!.action).toBe('VIEW_RESULT');
+    expect((await slotStates(u)).find((s) => s.slot.id === 'TWO_B')!.action).toBe('VIEW_RESULT');
   });
 
   it('Ticket B uses a different seed than Ticket A', async () => {
     installFakes(demoFixtures(6), { calls: [], pick: () => null });
     const u = await makeUser();
-    const a = await createOrGetJob(u, 'TEN_A'); const b = await createOrGetJob(u, 'TEN_B');
+    const a = await createOrGetJob(u, 'TWO_A'); const b = await createOrGetJob(u, 'TWO_B');
     const rows = await many<{ seed: string }>('SELECT seed FROM ticket_generation_jobs WHERE id = ANY($1)', [[a.jobId, b.jobId]]);
     expect(rows[0].seed).not.toBe(rows[1].seed);
   });
@@ -123,7 +124,7 @@ describe('provider quota failure and recovery', () => {
     const ai: FakeAi = { calls: [], pick: () => null };
     installFakes(demoFixtures(4), ai);
     const u = await makeUser();
-    const { jobId } = await createOrGetJob(u, 'TEN_A');
+    const { jobId } = await createOrGetJob(u, 'TWO_A');
     await _processOneForTests();
     // Simulate a Render restart: job left RUNNING with an expired lease.
     await one("UPDATE ticket_generation_jobs SET status='RUNNING', lease_owner='dead-instance', lease_expires_at=now() - interval '1 minute' WHERE id=$1 AND status NOT IN ('COMPLETED','NO_BET','INCOMPLETE')", [jobId]);

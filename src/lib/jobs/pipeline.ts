@@ -7,13 +7,14 @@ import { BudgetExceededError, RateLimitError, structuredCall } from '../ai/route
 import { optimizeTicket, type Candidate } from '../optimizer';
 import { buildDossier } from '../scout/dossier';
 import { teamHistory } from '../scout/history';
-import { slotById } from '../slots';
+import { policyFor, slotById, type LegPolicy } from '../slots';
 import { espnExtraMarkets, espnLeagueDay, espnSummary, mergeMarkets, standingFor } from '../sports/espn';
 import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sports/fixtures';
 import type { Fixture } from '../sports/types';
 import { modelFixture } from '../stats/engine';
 import { localDate, yyyymmdd } from '../time';
-import { agentFacts, consensus, contested, riskClass, toPosition, type FinalPosition } from './analysis';
+import { agentFacts, characterViolation, consensus, contested, riskClass, toPosition, type FinalPosition } from './analysis';
+import { agentTrackRecord, trackRecordText } from '../track-record';
 import { recordEvent } from './events';
 import type { CandidateEntry, Checkpoint, FixtureSnapshot, Stage } from './types';
 
@@ -214,11 +215,13 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
   if (!assignment) throw new Error(`Agentul ${agent.id} nu are model alocat.`);
   const stage: Stage = round === 0 ? 'ANALYSIS' : 'DEBATE';
   await recordEvent(job.id, { type: 'AGENT_STARTED', stage, agentId: agent.id, payload: { round, fixtures: snaps.map((s) => s.fixture.id), provider: assignment.primary.provider, model: assignment.primary.model, promptVersion: assignment.promptVersion } });
-  const facts = snaps.map(agentFacts);
+  const policy = jobPolicy(job);
+  const facts = snaps.map((s) => agentFacts(s, { minOdds: policy.minOdds, maxOdds: Math.min(agent.maxOdds, policy.maxOdds) }));
+  const record = trackRecordText(await agentTrackRecord(agent.id).catch(() => null));
   const validKeys = new Map(snaps.map((s) => [s.fixture.id, new Set(s.model.markets.map((m) => m.key))]));
   let user: string;
   if (round === 0) {
-    user = `Analizează independent fiecare meci. Schema răspunsului: ${INITIAL_SCHEMA_TEXT}\nMeciuri (${facts.length}):\n${JSON.stringify(facts)}`;
+    user = `Analizează independent fiecare meci. Bilet: ${ticketBrief(job, policy)}${record ? `\n${record}` : ''}\nSchema răspunsului: ${INITIAL_SCHEMA_TEXT}\nMeciuri (${facts.length}):\n${JSON.stringify(facts)}`;
   } else {
     const prior = await many<{ fixture_id: string; agent_id: string; round: number; decision: string; market_key: string | null; estimated_probability: string | null; payload: { rationale?: string; failureReasons?: string[]; objection?: string } }>(
       `SELECT DISTINCT ON (fixture_id, agent_id) fixture_id, agent_id, round, decision, market_key, estimated_probability, payload FROM agent_predictions WHERE job_id=$1 AND fixture_id = ANY($2) AND round < $3 ORDER BY fixture_id, agent_id, round DESC`,
@@ -230,7 +233,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       others: prior.filter((p) => p.fixture_id === f.fixtureId && p.agent_id !== agent.id).map((p) => `${agentById(p.agent_id)?.name}: ${summarize(p)}`),
       leadingCandidate: (() => { const t: Record<string, number> = {}; for (const p of prior.filter((x) => x.fixture_id === f.fixtureId && x.decision === 'BET_CANDIDATE' && x.market_key)) t[p.market_key!] = (t[p.market_key!] ?? 0) + 1; const top = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; return top ? `${top[0]} (${top[1]}/${VOTING_AGENTS.length} voturi)` : 'niciunul'; })(),
     }));
-    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Spune explicit dacă poți susține „leadingCandidate” (selecția cu cele mai multe voturi); o selecție intră pe bilet cu minimum ${config.limits.consensusThreshold}/${VOTING_AGENTS.length} voturi (un vot pentru o selecție mai strictă o susține și pe cea mai largă), dar nu vota împotriva propriei analize doar pentru consens. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
+    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Spune explicit dacă poți susține „leadingCandidate” (selecția cu cele mai multe voturi); o selecție intră pe bilet cu minimum ${config.limits.consensusThreshold}/${VOTING_AGENTS.length} voturi (5/10 dacă Victor și Robert o refuză amândoi; un vot pentru o selecție mai strictă o susține și pe cea mai largă, iar câștigă selecția susținută de cei mai mulți). Rămâi în limitele tale de cotă și probabilitate, dar nu vota împotriva propriei analize doar pentru consens. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
   }
   try {
     const res = round === 0
@@ -243,7 +246,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       try {
         const subset = facts.filter((f) => missingIds.includes(f.fixtureId));
         const retry = round === 0
-          ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user: `Analizează independent fiecare meci. Schema răspunsului: ${INITIAL_SCHEMA_TEXT}\nMeciuri (${subset.length}):\n${JSON.stringify(subset)}`, temperature: agent.temperature, maxOutputTokens: 380 * subset.length + 300 }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL_RETRY' } })
+          ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user: `Analizează independent fiecare meci. Bilet: ${ticketBrief(job, policy)}\nSchema răspunsului: ${INITIAL_SCHEMA_TEXT}\nMeciuri (${subset.length}):\n${JSON.stringify(subset)}`, temperature: agent.temperature, maxOutputTokens: 380 * subset.length + 300 }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL_RETRY' } })
           : null;
         if (retry) items = [...items, ...retry.data.predictions];
       } catch (e) { if (e instanceof RateLimitError || e instanceof BudgetExceededError) throw e; }
@@ -255,9 +258,9 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       const market = s.model.markets.find((m) => m.key === pos.marketKey) ?? null;
       const enriched = { ...item, marketKey: pos.marketKey, decision: pos.decision, availableOdds: market?.odds ?? null, expectedValue: market && pos.estimatedProbability !== null ? Math.round((pos.estimatedProbability * market.odds - 1) * 1000) / 1000 : null, marketLabel: market?.label ?? null };
       await query(
-        `INSERT INTO agent_predictions (job_id, fixture_id, agent_id, round, provider, model_id, prompt_version, decision, market_key, estimated_probability, confidence, risk, payload)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (job_id, fixture_id, agent_id, round) DO NOTHING`,
-        [job.id, s.fixture.id, agent.id, round, res.provider, res.model, assignment.promptVersion, pos.decision, pos.marketKey, pos.estimatedProbability, Math.round(pos.confidence), pos.risk, JSON.stringify(enriched)],
+        `INSERT INTO agent_predictions (job_id, fixture_id, agent_id, round, provider, model_id, prompt_version, decision, market_key, estimated_probability, confidence, risk, payload, odds)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (job_id, fixture_id, agent_id, round) DO NOTHING`,
+        [job.id, s.fixture.id, agent.id, round, res.provider, res.model, assignment.promptVersion, pos.decision, pos.marketKey, pos.estimatedProbability, Math.round(pos.confidence), pos.risk, JSON.stringify(enriched), market?.odds ?? null],
       );
       if (round === 0) await recordEvent(job.id, { type: 'PREDICTION_SAVED', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, decision: pos.decision, marketKey: pos.marketKey, marketLabel: market?.label ?? null, odds: market?.odds ?? null, estimatedProbability: pos.estimatedProbability, confidence: pos.confidence, risk: pos.risk, rationale: item.rationale, evidence: 'evidence' in item ? item.evidence : [], failureReasons: 'failureReasons' in item ? item.failureReasons : [], provider: res.provider, model: res.model } });
       else {
@@ -276,6 +279,32 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
 
 const summarize = (p: { decision: string; market_key: string | null; estimated_probability: string | null; payload: { rationale?: string; failureReasons?: string[] } }) =>
   `${p.decision === 'BET_CANDIDATE' ? `PARIU ${p.market_key} (p≈${p.estimated_probability ?? '?'})` : 'NO BET'} — ${(p.payload.rationale ?? '').slice(0, 220)}${p.payload.failureReasons?.[0] ? ` | Risc: ${p.payload.failureReasons[0].slice(0, 120)}` : ''}`;
+
+function jobPolicy(job: JobRow): LegPolicy {
+  return policyFor(job.slot, Number(job.target_odds));
+}
+
+function ticketBrief(job: JobRow, p: LegPolicy) {
+  return `țintă cotă ${Number(job.target_odds)}, construit din minimum ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic). Caută selecția SIGURĂ, nu cota mare.`;
+}
+
+/** Applies the character guard: out-of-character votes become NO_BET (and are reported, never silently dropped). */
+function guardPositions(job: JobRow, s: FixtureSnapshot, positions: FinalPosition[]) {
+  const policy = jobPolicy(job);
+  const setAside: Array<{ agentId: string; marketKey: string | null; reason: string }> = [];
+  const counted = positions.map((p) => {
+    const agent = agentById(p.agentId);
+    if (!agent) return p;
+    const reason = characterViolation(p, agent, policy, s.model.markets.find((m) => m.key === p.marketKey));
+    if (!reason) return p;
+    setAside.push({ agentId: p.agentId, marketKey: p.marketKey, reason });
+    return { ...p, decision: 'NO_BET' as const, marketKey: null };
+  });
+  const keys = s.model.markets
+    .filter((m) => m.odds >= policy.minOdds && m.odds <= policy.maxOdds && (m.estimatedProbability ?? 0) >= policy.minProbability)
+    .map((m) => ({ key: m.key, odds: m.odds }));
+  return { counted, setAside, keys };
+}
 
 async function latestPositions(jobId: string, fixtureId: string): Promise<FinalPosition[]> {
   const rows = await many<{ agent_id: string; round: number; decision: 'BET_CANDIDATE' | 'NO_BET'; market_key: string | null; estimated_probability: string | null; confidence: number; risk: string; payload: { rationale?: string }; provider: string; model_id: string }>(
@@ -307,9 +336,10 @@ async function chooseDebate(job: JobRow, ids: string[], round: number) {
   const out: string[] = [];
   const snaps = await batchSnapshots(job, ids);
   for (const id of ids) {
-    const pos = await latestPositions(job.id, id);
-    const keys = snaps.find((s) => s.fixture.id === id)?.model.markets.map((m) => ({ key: m.key, odds: m.odds }));
-    if (round === 1 ? contested(pos, keys, config.limits.consensusThreshold, VOTING_AGENTS.length) : (() => { const c = consensus(pos, config.limits.consensusThreshold, VOTING_AGENTS.length, keys); return c.outcome !== 'QUALIFIED' && c.votesFor === config.limits.consensusThreshold - 1; })()) out.push(id);
+    const snap = snaps.find((s) => s.fixture.id === id);
+    if (!snap) continue;
+    const { counted: pos, keys } = guardPositions(job, snap, await latestPositions(job.id, id));
+    if (round === 1 ? contested(pos, keys, config.limits.consensusThreshold, VOTING_AGENTS.length) : (() => { const c = consensus(pos, config.limits.consensusThreshold, VOTING_AGENTS.length, keys); return c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1; })()) out.push(id);
   }
   return out;
 }
@@ -321,13 +351,15 @@ async function stepVote(job: JobRow, ids: string[]) {
   for (const s of await batchSnapshots(job, ids)) {
     const exists = await one('SELECT 1 FROM final_decisions WHERE job_id=$1 AND fixture_id=$2', [job.id, s.fixture.id]);
     if (exists) continue;
-    const positions = await latestPositions(job.id, s.fixture.id);
-    for (const p of positions) await recordEvent(job.id, { type: 'VOTE_SUBMITTED', stage: 'VOTING', agentId: p.agentId, fixtureId: s.fixture.id, payload: { decision: p.decision, marketKey: p.marketKey, round: p.round, model: `${p.provider}/${p.model}` } });
-    const c = consensus(positions, threshold, VOTING_AGENTS.length, s.model.markets.map((m) => ({ key: m.key, odds: m.odds })));
-    await recordEvent(job.id, { type: 'CONSENSUS_CALCULATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, ...c, threshold, total: N } });
+    const raw = await latestPositions(job.id, s.fixture.id);
+    for (const p of raw) await recordEvent(job.id, { type: 'VOTE_SUBMITTED', stage: 'VOTING', agentId: p.agentId, fixtureId: s.fixture.id, payload: { decision: p.decision, marketKey: p.marketKey, round: p.round, model: `${p.provider}/${p.model}` } });
+    const { counted: positions, setAside, keys } = guardPositions(job, s, raw);
+    for (const v of setAside) await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage: 'VOTING', agentId: v.agentId, fixtureId: s.fixture.id, payload: { marketKey: v.marketKey, marketLabel: s.model.markets.find((m) => m.key === v.marketKey)?.label ?? null, reason: v.reason, note: 'Vot în afara caracterului agentului sau a regulilor de prudență — nenumărat.' } });
+    const c = consensus(positions, threshold, VOTING_AGENTS.length, keys);
+    await recordEvent(job.id, { type: 'CONSENSUS_CALCULATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, ...c, threshold: c.requiredVotes, total: N, setAside: setAside.length } });
     const validation: Record<string, unknown> = {};
     let outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET' | 'REJECTED' = c.outcome;
-    let reason = c.outcome === 'QUALIFIED' ? '' : c.outcome === 'NO_BET' ? `${c.noBetVotes}/${N} agenți au recomandat NO BET.` : `Consens insuficient: maximum ${c.votesFor}/${N} voturi pentru aceeași selecție (prag ${threshold}/${N}).`;
+    let reason = c.outcome === 'QUALIFIED' ? '' : c.outcome === 'NO_BET' ? `${c.noBetVotes}/${N} agenți au recomandat NO BET.` : `Consens insuficient: maximum ${c.votesFor}/${N} voturi pentru aceeași selecție în limitele de prudență (prag ${c.requiredVotes}/${N}${c.cautiousVeto ? ', ridicat pentru că Victor și Robert au refuzat' : ''}${setAside.length ? `; ${setAside.length} voturi nenumărate pentru că erau în afara caracterului` : ''}).`;
     if (c.outcome === 'QUALIFIED' && c.marketKey) {
       const est = s.model.markets.find((m) => m.key === c.marketKey)!;
       const base = await fixtureFromDb(s.fixture.id);
@@ -378,9 +410,10 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
 }
 
 async function tryOptimize(job: JobRow) {
-  const slot = slotById(job.slot)!;
+  const slot = slotById(job.slot);
+  const policy = jobPolicy(job);
   const cands = await qualifiedCandidates(job);
-  return { cands, result: optimizeTicket({ candidates: cands, target: Number(job.target_odds), requiredLegs: slot.requiredLegs, tolerance: config.limits.targetTolerance, avoidFixtures: new Set(job.config.avoidFixtures ?? []) }) };
+  return { cands, result: optimizeTicket({ candidates: cands, target: Number(job.target_odds), requiredLegs: slot ? slot.requiredLegs : Number(job.target_odds) >= 50 ? 12 : null, tolerance: config.limits.targetTolerance, avoidFixtures: new Set(job.config.avoidFixtures ?? []), minLegs: policy.minLegs, maxLegs: policy.maxLegs, maxLegOdds: policy.maxOdds }) };
 }
 
 async function build(job: JobRow) {

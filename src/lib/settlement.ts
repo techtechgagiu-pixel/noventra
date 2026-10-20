@@ -24,6 +24,20 @@ export function ticketOutcome(outcomes: string[]): 'PENDING' | 'WON' | 'LOST' | 
   return outcomes.includes('VOID') ? 'PARTIAL_VOID' : 'WON';
 }
 
+/** Settles every agent pick (not only ticket legs) so each agent builds a verified track record. */
+export async function settleAgentPredictions() {
+  const rows = await many<{ id: string; market_key: string; status: string; home_score: number | null; away_score: number | null; kickoff_utc: Date }>(
+    `SELECT p.id, p.market_key, f.status, f.home_score, f.away_score, f.kickoff_utc FROM agent_predictions p JOIN fixtures f ON f.id=p.fixture_id
+     WHERE p.decision='BET_CANDIDATE' AND p.market_key IS NOT NULL AND p.outcome IS NULL AND f.status IN ('post','cancelled','postponed') LIMIT 2000`,
+  );
+  for (const r of rows) {
+    let outcome: string | null = null;
+    if (r.status === 'post' && r.home_score !== null && r.away_score !== null) outcome = settleMarket(r.market_key, r.home_score, r.away_score);
+    else if (r.status === 'cancelled' || (r.status === 'postponed' && Date.now() - new Date(r.kickoff_utc).getTime() > 48 * 3600_000)) outcome = 'VOID';
+    if (outcome) await query('UPDATE agent_predictions SET outcome=$2, settled_at=now() WHERE id=$1', [r.id, outcome]);
+  }
+}
+
 let running = false;
 /** Deterministic, non-AI settlement of finished fixtures. Original prices and predictions are never changed. */
 export async function settlePending() {
@@ -31,10 +45,13 @@ export async function settlePending() {
   running = true;
   try {
     const due = await many<{ fixture_id: string; kickoff_utc: Date; league_id: string; status: string }>(
-      `SELECT DISTINCT f.id AS fixture_id, f.kickoff_utc, f.league_id, f.status FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id
-       WHERE s.outcome='PENDING' AND f.kickoff_utc < now() - interval '2 hours' AND f.provider='espn' LIMIT 40`,
+      `SELECT DISTINCT f.id AS fixture_id, f.kickoff_utc, f.league_id, f.status FROM fixtures f
+       WHERE f.kickoff_utc < now() - interval '2 hours' AND f.provider='espn' AND f.status NOT IN ('post','cancelled') AND (
+         EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING') OR
+         EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.outcome IS NULL))
+       LIMIT 60`,
     );
-    if (!due.length) return;
+    if (due.length) {
     const leagues = await getLeagues({ top10Only: false });
     const days = new Map<string, Set<string>>();
     for (const d of due) {
@@ -48,6 +65,8 @@ export async function settlePending() {
       const fixtures = await espnLeagueDay(league, yyyymmdd(date)).catch(() => []);
       await persistFixtures(fixtures.map((f) => ({ ...f, odds: null })));
     }
+    }
+    await settleAgentPredictions();
     const rows = await many<{ id: string; ticket_id: string; market_key: string; status: string; home_score: number | null; away_score: number | null; kickoff_utc: Date }>(
       `SELECT s.id, s.ticket_id, s.market_key, f.status, f.home_score, f.away_score, f.kickoff_utc FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE s.outcome='PENDING'`,
     );

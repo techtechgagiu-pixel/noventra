@@ -6,9 +6,11 @@ import { teamDossier } from '@/lib/scout/dossier';
 
 const pos = (agentId: string, marketKey: string | null): FinalPosition => ({ agentId, decision: marketKey ? 'BET_CANDIDATE' : 'NO_BET', marketKey, estimatedProbability: 0.6, confidence: 60, risk: 'MEDIUM', round: 0, rationale: '', provider: 'groq', model: 'm' });
 describe('voting', () => {
-  it('4/6 on the same canonical key qualifies', () => {
+  it('4/6 on the same canonical key qualifies; the broader key backed by more agents wins (prudence)', () => {
     const c = consensus([pos('a', '1X2:HOME'), pos('b', '1X2:HOME'), pos('c', '1X2:HOME'), pos('d', '1X2:HOME'), pos('e', null), pos('f', 'DC:1X')], 4);
-    expect(c).toMatchObject({ outcome: 'QUALIFIED', marketKey: '1X2:HOME', votesFor: 4 });
+    expect(c).toMatchObject({ outcome: 'QUALIFIED', marketKey: 'DC:1X', votesFor: 5, directVotes: 1 });
+    const only = consensus([pos('a', '1X2:HOME'), pos('b', '1X2:HOME'), pos('c', '1X2:HOME'), pos('d', '1X2:HOME'), pos('e', null), pos('f', null)], 4);
+    expect(only).toMatchObject({ outcome: 'QUALIFIED', marketKey: '1X2:HOME', votesFor: 4 });
   });
   it('3/6 is NO CONSENSUS; 4 NO_BET is NO BET; failed agents are abstentions, not votes', () => {
     expect(consensus([pos('a', '1X2:HOME'), pos('b', '1X2:HOME'), pos('c', '1X2:HOME'), pos('d', 'TOTAL:OVER:2.5'), pos('e', null), pos('f', null)], 4).outcome).toBe('NO_CONSENSUS');
@@ -71,10 +73,25 @@ describe('logical vote normalisation', () => {
     expect(selectionImplies('1X2:AWAY', 'AH:AWAY:1.5')).toBe(true);
     expect(selectionImplies('TOTAL:UNDER:2.5', 'DC:X2')).toBe(false);
   });
-  it('qualifies the most specific key that reaches 4/6 and reports supporters', () => {
+  it('among keys reaching the threshold, the safest (lowest price, same support) wins and supporters are reported', () => {
     const c = consensus([pos('a', '1X2:AWAY'), pos('b', '1X2:AWAY'), pos('c', 'DC:X2'), pos('d', 'DC:X2'), pos('e', null), pos('f', 'TOTAL:UNDER:2.5')], 4, 6, keys);
-    expect(c).toMatchObject({ outcome: 'QUALIFIED', marketKey: 'DC:X2', votesFor: 4, directVotes: 2 });
+    expect(c).toMatchObject({ outcome: 'QUALIFIED', marketKey: 'AH:AWAY:1.5', votesFor: 4 });
     expect(c.supporters.sort()).toEqual(['a', 'b', 'c', 'd']);
+    const noAh = consensus([pos('a', '1X2:AWAY'), pos('b', '1X2:AWAY'), pos('c', 'DC:X2'), pos('d', 'DC:X2'), pos('e', null), pos('f', null)], 4, 6, keys.filter((k) => !k.key.startsWith('AH')));
+    expect(noAh).toMatchObject({ marketKey: 'DC:X2', votesFor: 4, directVotes: 2 });
+  });
+  it('the 2.80 away win backed by 5 of 10 loses to Draw-or-Away backed by more agents', () => {
+    const ten = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin'];
+    const votes = ten.map((a, i) => pos(a, i < 5 ? '1X2:AWAY' : i < 7 ? 'DC:X2' : null));
+    const c = consensus(votes, 3, 10, [{ key: '1X2:AWAY', odds: 2.8 }, { key: 'DC:X2', odds: 1.55 }]);
+    expect(c).toMatchObject({ marketKey: 'DC:X2', votesFor: 7 });
+  });
+  it('cautious veto: when Victor and Robert both refuse, 3/10 is not enough (5 required)', () => {
+    const v = (a: string, k: string | null) => pos(a, k);
+    const three = [v('alex', 'DC:X2'), v('andrei', 'DC:X2'), v('cosmin', 'DC:X2'), v('victor', null), v('robert', null)];
+    expect(consensus(three, 3, 10, keys)).toMatchObject({ outcome: 'NO_CONSENSUS', cautiousVeto: true, requiredVotes: 5 });
+    const withVictor = [...three.slice(0, 3), v('victor', 'DC:X2'), v('robert', null)];
+    expect(consensus(withVictor, 3, 10, keys)).toMatchObject({ outcome: 'QUALIFIED', requiredVotes: 3 });
   });
   it('never counts unrelated markets together', () => {
     const c = consensus([pos('a', '1X2:AWAY'), pos('b', 'TOTAL:UNDER:2.5'), pos('c', 'TOTAL:UNDER:2.5'), pos('d', '1X2:AWAY'), pos('e', null), pos('f', null)], 4, 6, keys);
@@ -94,5 +111,19 @@ describe('ten agents, threshold 3/10', () => {
     expect(selectionImplies('TT:HOME:OVER:1.5', 'TT:HOME:OVER:0.5')).toBe(true);
     expect(selectionImplies('TT:HOME:OVER:1.5', 'TOTAL:OVER:1.5')).toBe(true);
     expect(settleMarket('TT:AWAY:UNDER:1.5', 3, 1)).toBe('WON');
+  });
+});
+
+describe('character guard', () => {
+  it('sets aside votes above the agent cap, below its own probability floor, or below the ticket floor', async () => {
+    const { characterViolation } = await import('@/lib/jobs/analysis');
+    const elena = { name: 'Elena', maxOdds: 1.7, minProbability: 0.62 };
+    const five = { minOdds: 1.15, maxOdds: 1.65, minProbability: 0.6 };
+    const p = (k: string, est: number | null) => ({ ...pos('elena', k), estimatedProbability: est });
+    expect(characterViolation(p('1X2:AWAY', 0.36), elena, five, { odds: 2.8, estimatedProbability: 0.36 })).toMatch(/depășește limita 1.65/);
+    expect(characterViolation(p('DC:X2', 0.55), elena, five, { odds: 1.4, estimatedProbability: 0.7 })).toMatch(/pragul personal de 62%/);
+    expect(characterViolation(p('DC:X2', 0.7), elena, five, { odds: 1.4, estimatedProbability: 0.52 })).toMatch(/motorul statistic/);
+    expect(characterViolation(p('DC:X2', 0.7), elena, five, { odds: 1.4, estimatedProbability: 0.7 })).toBeNull();
+    expect(characterViolation(pos('elena', null), elena, five, undefined)).toBeNull();
   });
 });
