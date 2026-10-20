@@ -6,6 +6,7 @@ const inter = Inter({ subsets: ['latin', 'latin-ext'], variable: '--font-inter',
 const grotesk = Space_Grotesk({ subsets: ['latin', 'latin-ext'], variable: '--font-grotesk', display: 'swap' });
 
 export const metadata: Metadata = {
+  robots: { index: false, follow: false }, // private personal tool
   title: 'BETMIND SIX · NEXUS',
   description: 'Ten Minds. One Decision. Analiză de fotbal cu zece agenți AI, pe date reale.',
   icons: { icon: '/favicon.svg' },

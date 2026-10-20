@@ -145,7 +145,7 @@ function Network({ state, animate, activeFx }: { state: NexusState; animate: boo
           <g key={n.id}>
             <line x1={cx} y1={cy} x2={n.x} y2={n.y} stroke={m.accent} strokeOpacity={busy ? 0.9 : 0.25} strokeWidth={busy ? 2 : 1} className={busy && animate ? 'flow' : ''} />
             <circle cx={n.x} cy={n.y} r={ids.length > 6 ? 21 : 24} fill="#0a1228" stroke={m.accent} strokeWidth={a.status === 'IDLE' ? 1 : 2.5} opacity={a.status === 'IDLE' ? 0.6 : 1} />
-            <text x={n.x} y={n.y + 4} textAnchor="middle" fill={m.accent} fontSize={ids.length > 6 ? 9.5 : 11} fontWeight="700">{m.name}</text>
+            <text x={n.x} y={n.y + 4} textAnchor="middle" fill={m.accent} fontSize={ids.length > 6 ? 9.5 : 11} fontWeight="700">{m.short ?? m.name}</text>
             {a.status === 'DONE' && <circle cx={n.x + 18} cy={n.y - 18} r={5} fill="#34d399" />}
             {a.status === 'FAILED' && <circle cx={n.x + 18} cy={n.y - 18} r={5} fill="#fb7185" />}
           </g>

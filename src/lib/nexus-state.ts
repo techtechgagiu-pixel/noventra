@@ -31,7 +31,7 @@ export type NexusState = {
 };
 
 const VOTERS = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin'];
-const NAMES: Record<string, string> = { victor: 'Victor', andrei: 'Andrei', mihai: 'Mihai', alex: 'Alex', diana: 'Diana', robert: 'Robert', ioana: 'Ioana', radu: 'Radu', elena: 'Elena', cosmin: 'Cosmin', scout: 'SCOUT' };
+const NAMES: Record<string, string> = { victor: 'Mircea Sandu', andrei: 'Gheorghe Hagi', mihai: 'Gică Popescu', alex: 'Adrian Mutu', diana: 'Răzvan Raț', robert: 'Mircea Lucescu', ioana: 'Cristi Chivu', radu: 'Răzvan Lucescu', elena: 'Dumitru Dragomir', cosmin: 'Anghel Iordănescu', scout: 'SCOUT' };
 
 export function initialState(): NexusState {
   return {
