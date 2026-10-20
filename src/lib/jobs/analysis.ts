@@ -67,7 +67,7 @@ export const CAUTIOUS_VETO_VOTES = 5;
  * so a broader, safer selection beats a riskier one that only part of the group supports.
  * `availableKeys` should already be limited to the ticket's allowed price band.
  */
-export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 10, availableKeys?: Array<{ key: string; odds: number }>): ConsensusResult {
+export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 10, availableKeys?: Array<{ key: string; odds: number }>, pick: 'safest' | 'highest' = 'safest'): ConsensusResult {
   const bets = positions.filter((p) => p.decision === 'BET_CANDIDATE' && p.marketKey);
   const noBet = positions.length - bets.length;
   const abstentions = totalAgents - positions.length;
@@ -82,7 +82,9 @@ export function consensus(positions: FinalPosition[], threshold: number, totalAg
     return { key: k.key, odds: k.odds, supporters, direct: tally[k.key] ?? 0 };
   }).filter((s) => s.supporters.length > 0)
     .sort((a, b) => b.supporters.length - a.supporters.length || a.odds - b.odds || b.direct - a.direct);
-  const qualified = support.find((s) => s.supporters.length >= required);
+  const qualified = pick === 'highest'
+    ? support.filter((s) => s.supporters.length >= required).sort((a, b) => b.odds - a.odds || b.supporters.length - a.supporters.length)[0]
+    : support.find((s) => s.supporters.length >= required);
   const top = qualified ?? support[0];
   const base = { noBetVotes: noBet, abstentions, tally, requiredVotes: required, cautiousVeto };
   if (qualified) return { outcome: 'QUALIFIED', marketKey: qualified.key, votesFor: qualified.supporters.length, directVotes: qualified.direct, supporters: qualified.supporters, ...base };
@@ -97,12 +99,12 @@ export function consensus(positions: FinalPosition[], threshold: number, totalAg
 export function characterViolation(
   p: FinalPosition,
   agent: { name: string; maxOdds: number; minProbability: number },
-  policy: { minOdds: number; maxOdds: number; minProbability: number },
+  policy: { minOdds: number; maxOdds: number; minProbability: number; agentCapBonus?: number },
   market: { odds: number; estimatedProbability: number | null } | undefined,
 ): string | null {
   if (p.decision !== 'BET_CANDIDATE' || !p.marketKey) return null;
   if (!market) return 'piața nu există în cotele observate';
-  const cap = Math.min(agent.maxOdds, policy.maxOdds);
+  const cap = Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds);
   if (market.odds > cap + 1e-9) return `cota ${market.odds.toFixed(2)} depășește limita ${cap.toFixed(2)} (${agent.name} max ${agent.maxOdds.toFixed(2)}, bilet max ${policy.maxOdds.toFixed(2)})`;
   if (market.odds < policy.minOdds - 1e-9) return `cota ${market.odds.toFixed(2)} este sub minimul biletului (${policy.minOdds.toFixed(2)})`;
   if (p.estimatedProbability !== null && p.estimatedProbability < agent.minProbability) return `probabilitatea proprie ${Math.round(p.estimatedProbability * 100)}% este sub pragul personal de ${Math.round(agent.minProbability * 100)}%`;

@@ -224,7 +224,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
   const stage: Stage = round === 0 ? 'ANALYSIS' : 'DEBATE';
   await recordEvent(job.id, { type: 'AGENT_STARTED', stage, agentId: agent.id, payload: { round, fixtures: snaps.map((s) => s.fixture.id), provider: assignment.primary.provider, model: assignment.primary.model, promptVersion: assignment.promptVersion } });
   const policy = jobPolicy(job);
-  const band = { minOdds: policy.minOdds, maxOdds: Math.min(agent.maxOdds, policy.maxOdds) };
+  const band = { minOdds: policy.minOdds, maxOdds: Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds) };
   const facts: Array<{ fixtureId: string; match: string; markets: Array<{ key: string; odds: number; est?: number | null; ev?: number | null }> }> =
     agent.id === 'hantu' ? snaps.map((s) => newsFacts(s, band)) : snaps.map((s) => agentFacts(s, band));
   const record = trackRecordText(await agentTrackRecord(agent.id).catch(() => null));
@@ -295,7 +295,12 @@ function jobPolicy(job: JobRow): LegPolicy {
 }
 
 function ticketBrief(job: JobRow, p: LegPolicy) {
-  return `țintă cotă ${Number(job.target_odds)}, construit din minimum ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic). Caută selecția SIGURĂ, nu cota mare.`;
+  const base = `țintă cotă ${Number(job.target_odds)}, construit din minimum ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
+  if (p.pick === 'highest') {
+    const avg = Math.pow(Number(job.target_odds), 1 / p.minLegs);
+    return `${base} Biletul are nevoie de o cotă medie de aproximativ ${avg.toFixed(2)} pe meci, deci aici NU alegi automat varianta cea mai mică: alege selecția solidă cu cotă între ${p.minOdds.toFixed(2)} și ${p.maxOdds.toFixed(2)}. La acest bilet limita ta de cotă este mărită cu +${(p.agentCapBonus ?? 0).toFixed(2)}.`;
+  }
+  return `${base} Caută selecția SIGURĂ, nu cota mare.`;
 }
 
 /** Applies the character guard: out-of-character votes become NO_BET (and are reported, never silently dropped). */
@@ -352,7 +357,7 @@ async function chooseDebate(job: JobRow, ids: string[], round: number) {
     const snap = snaps.find((s) => s.fixture.id === id);
     if (!snap) continue;
     const { counted: pos, keys } = guardPositions(job, snap, await latestPositions(job.id, id));
-    if (round === 1 ? contested(pos, keys, config.limits.consensusThreshold, VOTING_AGENTS.length) : (() => { const c = consensus(pos, config.limits.consensusThreshold, VOTING_AGENTS.length, keys); return c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1; })()) out.push(id);
+    if (round === 1 ? contested(pos, keys, config.limits.consensusThreshold, VOTING_AGENTS.length) : (() => { const c = consensus(pos, config.limits.consensusThreshold, VOTING_AGENTS.length, keys, jobPolicy(job).pick); return c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1; })()) out.push(id);
   }
   return out;
 }
@@ -368,7 +373,7 @@ async function stepVote(job: JobRow, ids: string[]) {
     for (const p of raw) await recordEvent(job.id, { type: 'VOTE_SUBMITTED', stage: 'VOTING', agentId: p.agentId, fixtureId: s.fixture.id, payload: { decision: p.decision, marketKey: p.marketKey, round: p.round, model: `${p.provider}/${p.model}` } });
     const { counted: positions, setAside, keys } = guardPositions(job, s, raw);
     for (const v of setAside) await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage: 'VOTING', agentId: v.agentId, fixtureId: s.fixture.id, payload: { marketKey: v.marketKey, marketLabel: s.model.markets.find((m) => m.key === v.marketKey)?.label ?? null, reason: v.reason, note: 'Vot în afara caracterului agentului sau a regulilor de prudență — nenumărat.' } });
-    const c = consensus(positions, threshold, VOTING_AGENTS.length, keys);
+    const c = consensus(positions, threshold, VOTING_AGENTS.length, keys, jobPolicy(job).pick);
     await recordEvent(job.id, { type: 'CONSENSUS_CALCULATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, ...c, threshold: c.requiredVotes, total: N, setAside: setAside.length } });
     const validation: Record<string, unknown> = {};
     let outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET' | 'REJECTED' = c.outcome;

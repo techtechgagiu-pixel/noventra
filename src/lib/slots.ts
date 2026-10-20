@@ -20,12 +20,18 @@ export type SlotDefinition = {
  * - a selection needs the stats engine's probability ≥ minProbability;
  * - the ticket must reach the target with at least minLegs small-priced selections (never 2 big prices).
  */
-export type LegPolicy = { minOdds: number; maxOdds: number; minProbability: number; minLegs: number; maxLegs: number };
+export type LegPolicy = {
+  minOdds: number; maxOdds: number; minProbability: number; minLegs: number; maxLegs: number;
+  /** Added to every agent's own max price (weekly needs bigger legs). */
+  agentCapBonus?: number;
+  /** Which qualified selection wins a fixture: the one most agents back ('safest') or the highest price still ≥ threshold ('highest'). */
+  pick?: 'safest' | 'highest';
+};
 export const POLICIES = {
   five: { minOdds: 1.15, maxOdds: 1.65, minProbability: 0.6, minLegs: 3, maxLegs: 7 },
   two: { minOdds: 1.12, maxOdds: 1.45, minProbability: 0.68, minLegs: 2, maxLegs: 4 },
   // 12 legs × ~1.47 average ≈ 100: small prices alone cannot reach it, so the weekly band starts at 1.35 and allows up to 2.00.
-  weekly: { minOdds: 1.35, maxOdds: 2.0, minProbability: 0.5, minLegs: 12, maxLegs: 12 },
+  weekly: { minOdds: 1.35, maxOdds: 2.0, minProbability: 0.5, minLegs: 12, maxLegs: 12, agentCapBonus: 0.3, pick: 'highest' },
 } satisfies Record<string, LegPolicy>;
 
 export const SLOTS: readonly SlotDefinition[] = [

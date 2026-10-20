@@ -127,3 +127,18 @@ describe('character guard', () => {
     expect(characterViolation(pos('elena', null), elena, five, undefined)).toBeNull();
   });
 });
+
+describe('weekly COTĂ 100 picking', () => {
+  it("'highest' picks the biggest price that still has the required votes; agent caps get the weekly bonus", async () => {
+    const { characterViolation } = await import('@/lib/jobs/analysis');
+    const keys = [{ key: '1X2:AWAY', odds: 1.9 }, { key: 'DC:X2', odds: 1.38 }];
+    const votes = [pos('alex', '1X2:AWAY'), pos('andrei', '1X2:AWAY'), pos('cosmin', '1X2:AWAY'), pos('victor', 'DC:X2'), pos('robert', 'DC:X2')];
+    expect(consensus(votes, 3, 11, keys).marketKey).toBe('DC:X2');
+    expect(consensus(votes, 3, 11, keys, 'highest').marketKey).toBe('1X2:AWAY');
+    const sandu = { name: 'Mircea Sandu', maxOdds: 1.55, minProbability: 0.6 };
+    const weekly = { minOdds: 1.35, maxOdds: 2.0, minProbability: 0.5, agentCapBonus: 0.3 };
+    const p = { ...pos('victor', 'DC:X2'), estimatedProbability: 0.62 };
+    expect(characterViolation(p, sandu, weekly, { odds: 1.8, estimatedProbability: 0.6 })).toBeNull();
+    expect(characterViolation(p, sandu, weekly, { odds: 1.9, estimatedProbability: 0.6 })).toMatch(/depășește limita 1.85/);
+  });
+});
