@@ -3,7 +3,7 @@ import { config } from '../config';
 import { many, one, tx } from '../db';
 import { providerConfigured, resetModelExhaustion } from '../ai/router';
 import { aiUsageToday } from '../usage';
-import { CUSTOM_LIMIT_PER_DAY, SLOTS, customPolicy, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
+import { CUSTOM_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, slotInfo, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
 import { VOTING_AGENTS } from '../ai/agents';
 import { localDate } from '../time';
 import { recordEvent } from './events';
@@ -174,3 +174,26 @@ export async function resumeJob(userId: string, jobId: string) {
   kickWorker();
   return { resumed: true, status: 'QUEUED' };
 }
+
+/** The work queue: analyses waiting or running now, plus the ones finished in the last 2 hours. */
+export async function jobQueue(userId: string) {
+  const rows = await many<{ id: string; slot: string; status: string; stage: string; target_odds: string; required_legs: number | null; config: { custom?: CustomConfig }; checkpoint: { batches?: string[][]; batchIndex?: number; analyzed?: number; qualified?: number }; created_at: Date; started_at: Date | null; finished_at: Date | null; next_run_at: Date; last_error: string | null; ticket_id: string | null; actual_odds: string | null; generation_status: string | null }>(
+    `SELECT j.id, j.slot, j.status, j.stage, j.target_odds, j.required_legs, j.config, j.checkpoint, j.created_at, j.started_at, j.finished_at, j.next_run_at, j.last_error,
+            t.id AS ticket_id, t.actual_odds, t.generation_status
+     FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
+     WHERE j.user_id=$1 AND (j.status IN ('QUEUED','RUNNING','WAITING','PAUSED') OR j.finished_at > now() - interval '2 hours')
+     ORDER BY CASE WHEN j.status IN ('QUEUED','RUNNING','WAITING','PAUSED') THEN 0 ELSE 1 END, j.created_at DESC LIMIT 20`, [userId]);
+  const waiting = rows.filter((r) => r.status === 'QUEUED').sort((a, b) => +a.created_at - +b.created_at).map((r) => r.id);
+  return rows.map((r) => {
+    const info = slotInfo(r.slot, Number(r.target_odds), r.required_legs);
+    const batches = r.checkpoint.batches?.length ?? 0;
+    return {
+      id: r.id, slot: r.slot, title: info.title, status: r.status, stage: r.stage, createdAt: r.created_at.toISOString(),
+      startedAt: r.started_at?.toISOString() ?? null, finishedAt: r.finished_at?.toISOString() ?? null, nextRunAt: r.next_run_at.toISOString(), lastError: r.last_error,
+      batch: Math.min(batches, (r.checkpoint.batchIndex ?? 0) + (r.status === 'COMPLETED' ? 0 : 1)), batches, analyzed: r.checkpoint.analyzed ?? 0, qualified: r.checkpoint.qualified ?? 0,
+      agents: r.config.custom?.agents ?? null, custom: isCustomSlot(r.slot), position: r.status === 'QUEUED' ? waiting.indexOf(r.id) + 1 : null,
+      ticketId: r.ticket_id, actualOdds: r.actual_odds ? Number(r.actual_odds) : null, generation: r.generation_status,
+    };
+  });
+}
+export type QueueItem = Awaited<ReturnType<typeof jobQueue>>[number];

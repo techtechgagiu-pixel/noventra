@@ -62,7 +62,7 @@ describe('daily ticket end-to-end (DEMO data, fake AI transport)', () => {
     expect(dg!.d!.lines.length).toBeLessThanOrEqual(10);
     // Independent initial predictions exist for all ten agents.
     const agents = await many<{ agent_id: string }>('SELECT DISTINCT agent_id FROM agent_predictions WHERE job_id=$1 AND round=0', [jobId]);
-    expect(agents.map((a) => a.agent_id).sort()).toEqual(['alex', 'andrei', 'cosmin', 'diana', 'elena', 'hantu', 'ioana', 'mihai', 'radu', 'robert', 'victor']);
+    expect(agents.map((a) => a.agent_id).sort()).toEqual(['alex', 'andrei', 'becali', 'cosmin', 'diana', 'elena', 'hantu', 'ioana', 'mihai', 'radu', 'robert', 'victor']);
     // Locked for the day: a second click returns the same job, no new AI.
     const callsAfter = aiCallCount();
     const again = await createOrGetJob(u, 'FIVE_A');

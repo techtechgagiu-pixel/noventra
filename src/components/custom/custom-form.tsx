@@ -8,7 +8,7 @@ import { customPolicy } from '@/lib/slots';
 export type AgentCard = { id: string; name: string; title: string; specialty: string; risk: number; maxOdds: number; minProbability: number; model: string | null; record: string | null };
 const TARGETS = [2, 3, 5, 10, 20, 50, 100];
 const GROUPS: Array<{ label: string; ids: (a: AgentCard[]) => string[] }> = [
-  { label: 'Toți 11', ids: (a) => a.map((x) => x.id) },
+  { label: 'Toți', ids: (a) => a.map((x) => x.id) },
   { label: 'Prudenții', ids: (a) => a.filter((x) => x.maxOdds <= 1.75).map((x) => x.id) },
   { label: 'Vânătorii de cote', ids: (a) => a.filter((x) => x.maxOdds >= 1.85).map((x) => x.id) },
 ];

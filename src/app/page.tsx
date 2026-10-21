@@ -15,7 +15,8 @@ import { slotById } from '@/lib/slots';
 import { VOTING_AGENTS } from '@/lib/ai/agents';
 import { activeAssignments } from '@/lib/ai/assignments';
 import { allTrackRecords } from '@/lib/track-record';
-import { customJobs } from '@/lib/jobs/service';
+import { customJobs, jobQueue } from '@/lib/jobs/service';
+import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
 
@@ -89,9 +90,10 @@ async function BileteTab({ userId, ticket, fresh, running }: { userId: string; t
   return (
     <div className="space-y-5">
       <div>
-        <p className="max-w-2xl text-sm text-muted">Apasă <strong className="text-text">CREEAZĂ BILETUL</strong>: cei 11 agenți analizează meciurile de azi și mâine, votează și construiesc biletul din cote mici. Urmărești totul în fila <Link href="/?tab=analiza" className="text-cyan">Analiză</Link>.</p>
+        <p className="max-w-2xl text-sm text-muted">Apasă <strong className="text-text">CREEAZĂ BILETUL</strong>: cei 12 agenți analizează meciurile de azi și mâine, votează și construiesc biletul din cote mici. Urmărești totul în fila <Link href="/?tab=analiza" className="text-cyan">Analiză</Link>.</p>
         {running > 0 && <p className="chip mt-3 text-emerald"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald" /> {running === 1 ? 'O analiză rulează acum' : `${running} analize rulează acum`} — <Link href="/?tab=analiza" className="underline">vezi live</Link></p>}
       </div>
+      <JobQueue initial={plain(await jobQueue(userId))} />
       <SlotCards initial={plain(slots)} />
     </div>
   );
@@ -163,6 +165,7 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
         <h1 className="font-display text-2xl font-bold">Bilet custom</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">Tu alegi cota, numărul de meciuri și cine intră în teren. Agenții aleși analizează și dezbat live pe hartă, iar jurnalul de sub hartă arată tot ce și-au spus. Maximum 10 bilete custom pe zi.</p>
       </div>
+      <JobQueue initial={plain(await jobQueue(userId))} />
       <CustomForm agents={cards} />
       {recent.length > 0 && (
         <section>

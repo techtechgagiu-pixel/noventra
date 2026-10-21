@@ -1,7 +1,7 @@
 import type { ModelRef } from './router';
 
 /**
- * One model per agent, eleven different vendors, all verified on OpenRouter (2026-10-21) to support JSON output.
+ * One model per agent, twelve different vendors, all verified on OpenRouter (2026-10-21) to support JSON output.
  * Active only when OPENROUTER_API_KEY is set; the agent's free Gemini/Groq model then becomes its fallback.
  * Prices: USD per million tokens (input / output) from the OpenRouter catalogue, used for the daily spend cap.
  */
@@ -17,6 +17,7 @@ export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; 
   elena: { model: 'google/gemma-4-31b-it', inPerM: 0.2, outPerM: 0.4 },
   cosmin: { model: 'tencent/hy3', inPerM: 0.132, outPerM: 0.528 },
   hantu: { model: 'nvidia/nemotron-3.5-super-vl', inPerM: 0.15, outPerM: 0.5 },
+  becali: { model: 'x-ai/grok-4.3', inPerM: 1.25, outPerM: 2.5 },
 };
 
 export const OPENROUTER_PRICE = new Map(Object.values(OPENROUTER_MODELS).map((m) => [m.model, m]));

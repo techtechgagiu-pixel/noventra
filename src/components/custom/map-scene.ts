@@ -30,7 +30,7 @@ export const FORMATION: Array<{ id: string; u: number; v: number; line: string }
   { id: 'robert', u: 0.07, v: 0.5, line: 'Portar · creierul' },
   { id: 'victor', u: 0.28, v: 0.13, line: 'Apărare' }, { id: 'mihai', u: 0.28, v: 0.38, line: 'Apărare' },
   { id: 'radu', u: 0.28, v: 0.62, line: 'Apărare' }, { id: 'elena', u: 0.28, v: 0.87, line: 'Apărare' },
-  { id: 'diana', u: 0.53, v: 0.2, line: 'Mijloc' }, { id: 'hantu', u: 0.5, v: 0.5, line: 'Mijloc' }, { id: 'ioana', u: 0.53, v: 0.8, line: 'Mijloc' },
+  { id: 'diana', u: 0.54, v: 0.13, line: 'Mijloc' }, { id: 'hantu', u: 0.5, v: 0.38, line: 'Mijloc' }, { id: 'becali', u: 0.5, v: 0.62, line: 'Mijloc · patronul' }, { id: 'ioana', u: 0.54, v: 0.87, line: 'Mijloc' },
   { id: 'cosmin', u: 0.8, v: 0.17, line: 'Atac' }, { id: 'alex', u: 0.84, v: 0.5, line: 'Atac' }, { id: 'andrei', u: 0.8, v: 0.83, line: 'Atac' },
 ];
 const BRAIN = 'robert';

@@ -30,8 +30,8 @@ export type NexusState = {
   seed: string | null;
 };
 
-const VOTERS = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin', 'hantu'];
-const NAMES: Record<string, string> = { victor: 'Mircea Sandu', andrei: 'Gheorghe Hagi', mihai: 'Gică Popescu', alex: 'Adrian Mutu', diana: 'Răzvan Raț', robert: 'Mircea Lucescu', ioana: 'Cristi Chivu', radu: 'Răzvan Lucescu', elena: 'Dumitru Dragomir', cosmin: 'Anghel Iordănescu', hantu: 'Hanțu', scout: 'SCOUT' };
+const VOTERS = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin', 'hantu', 'becali'];
+const NAMES: Record<string, string> = { victor: 'Mircea Sandu', andrei: 'Gheorghe Hagi', mihai: 'Gică Popescu', alex: 'Adrian Mutu', diana: 'Răzvan Raț', robert: 'Mircea Lucescu', ioana: 'Cristi Chivu', radu: 'Răzvan Lucescu', elena: 'Dumitru Dragomir', cosmin: 'Anghel Iordănescu', hantu: 'Hanțu', becali: 'Gigi Becali', scout: 'SCOUT' };
 
 export function initialState(): NexusState {
   return {

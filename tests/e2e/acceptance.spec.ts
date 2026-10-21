@@ -67,7 +67,7 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   await page.getByLabel('Cota dorită').fill('3');
   await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
   await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
-  await page.getByRole('button', { name: 'Toți 11' }).click();
+  await page.getByRole('button', { name: 'Toți', exact: true }).click();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/custom-form.png`, fullPage: true });
   await page.getByRole('button', { name: /CREEAZĂ BILETUL CUSTOM/ }).click();
   await expect(page).toHaveURL(/tab=custom&job=[0-9a-f-]{36}/);
@@ -77,5 +77,9 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   await expect(page.getByRole('link', { name: 'VEZI BILETUL' })).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole('log')).toContainText(/propune|NO BET/, { timeout: 30_000 });
   if (process.env.SHOTS) { await page.waitForTimeout(3000); await page.screenshot({ path: `${process.env.SHOTS}/custom-done.png`, fullPage: true }); await page.setViewportSize({ width: 390, height: 844 }); await page.getByRole('button', { name: /Redă dezbaterea/ }).click(); await page.waitForTimeout(2500); await page.screenshot({ path: `${process.env.SHOTS}/custom-mobile.png`, fullPage: true }); }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/?tab=custom');
+  await expect(page.getByRole('region', { name: 'Coada analizelor' })).toContainText('CUSTOM — COTĂ 3');
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/queue.png` });
   expect(errors.filter((e) => !/favicon|404/.test(e))).toEqual([]);
 });

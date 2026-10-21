@@ -8,7 +8,7 @@ const grotesk = Space_Grotesk({ subsets: ['latin', 'latin-ext'], variable: '--fo
 export const metadata: Metadata = {
   robots: { index: false, follow: false }, // private personal tool
   title: 'PRIMUL 11',
-  description: 'Primul 11 votează. Tu câștigi timp. Analiză de fotbal cu unsprezece agenți AI, pe date reale.',
+  description: 'Primul 11 votează. Tu câștigi timp. Analiză de fotbal cu doisprezece agenți AI, pe date reale.',
   icons: { icon: '/favicon.svg' },
 };
 export const viewport: Viewport = { themeColor: '#060b18', width: 'device-width', initialScale: 1 };
