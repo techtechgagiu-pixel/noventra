@@ -114,3 +114,12 @@ test('your own ticket: build from real prices → agents review it live → verd
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/review-ticket.png`, fullPage: true });
   expect(errors).toEqual([]);
 });
+
+test('statistics tab: per-agent record and consumption', async ({ page }) => {
+  await page.goto('/auth/test-login?email=e2e@test.local');
+  await page.goto('/?tab=statistici');
+  await expect(page.getByRole('heading', { name: 'Statistici' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Agenții' }).locator('article')).toHaveCount(13);
+  await expect(page.getByText('Consum azi')).toBeVisible();
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/stats.png`, fullPage: true });
+});

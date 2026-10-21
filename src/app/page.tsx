@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, ClipboardCheck, History, SlidersHorizontal, Ticket } from 'lucide-react';
+import { Activity, BarChart3, ClipboardCheck, History, SlidersHorizontal, Ticket } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { many } from '@/lib/db';
 import { slotStates } from '@/lib/jobs/service';
@@ -20,13 +20,15 @@ import { ReviewBuilder } from '@/components/review/review-builder';
 import { HomeStage } from '@/components/home/home-stage';
 import { homeReel, homeStats, homeThreads } from '@/lib/home-reel';
 import { HomeThreads } from '@/components/home/home-threads';
+import { StatsView } from '@/components/stats-view';
+import { agentStats } from '@/lib/agent-stats';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'acasa' | 'bilete' | 'custom' | 'verifica' | 'analiza' | 'istoric';
+type Tab = 'acasa' | 'bilete' | 'custom' | 'verifica' | 'analiza' | 'istoric' | 'statistici';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -34,7 +36,7 @@ const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string }> }) {
   const user = (await currentUser())!;
   const sp = await searchParams;
-  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
+  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' || sp.tab === 'statistici' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
@@ -44,6 +46,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     { id: 'verifica', label: 'Biletul tău', icon: ClipboardCheck, badge: running.some((j) => j.slot.startsWith('REVIEW_')) },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
     { id: 'istoric', label: 'Istoric', icon: History },
+    { id: 'statistici', label: 'Statistici', icon: BarChart3 },
   ];
 
   return (
@@ -57,9 +60,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
           </Link>
           <nav className="ml-auto flex gap-1 rounded-xl border border-line bg-panel p-1" aria-label="Secțiuni">
             {tabs.map(({ id, label, icon: Icon, badge }) => (
-              <Link key={id} href={`/?tab=${id}`} aria-current={tab === id ? 'page' : undefined}
+              <Link key={id} href={`/?tab=${id}`} title={label} aria-label={label} aria-current={tab === id ? 'page' : undefined}
                 className={`relative flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition md:px-4 ${tab === id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:text-text'}`}>
-                <Icon size={16} aria-hidden /> <span className={id === 'bilete' || id === 'analiza' ? 'hidden sm:inline' : 'hidden md:inline'}>{label}</span>
+                <Icon size={16} aria-hidden /> <span className="hidden xl:inline">{label}</span>
                 {badge && <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-emerald" aria-label="analiză în curs" />}
               </Link>
             ))}
@@ -73,6 +76,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
         {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
+        {tab === 'statistici' && <StatisticiTab userId={user.id} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} />}
       </main>
       <footer className="mx-auto max-w-6xl px-4 pb-8 text-xs text-muted">18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</footer>
@@ -268,6 +272,11 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
       )}
     </div>
   );
+}
+
+async function StatisticiTab({ userId }: { userId: string }) {
+  const { agents, totals } = await agentStats(userId);
+  return <StatsView agents={plain(agents)} totals={totals} />;
 }
 
 async function IstoricTab({ userId, ticket }: { userId: string; ticket?: string }) {
