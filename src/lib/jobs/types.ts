@@ -18,7 +18,7 @@ export const STAGES: { id: Stage; label: string }[] = [
   { id: 'BUILDING', label: 'Construirea biletului' },
 ];
 
-export type BatchStep = 'FETCH' | 'SCOUT' | 'STATS' | 'INITIAL' | 'DEBATE1' | 'DEBATE2' | 'VOTE' | 'DONE';
+export type BatchStep = 'FETCH' | 'SCOUT' | 'STATS' | 'INITIAL' | 'DEBATE1' | 'DEBATE2' | 'BRAIN' | 'VOTE' | 'DONE';
 
 export type Checkpoint = {
   phase: 'DISCOVER' | 'BATCH' | 'BUILD' | 'DONE';
@@ -30,6 +30,8 @@ export type Checkpoint = {
   qualified: number;
   debateFixtures?: string[];
   resumedCount?: number;
+  /** The brain's choice per fixture (key, or null = reject the shortlist). Absent = brain unavailable → automatic rule. */
+  brain?: Record<string, { key: string | null; backup?: string | null; reason: string; model: string | null }>;
 };
 
 export type CandidateEntry = { fixtureId: string; home: string; away: string; league: string; kickoff: string; eligible: boolean; reason?: string };

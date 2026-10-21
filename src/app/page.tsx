@@ -40,6 +40,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
           <Link href="/" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
             <img src="/favicon.svg" alt="" className="h-8 w-8" />
             <span className="hidden sm:inline">PRIMUL <span className="text-cyan">11</span></span>
+            <span className="rounded-md border border-gold/60 bg-gold/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold">Beta</span>
           </Link>
           <nav className="ml-auto flex gap-1 rounded-xl border border-line bg-panel p-1" aria-label="Secțiuni">
             {tabs.map(({ id, label, icon: Icon, badge }) => (

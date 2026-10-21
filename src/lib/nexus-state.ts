@@ -73,6 +73,9 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
       break;
     case 'BATCH_STARTED': s.batchIndex = (p.batch ?? 1) - 1; s.batchFraction = 0; for (const id of p.fixtures ?? []) setFx(id, { state: 'RESEARCH' }); log(`Lotul ${p.batch}/${p.of} intră în analiză.`); break;
     case 'SCOUT_STARTED': s.scout = { ...s.scout, status: 'RESEARCHING', message: p.message }; log(p.message); break;
+    case 'MARKETS_CHECKED': log(`Filtru: ${p.accepted} meciuri au minimum ${p.minimum} pronosticuri cu cotă reală; ${p.rejected} au avut prea puține și au fost lăsate deoparte.`); break;
+    case 'BRAIN_STARTED': log(`🧠 Creierul echipei (Mircea Lucescu) alege pronosticul ideal pentru ${p.fixtures} meciuri — ${p.model}.`); break;
+    case 'BRAIN_DECISION': log(`🧠 ${p.match}: ${p.choice ? `alege „${p.label}” @ ${p.odds}` : 'respinge lista scurtă'} — ${short(p.reason, 140)}`, p.choice ? 'good' : 'info'); break;
     case 'NEWS_COLLECTED': log(`Hanțu: ${p.home + p.away} știri despre ${p.match}${p.headlines?.[0] ? ` — „${short(p.headlines[0].title, 90)}” (${p.headlines[0].source ?? 'presă'})` : ''}.`); break;
     case 'SCOUT_COMPLETED': s.scout = { ...s.scout, status: 'DONE', message: p.message, model: p.model ?? s.scout.model, dossiers: s.scout.dossiers + 1 }; s.batchFraction = Math.max(s.batchFraction, 0.15); log(`SCOUT: dosar istoric pentru ${p.match} (${p.homeSample}+${p.awaySample} meciuri).`); break;
     case 'STATS_COMPLETED': s.batchFraction = Math.max(s.batchFraction, 0.25); log(`Model statistic: ${p.match} — λ ${p.lambdaHome}–${p.lambdaAway}, incertitudine ${p.uncertainty}.`); break;

@@ -1,6 +1,6 @@
 export type FixtureStatus = 'pre' | 'in' | 'post' | 'postponed' | 'cancelled';
 
-export type MarketType = '1X2' | 'DOUBLE_CHANCE' | 'TOTAL' | 'HANDICAP' | 'TEAM_TOTAL';
+export type MarketType = '1X2' | 'DOUBLE_CHANCE' | 'TOTAL' | 'HANDICAP' | 'TEAM_TOTAL' | 'BTTS' | 'CLEAN_SHEET' | 'TEAM_SPECIAL' | 'HALF' | 'CORNERS';
 
 /** A priced market selection, exactly as observed at the source. Never altered. */
 export type MarketQuote = {

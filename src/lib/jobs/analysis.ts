@@ -45,7 +45,12 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
   };
 }
 
-export type FinalPosition = { agentId: string; decision: 'BET_CANDIDATE' | 'NO_BET'; marketKey: string | null; estimatedProbability: number | null; confidence: number; risk: string; round: number; rationale: string; provider: string; model: string };
+export type FinalPosition = { agentId: string; decision: 'BET_CANDIDATE' | 'NO_BET'; marketKey: string | null; estimatedProbability: number | null; confidence: number; risk: string; round: number; rationale: string; provider: string; model: string;
+  /** Other selections the agent also backs (validated keys, main pick excluded). */
+  alternatives?: string[] };
+
+/** Every selection an agent backs: its main pick first, then its alternatives. */
+export const picksOf = (p: FinalPosition) => (p.decision === 'BET_CANDIDATE' && p.marketKey ? [p.marketKey, ...(p.alternatives ?? [])] : (p.alternatives ?? []));
 
 /** Canonicalises equivalent selections so votes are comparable. */
 export function canonicalMarket(key: string | null, validKeys: Set<string>): string | null {
@@ -57,7 +62,10 @@ export function canonicalMarket(key: string | null, validKeys: Set<string>): str
   return a && validKeys.has(a) ? a : null;
 }
 
-export type ConsensusResult = { outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET'; marketKey: string | null; votesFor: number; directVotes: number; noBetVotes: number; abstentions: number; tally: Record<string, number>; supporters: string[]; requiredVotes: number; cautiousVeto: boolean };
+export type ShortlistItem = { key: string; odds: number; supporters: string[]; direct: number };
+export type ConsensusResult = { outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET'; marketKey: string | null; votesFor: number; directVotes: number; noBetVotes: number; abstentions: number; tally: Record<string, number>; supporters: string[]; requiredVotes: number; cautiousVeto: boolean;
+  /** Every selection that reached the required support — the brain chooses among these. */
+  shortlist: ShortlistItem[] };
 
 /** The two most prudent agents. When both refuse a fixture, the bar rises to CAUTIOUS_VETO_VOTES. */
 export const CAUTIOUS_AGENTS = ['victor', 'robert'];
@@ -71,17 +79,17 @@ export const CAUTIOUS_VETO_VOTES = 5;
  * `availableKeys` should already be limited to the ticket's allowed price band.
  */
 export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 10, availableKeys?: Array<{ key: string; odds: number }>, pick: 'safest' | 'highest' = 'safest'): ConsensusResult {
-  const bets = positions.filter((p) => p.decision === 'BET_CANDIDATE' && p.marketKey);
+  const bets = positions.filter((p) => picksOf(p).length > 0);
   const noBet = positions.length - bets.length;
   const abstentions = totalAgents - positions.length;
   const tally: Record<string, number> = {};
-  for (const b of bets) tally[b.marketKey!] = (tally[b.marketKey!] ?? 0) + 1;
+  for (const b of bets) for (const pk of picksOf(b)) tally[pk] = (tally[pk] ?? 0) + 1;
   const refusedBy = new Set(positions.filter((p) => p.decision === 'NO_BET').map((p) => p.agentId));
   const cautiousVeto = CAUTIOUS_AGENTS.every((a) => refusedBy.has(a));
   const required = cautiousVeto ? Math.max(threshold, CAUTIOUS_VETO_VOTES) : threshold;
-  const keys = availableKeys ?? [...new Set(bets.map((b) => b.marketKey!))].map((key) => ({ key, odds: 0 }));
+  const keys = availableKeys ?? [...new Set(bets.flatMap(picksOf))].map((key) => ({ key, odds: 0 }));
   const support = keys.map((k) => {
-    const supporters = bets.filter((b) => selectionImplies(b.marketKey!, k.key)).map((b) => b.agentId);
+    const supporters = bets.filter((b) => picksOf(b).some((pk) => selectionImplies(pk, k.key))).map((b) => b.agentId);
     return { key: k.key, odds: k.odds, supporters, direct: tally[k.key] ?? 0 };
   }).filter((s) => s.supporters.length > 0)
     .sort((a, b) => b.supporters.length - a.supporters.length || a.odds - b.odds || b.direct - a.direct);
@@ -89,7 +97,9 @@ export function consensus(positions: FinalPosition[], threshold: number, totalAg
     ? support.filter((s) => s.supporters.length >= required).sort((a, b) => b.odds - a.odds || b.supporters.length - a.supporters.length)[0]
     : support.find((s) => s.supporters.length >= required);
   const top = qualified ?? support[0];
-  const base = { noBetVotes: noBet, abstentions, tally, requiredVotes: required, cautiousVeto };
+  // Only selections at least one agent actually proposed (not merely implied) are offered to the brain.
+  const shortlist = support.filter((s) => s.supporters.length >= required && s.direct > 0).slice(0, 6);
+  const base = { noBetVotes: noBet, abstentions, tally, requiredVotes: required, cautiousVeto, shortlist };
   if (qualified) return { outcome: 'QUALIFIED', marketKey: qualified.key, votesFor: qualified.supporters.length, directVotes: qualified.direct, supporters: qualified.supporters, ...base };
   if (noBet >= threshold) return { outcome: 'NO_BET', marketKey: null, votesFor: top?.supporters.length ?? 0, directVotes: top?.direct ?? 0, supporters: top?.supporters ?? [], ...base };
   return { outcome: 'NO_CONSENSUS', marketKey: top?.key ?? null, votesFor: top?.supporters.length ?? 0, directVotes: top?.direct ?? 0, supporters: top?.supporters ?? [], ...base };
@@ -126,7 +136,11 @@ export function contested(positions: FinalPosition[], availableKeys?: Array<{ ke
 export function toPosition(agentId: string, p: Prediction | Revision, round: number, provider: string, model: string, validKeys: Set<string>): FinalPosition {
   const key = canonicalMarket(p.marketKey, validKeys);
   const decision = p.decision === 'BET_CANDIDATE' && key ? 'BET_CANDIDATE' : 'NO_BET';
-  return { agentId, decision, marketKey: decision === 'BET_CANDIDATE' ? key : null, estimatedProbability: p.estimatedProbability, confidence: p.confidence, risk: p.risk, round, rationale: p.rationale, provider, model };
+  const alts = 'alternatives' in p && Array.isArray(p.alternatives) ? p.alternatives : [];
+  const alternatives = decision === 'BET_CANDIDATE'
+    ? [...new Set(alts.map((a) => canonicalMarket(a.marketKey, validKeys)).filter((k): k is string => !!k && k !== key))].slice(0, 2)
+    : [];
+  return { agentId, decision, marketKey: decision === 'BET_CANDIDATE' ? key : null, estimatedProbability: p.estimatedProbability, confidence: p.confidence, risk: p.risk, round, rationale: p.rationale, provider, model, alternatives };
 }
 
 export function riskClass(prob: number | null, uncertainty: string): 'LOW' | 'MEDIUM' | 'HIGH' {

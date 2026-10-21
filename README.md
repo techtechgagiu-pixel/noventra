@@ -8,6 +8,13 @@
 > Rules added 2026-10-21: no „Under” selections at all (`isBannedMarket`); a ticket with 3+ legs may not have more than half
 > of its legs on one market type. With `OPENROUTER_API_KEY` set, each voting agent runs on its own vendor's model
 > (`src/lib/ai/openrouter-models.ts`, free Gemini/Groq model as fallback) under a daily cap `OPENROUTER_DAILY_USD` (default 1.5).
+>
+> Flow since 2026-10-21 (v4): a fixture enters only with ≥ `MIN_MARKETS_PER_FIXTURE` (30) real, allowed selections — DraftKings
+> props now add BTTS, clean sheet, win by 2+, win both halves, half-time / second-half result, first-half goals and corners
+> (settled from the score, the half-time score and the corner count read from the match summary). Each agent gives a main pick
+> plus up to 2 alternatives; selections backed by ≥ 3 agents form the shortlist; the brain (Mircea Lucescu persona, stronger
+> model) picks the ideal one per fixture (plus a backup if validation fails), weighing win chance, the ideal price per leg and
+> ticket variety. One debate round by default.
 
 **Six Minds. One Decision.** — analiză de fotbal cu șase agenți AI, pe date reale, cu replay complet al deciziilor.
 

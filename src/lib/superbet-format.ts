@@ -27,6 +27,28 @@ export function superbetPick(key: string, home: string, away: string): SuperbetP
       if (line === 0.5) return { market: 'Șansă dublă', pick: a === 'HOME' ? '1X' : 'X2', note: `echivalent cu handicap ${team} +0.5` };
       return { market: 'Handicap asiatic', pick: `${team} ${signed(line)}` };
     }
+    case 'BTTS':
+      return { market: 'Ambele echipe marchează (GG/NG)', pick: a === 'YES' ? 'GG (Da)' : 'NG (Nu)' };
+    case 'CS': {
+      const team = a === 'HOME' ? home : away;
+      return { market: `${team} – fără gol primit (Clean sheet)`, pick: b === 'YES' ? 'Da' : 'Nu' };
+    }
+    case 'WIN2':
+      return { market: 'Handicap european (0:1)', pick: a === 'HOME' ? '1' : '2', note: `${a === 'HOME' ? home : away} câștigă la 2+ goluri` };
+    case 'WBH':
+      return { market: 'Câștigă ambele reprize', pick: a === 'HOME' ? home : away };
+    case 'HT1X2':
+      return { market: 'Pauză (1X2 repriza 1)', pick: a === 'HOME' ? '1' : a === 'AWAY' ? '2' : 'X' };
+    case 'H21X2':
+      return { market: 'Repriza 2 (1X2)', pick: a === 'HOME' ? '1' : a === 'AWAY' ? '2' : 'X' };
+    case 'HTTOT':
+      return { market: 'Total goluri repriza 1', pick: `${a === 'OVER' ? 'Peste' : 'Sub'} ${b}` };
+    case 'CORN':
+      return { market: 'Total cornere', pick: `${a === 'OVER' ? 'Peste' : 'Sub'} ${b}` };
+    case 'TCORN': {
+      const team = a === 'HOME' ? home : away;
+      return { market: `Cornere ${team}`, pick: `${b === 'OVER' ? 'Peste' : 'Sub'} ${c}` };
+    }
     default:
       return { market: key, pick: '' };
   }

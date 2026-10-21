@@ -1,18 +1,37 @@
 import { many, query } from './db';
-import { espnLeagueDay } from './sports/espn';
+import { espnLeagueDay, espnSummary } from './sports/espn';
 import { getLeagues, persistFixtures } from './sports/fixtures';
 import { localDate, yyyymmdd } from './time';
 
-/** Canonical settlement for the market keys this app produces. Returns null when not decidable. */
-export function settleMarket(key: string, home: number, away: number): 'WON' | 'LOST' | null {
+export type MatchFacts = { ht?: [number, number] | null; corners?: [number, number] | null };
+
+/** Which extra match facts a market needs to be settled (beyond the final score). */
+export function needsFacts(key: string): Array<'ht' | 'corners'> {
+  const t = key.split(':')[0];
+  return t === 'HT1X2' || t === 'H21X2' || t === 'HTTOT' || t === 'WBH' ? ['ht'] : t === 'CORN' || t === 'TCORN' ? ['corners'] : [];
+}
+
+/** Canonical settlement for the market keys this app produces. Returns null when not decidable (yet). */
+export function settleMarket(key: string, home: number, away: number, facts: MatchFacts = {}): 'WON' | 'LOST' | null {
   const [type, side, lineRaw] = key.split(':');
   const line = Number(lineRaw);
+  const r = (b: boolean) => (b ? 'WON' : 'LOST');
+  const ht = facts.ht ?? null, corners = facts.corners ?? null;
   switch (type) {
-    case '1X2': return (side === 'HOME' ? home > away : side === 'AWAY' ? away > home : home === away) ? 'WON' : 'LOST';
-    case 'DC': return (side === '1X' ? home >= away : side === 'X2' ? away >= home : home !== away) ? 'WON' : 'LOST';
-    case 'TOTAL': return (side === 'OVER' ? home + away > line : home + away < line) ? 'WON' : 'LOST';
-    case 'AH': return (side === 'HOME' ? home + line > away : away + line > home) ? 'WON' : 'LOST';
-    case 'TT': { const goals = side === 'HOME' ? home : away; const l = Number(key.split(':')[3]); return (key.split(':')[2] === 'OVER' ? goals > l : goals < l) ? 'WON' : 'LOST'; }
+    case '1X2': return r(side === 'HOME' ? home > away : side === 'AWAY' ? away > home : home === away);
+    case 'DC': return r(side === '1X' ? home >= away : side === 'X2' ? away >= home : home !== away);
+    case 'TOTAL': return r(side === 'OVER' ? home + away > line : home + away < line);
+    case 'AH': return r(side === 'HOME' ? home + line > away : away + line > home);
+    case 'TT': { const goals = side === 'HOME' ? home : away; const l = Number(key.split(':')[3]); return r(key.split(':')[2] === 'OVER' ? goals > l : goals < l); }
+    case 'BTTS': return r(side === 'YES' ? home > 0 && away > 0 : !(home > 0 && away > 0));
+    case 'CS': { const conceded = side === 'HOME' ? away : home; return r(key.split(':')[2] === 'YES' ? conceded === 0 : conceded > 0); }
+    case 'WIN2': return r(side === 'HOME' ? home - away >= 2 : away - home >= 2);
+    case 'HT1X2': return ht ? r(side === 'HOME' ? ht[0] > ht[1] : side === 'AWAY' ? ht[1] > ht[0] : ht[0] === ht[1]) : null;
+    case 'H21X2': { if (!ht) return null; const h = home - ht[0], a = away - ht[1]; return r(side === 'HOME' ? h > a : side === 'AWAY' ? a > h : h === a); }
+    case 'HTTOT': return ht ? r(side === 'OVER' ? ht[0] + ht[1] > line : ht[0] + ht[1] < line) : null;
+    case 'WBH': { if (!ht) return null; const h2 = [home - ht[0], away - ht[1]]; return r(side === 'HOME' ? ht[0] > ht[1] && h2[0] > h2[1] : ht[1] > ht[0] && h2[1] > h2[0]); }
+    case 'CORN': return corners ? r(side === 'OVER' ? corners[0] + corners[1] > line : corners[0] + corners[1] < line) : null;
+    case 'TCORN': { if (!corners) return null; const c = side === 'HOME' ? corners[0] : corners[1]; const l = Number(key.split(':')[3]); return r(key.split(':')[2] === 'OVER' ? c > l : c < l); }
     default: return null;
   }
 }
@@ -24,15 +43,47 @@ export function ticketOutcome(outcomes: string[]): 'PENDING' | 'WON' | 'LOST' | 
   return outcomes.includes('VOID') ? 'PARTIAL_VOID' : 'WON';
 }
 
+type FactRow = { status: string; home_score: number | null; away_score: number | null; kickoff_utc: Date; ht_home: number | null; ht_away: number | null; corners_home: number | null; corners_away: number | null };
+const factsOf = (r: FactRow): MatchFacts => ({
+  ht: r.ht_home !== null && r.ht_away !== null ? [r.ht_home, r.ht_away] : null,
+  corners: r.corners_home !== null && r.corners_away !== null ? [r.corners_home, r.corners_away] : null,
+});
+
+/** Reads half-time score and corners from the finished match's summary, once, for fixtures whose markets need them. */
+async function loadMatchFacts() {
+  const rows = await many<{ id: string; provider_id: string; provider_key: string }>(
+    `SELECT DISTINCT f.id, f.provider_id, l.provider_key FROM fixtures f JOIN leagues l ON l.id=f.league_id
+     WHERE f.status='post' AND f.provider='espn' AND (f.ht_home IS NULL OR f.corners_home IS NULL)
+       AND (f.facts_checked_at IS NULL OR f.facts_checked_at < now() - interval '3 hours')
+       AND (EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING' AND s.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):')
+         OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.outcome IS NULL AND p.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):'))
+     LIMIT 40`);
+  for (const r of rows) {
+    try {
+      const sm = await espnSummary(r.provider_key, r.provider_id, 30 * 60_000) as Record<string, any>;
+      const comps = (sm.header?.competitions?.[0]?.competitors ?? []) as Array<{ homeAway: string; linescores?: Array<{ displayValue?: string; value?: number }> }>;
+      const half = (side: string) => { const c = comps.find((x) => x.homeAway === side); const v = c?.linescores?.[0]; const n = Number(v?.value ?? v?.displayValue); return Number.isFinite(n) ? n : null; };
+      const teams = (sm.boxscore?.teams ?? []) as Array<{ homeAway?: string; team?: { id?: string }; statistics?: Array<{ name: string; displayValue?: string }> }>;
+      const homeId = (sm.header?.competitions?.[0]?.competitors ?? []).find((x: { homeAway: string }) => x.homeAway === 'home')?.team?.id;
+      const cornersOf = (home: boolean) => { const t = teams.find((x) => (x.homeAway ? x.homeAway === (home ? 'home' : 'away') : (x.team?.id === homeId) === home)); const v = Number(t?.statistics?.find((st) => st.name === 'wonCorners')?.displayValue); return Number.isFinite(v) ? v : null; };
+      await query('UPDATE fixtures SET ht_home=COALESCE($2,ht_home), ht_away=COALESCE($3,ht_away), corners_home=COALESCE($4,corners_home), corners_away=COALESCE($5,corners_away), facts_checked_at=now() WHERE id=$1',
+        [r.id, half('home'), half('away'), cornersOf(true), cornersOf(false)]);
+    } catch { await query('UPDATE fixtures SET facts_checked_at=now() WHERE id=$1', [r.id]); }
+  }
+}
+
+/** A finished leg whose extra facts never arrive (≥ 3 days) is voided rather than guessed. */
+const factsMissingTooLong = (r: FactRow) => Date.now() - new Date(r.kickoff_utc).getTime() > 72 * 3600_000;
+
 /** Settles every agent pick (not only ticket legs) so each agent builds a verified track record. */
 export async function settleAgentPredictions() {
-  const rows = await many<{ id: string; market_key: string; status: string; home_score: number | null; away_score: number | null; kickoff_utc: Date }>(
-    `SELECT p.id, p.market_key, f.status, f.home_score, f.away_score, f.kickoff_utc FROM agent_predictions p JOIN fixtures f ON f.id=p.fixture_id
+  const rows = await many<FactRow & { id: string; market_key: string }>(
+    `SELECT p.id, p.market_key, f.status, f.home_score, f.away_score, f.kickoff_utc, f.ht_home, f.ht_away, f.corners_home, f.corners_away FROM agent_predictions p JOIN fixtures f ON f.id=p.fixture_id
      WHERE p.decision='BET_CANDIDATE' AND p.market_key IS NOT NULL AND p.outcome IS NULL AND f.status IN ('post','cancelled','postponed') LIMIT 2000`,
   );
   for (const r of rows) {
     let outcome: string | null = null;
-    if (r.status === 'post' && r.home_score !== null && r.away_score !== null) outcome = settleMarket(r.market_key, r.home_score, r.away_score);
+    if (r.status === 'post' && r.home_score !== null && r.away_score !== null) outcome = settleMarket(r.market_key, r.home_score, r.away_score, factsOf(r)) ?? (factsMissingTooLong(r) ? 'VOID' : null);
     else if (r.status === 'cancelled' || (r.status === 'postponed' && Date.now() - new Date(r.kickoff_utc).getTime() > 48 * 3600_000)) outcome = 'VOID';
     if (outcome) await query('UPDATE agent_predictions SET outcome=$2, settled_at=now() WHERE id=$1', [r.id, outcome]);
   }
@@ -66,14 +117,15 @@ export async function settlePending() {
       await persistFixtures(fixtures.map((f) => ({ ...f, odds: null })));
     }
     }
+    await loadMatchFacts().catch(() => {});
     await settleAgentPredictions();
-    const rows = await many<{ id: string; ticket_id: string; market_key: string; status: string; home_score: number | null; away_score: number | null; kickoff_utc: Date }>(
-      `SELECT s.id, s.ticket_id, s.market_key, f.status, f.home_score, f.away_score, f.kickoff_utc FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE s.outcome='PENDING'`,
+    const rows = await many<FactRow & { id: string; ticket_id: string; market_key: string }>(
+      `SELECT s.id, s.ticket_id, s.market_key, f.status, f.home_score, f.away_score, f.kickoff_utc, f.ht_home, f.ht_away, f.corners_home, f.corners_away FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE s.outcome='PENDING'`,
     );
     const touched = new Set<string>();
     for (const r of rows) {
       let outcome: string | null = null;
-      if (r.status === 'post' && r.home_score !== null && r.away_score !== null) outcome = settleMarket(r.market_key, r.home_score, r.away_score);
+      if (r.status === 'post' && r.home_score !== null && r.away_score !== null) outcome = settleMarket(r.market_key, r.home_score, r.away_score, factsOf(r)) ?? (factsMissingTooLong(r) ? 'VOID' : null);
       else if (r.status === 'cancelled' || (r.status === 'postponed' && Date.now() - new Date(r.kickoff_utc).getTime() > 48 * 3600_000)) outcome = 'VOID';
       if (outcome) { await query('UPDATE ticket_selections SET outcome=$2 WHERE id=$1', [r.id, outcome]); touched.add(r.ticket_id); }
     }

@@ -59,7 +59,10 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
   return (
     <div className="space-y-6">
       {fresh && <p className="chip text-emerald"><Check size={13} aria-hidden /> Analiza s-a încheiat și a fost salvată automat.</p>}
-      <div className="card overflow-hidden">
+      <div className={`card overflow-hidden ${t.outcomeStatus === 'WON' || t.outcomeStatus === 'PARTIAL_VOID' ? 'border-emerald ring-2 ring-emerald/40' : t.outcomeStatus === 'LOST' ? 'border-rose ring-2 ring-rose/40' : ''}`}>
+        {completed && (t.outcomeStatus === 'WON' || t.outcomeStatus === 'LOST' || t.outcomeStatus === 'PARTIAL_VOID') && (
+          <p className={`px-6 py-3 font-display text-lg font-bold ${t.outcomeStatus === 'LOST' ? 'bg-rose/20 text-rose' : 'bg-emerald/20 text-emerald'}`}>{t.outcomeStatus === 'LOST' ? '✗ BILET PIERDUT' : '✓ BILET CÂȘTIGAT'} · {t.selections.filter((x) => x.outcome === 'WON').length}/{t.selections.length} meciuri au intrat</p>
+        )}
         <div className="flex flex-col gap-4 border-b border-line p-6 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan">{t.subtitle}</p>
@@ -74,7 +77,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
         {completed ? (
           <ol className="divide-y divide-line">
             {t.selections.map((s) => (
-              <li key={s.position} className="grid gap-2 p-5 md:grid-cols-[1fr_auto] md:items-center">
+              <li key={s.position} className={`grid gap-2 border-l-4 p-5 md:grid-cols-[1fr_auto] md:items-center ${s.outcome === 'WON' ? 'border-l-emerald bg-emerald/10' : s.outcome === 'LOST' ? 'border-l-rose bg-rose/10' : 'border-l-transparent'}`}>
                 <div>
                   <p className="text-xs text-muted">{s.snapshot.league} · {fmtDateTime(s.snapshot.kickoff)}</p>
                   <p className="text-lg font-semibold">{s.snapshot.home} <span className="text-muted">vs</span> {s.snapshot.away}{s.home_score != null && s.outcome !== 'PENDING' && <span className="ml-2 text-sm text-muted">({s.home_score}–{s.away_score})</span>}</p>
@@ -82,7 +85,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
                   {(() => { const p = superbetPick(s.market_key, s.snapshot.home, s.snapshot.away); return <p className="text-xs text-muted">Pe Superbet: <span className="text-text">{p.market} → {p.pick}</span>{p.note ? ` (${p.note})` : ''}</p>; })()}
                   <p className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="chip">{s.votes_for}/{t.summary.agents ?? 6} voturi</span><span className="chip">{RISK_RO[s.risk]}</span><span className="chip">{s.bookmaker} · observat {fmtDateTime(s.quote_observed_at)}</span>{s.model_probability != null && <span className="chip">p estimat {Math.round(s.model_probability * 100)}%</span>}</p>
                 </div>
-                <div className="text-right"><p className="font-display text-3xl font-bold tabular">{odds(s.odds)}</p>{s.outcome !== 'PENDING' && <p className={`text-xs font-bold ${s.outcome === 'WON' ? 'text-emerald' : s.outcome === 'LOST' ? 'text-rose' : 'text-muted'}`}>{s.outcome === 'WON' ? 'Câștigat' : s.outcome === 'LOST' ? 'Pierdut' : 'Anulat'}</p>}</div>
+                <div className="text-right"><p className="font-display text-3xl font-bold tabular">{odds(s.odds)}</p><p className={`text-xs font-bold ${s.outcome === 'WON' ? 'text-emerald' : s.outcome === 'LOST' ? 'text-rose' : 'text-muted'}`}>{s.outcome === 'WON' ? '✓ A intrat' : s.outcome === 'LOST' ? '✗ Nu a intrat' : s.outcome === 'VOID' ? 'Anulat' : 'În așteptare'}</p></div>
               </li>
             ))}
           </ol>

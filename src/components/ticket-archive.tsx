@@ -19,13 +19,13 @@ export function TicketArchive({ tickets }: { tickets: T[] }) {
   }), [tickets, f, today, yesterday, monday]);
   return (
     <div className="space-y-4">
-      <h1 className="font-display text-3xl font-bold">Biletele mele</h1>
+      <h1 className="font-display text-2xl font-bold">Biletele mele</h1>
       <div className="flex flex-wrap gap-2">{FILTERS.map(([k, l]) => <button key={k} onClick={() => setF(k)} className={`chip ${f === k ? 'border-cyan text-cyan' : 'text-muted'}`} aria-pressed={f === k}>{l}</button>)}</div>
       {list.length === 0 ? <div className="card p-8 text-center text-muted">Niciun bilet în această categorie.</div> : (
         <ul className="grid gap-3 md:grid-cols-2">
           {list.map((t) => (
             <li key={t.id}>
-              <Link href={`/?tab=istoric&ticket=${t.id}`} className="card block p-4 transition hover:border-cyan/50">
+              <Link href={`/?tab=istoric&ticket=${t.id}`} className={`card block p-4 transition hover:border-cyan/50 ${t.outcome_status === 'WON' || t.outcome_status === 'PARTIAL_VOID' ? 'border-emerald bg-emerald/10' : t.outcome_status === 'LOST' ? 'border-rose bg-rose/10' : ''}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div><p className="font-semibold">{SLOTS_UI[t.slot]}</p><p className="text-xs text-muted">{fmtDateTime(t.created_at)}</p></div>
                   <div className="text-right"><p className="font-display text-2xl font-bold tabular">{t.generation_status === 'COMPLETED' ? odds(t.actual_odds) : '—'}</p><p className="text-xs text-muted">țintă {t.target_odds}</p></div>
@@ -34,7 +34,16 @@ export function TicketArchive({ tickets }: { tickets: T[] }) {
                   <span className={`chip ${t.generation_status === 'COMPLETED' ? 'text-emerald' : 'text-gold'}`}>{t.generation_status === 'COMPLETED' ? `${t.leg_count} meciuri` : t.generation_status === 'NO_BET' ? 'NO BET' : 'Incomplet'}</span>
                   {t.generation_status === 'COMPLETED' && <span className={`chip ${t.outcome_status === 'WON' ? 'text-emerald' : t.outcome_status === 'LOST' ? 'text-rose' : 'text-muted'}`}>{OUTCOME_RO[t.outcome_status]}</span>}
                 </div>
-                {t.selections.length > 0 && <p className="mt-2 line-clamp-2 text-xs text-muted">{t.selections.map((s) => s.match).join(' · ')}</p>}
+                {t.selections.length > 0 && (
+                  <ul className="mt-3 space-y-1 text-xs">
+                    {t.selections.map((s, i) => (
+                      <li key={i} className="flex items-center gap-2">
+                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.outcome === 'WON' ? 'bg-emerald' : s.outcome === 'LOST' ? 'bg-rose' : s.outcome === 'VOID' ? 'bg-muted' : 'border border-muted'}`} aria-label={s.outcome === 'WON' ? 'a intrat' : s.outcome === 'LOST' ? 'nu a intrat' : 'în așteptare'} />
+                        <span className={`truncate ${s.outcome === 'LOST' ? 'text-rose' : s.outcome === 'WON' ? 'text-emerald' : 'text-muted'}`}>{s.match} — {s.label} @ {odds(s.odds)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Link>
             </li>
           ))}

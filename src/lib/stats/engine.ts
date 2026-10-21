@@ -36,7 +36,10 @@ export function selectionWins(key: string, hg: number, ag: number): boolean | nu
     case 'TOTAL': { const line = Number(parts[2]); return parts[1] === 'OVER' ? hg + ag > line : hg + ag < line; }
     case 'AH': { const line = Number(parts[2]); return parts[1] === 'HOME' ? hg + line > ag : ag + line > hg; }
     case 'TT': { const goals = parts[1] === 'HOME' ? hg : ag; const line = Number(parts[3]); return parts[2] === 'OVER' ? goals > line : goals < line; }
-    default: return null;
+    case 'BTTS': return parts[1] === 'YES' ? hg > 0 && ag > 0 : !(hg > 0 && ag > 0);
+    case 'CS': { const conceded = parts[1] === 'HOME' ? ag : hg; return parts[2] === 'YES' ? conceded === 0 : conceded > 0; }
+    case 'WIN2': return parts[1] === 'HOME' ? hg - ag >= 2 : ag - hg >= 2;
+    default: return null; // half-time, second-half and corner markets need data beyond the final score
   }
 }
 
@@ -93,11 +96,23 @@ export function fairProbabilities(markets: MarketQuote[]) {
   const groups = new Map<string, MarketQuote[]>();
   for (const m of markets) {
     const book = m.bookmaker ?? '';
-    const g = m.marketType === '1X2' ? `1X2|${book}` : m.marketType === 'TOTAL' ? `TOTAL:${m.line}|${book}` : m.marketType === 'HANDICAP' ? `AH:${Math.abs(m.line ?? 0)}|${book}` : m.marketType === 'TEAM_TOTAL' ? `TT:${m.key.split(':')[1]}:${m.line}|${book}` : m.key;
+    const parts = m.key.split(':');
+    const g = m.marketType === '1X2' ? `1X2|${book}`
+      : m.marketType === 'TOTAL' ? `TOTAL:${m.line}|${book}`
+      : m.marketType === 'HANDICAP' ? `AH:${Math.abs(m.line ?? 0)}|${book}`
+      : m.marketType === 'TEAM_TOTAL' ? `TT:${parts[1]}:${m.line}|${book}`
+      : parts[0] === 'HT1X2' || parts[0] === 'H21X2' ? `${parts[0]}|${book}`
+      : parts[0] === 'HTTOT' || parts[0] === 'CORN' ? `${parts[0]}:${m.line}|${book}`
+      : parts[0] === 'TCORN' ? `TCORN:${parts[1]}:${m.line}|${book}`
+      : parts[0] === 'BTTS' ? `BTTS|${book}`
+      : parts[0] === 'CS' ? `CS:${parts[1]}|${book}`
+      : m.key;
     groups.set(g, [...(groups.get(g) ?? []), m]);
   }
   for (const [g, list] of groups) {
-    const complete = g.startsWith('1X2|') ? list.length === 3 : g.startsWith('TOTAL') || g.startsWith('AH') || g.startsWith('TT:') ? list.length === 2 : false;
+    const three = /^(1X2|HT1X2|H21X2)\|/.test(g);
+    const two = /^(TOTAL|AH|TT:|HTTOT|CORN|TCORN|BTTS|CS:)/.test(g);
+    const complete = three ? list.length === 3 : two ? list.length === 2 : false;
     const sum = list.reduce((s, m) => s + 1 / m.odds, 0);
     for (const m of list) out.set(m.key, { implied: 1 / m.odds, fair: complete ? 1 / m.odds / sum : null, groupMargin: complete ? sum - 1 : null });
   }

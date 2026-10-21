@@ -249,44 +249,107 @@ export async function espnExtraMarkets(f: { leagueKey: string; providerId: strin
     }
   }
 
-  // DraftKings props
+  // DraftKings props (all pages; player props are ignored — only match/team markets that can be settled from the score,
+  // the half-time score or the corner count).
   const dk = items.find((i) => /draftkings/i.test(str(obj(i.provider).name) ?? ''));
   const propsRef = str(obj(dk?.propBets).$ref);
   if (propsRef) {
     try {
-      const url = propsRef.replace(/^http:/, 'https:') + (propsRef.includes('?') ? '&' : '?') + 'limit=300';
-      const props = arr(obj(await sportsGet(url, { provider: 'espn', ttlMs: 10 * 60_000 })).items).map(obj);
-      const price = (p: Obj) => numOrNull(obj(obj(p.current).over).decimal);
-      const bk = 'DraftKings';
-      for (const p of props.filter((x) => str(obj(x.type).name) === 'Double Chance')) {
-        const team = teamIdFromRef(p); const v = price(p);
-        if (!v) continue;
-        if (team && team === f.homeTeamId) add({ key: 'DC:1X', label: `${f.home} sau egal (1X)`, marketType: 'DOUBLE_CHANCE', odds: v, bookmaker: bk });
-        else if (team && team === f.awayTeamId) add({ key: 'DC:X2', label: `Egal sau ${f.away} (X2)`, marketType: 'DOUBLE_CHANCE', odds: v, bookmaker: bk });
-        else if (!team) add({ key: 'DC:12', label: `${f.home} sau ${f.away} (12)`, marketType: 'DOUBLE_CHANCE', odds: v, bookmaker: bk });
+      const baseUrl = propsRef.replace(/^http:/, 'https:') + (propsRef.includes('?') ? '&' : '?') + 'limit=500';
+      const first = obj(await sportsGet(baseUrl, { provider: 'espn', ttlMs: 20 * 60_000 }));
+      let props = arr(first.items).map(obj);
+      const pages = Math.min(3, Number(first.pageCount ?? 1) || 1);
+      for (let page = 2; page <= pages; page++) {
+        try { props = props.concat(arr(obj(await sportsGet(`${baseUrl}&page=${page}`, { provider: 'espn', ttlMs: 20 * 60_000 })).items).map(obj)); } catch { break; }
       }
-      for (const [side, teamId, name] of [['HOME', f.homeTeamId, f.home], ['AWAY', f.awayTeamId, f.away]] as const) {
+      const price = (p: Obj) => numOrNull(obj(obj(p.current).over).decimal);
+      const target = (p: Obj) => numOrNull(obj(obj(p.current).target).value) ?? numOrNull(obj(p.target).value);
+      const of = (name: string) => props.filter((x) => str(obj(x.type).name) === name);
+      const bk = 'DraftKings';
+      const sideOf = (team: string | undefined) => (team && team === f.homeTeamId ? 'HOME' : team && team === f.awayTeamId ? 'AWAY' : team ? null : 'NONE');
+      const nameOf = (side: 'HOME' | 'AWAY') => (side === 'HOME' ? f.home : f.away);
+
+      for (const p of of('Double Chance')) {
+        const side = sideOf(teamIdFromRef(p)); const v = price(p);
+        if (!v) continue;
+        if (side === 'HOME') add({ key: 'DC:1X', label: `${f.home} sau egal (1X)`, marketType: 'DOUBLE_CHANCE', odds: v, bookmaker: bk });
+        else if (side === 'AWAY') add({ key: 'DC:X2', label: `Egal sau ${f.away} (X2)`, marketType: 'DOUBLE_CHANCE', odds: v, bookmaker: bk });
+        else if (side === 'NONE') add({ key: 'DC:12', label: `${f.home} sau ${f.away} (12)`, marketType: 'DOUBLE_CHANCE', odds: v, bookmaker: bk });
+      }
+      // Three-way half markets: team-tagged rows are the teams, the untagged row is the draw.
+      for (const [type, prefix, what] of [['1st Half Moneyline', 'HT1X2', 'prima repriză'], ['2nd Half Moneyline', 'H21X2', 'repriza a doua']] as const) {
+        const rows = of(type);
+        if (rows.length !== 3) continue;
+        for (const p of rows) {
+          const side = sideOf(teamIdFromRef(p)); const v = price(p);
+          if (!v || !side) continue;
+          if (side === 'NONE') add({ key: `${prefix}:DRAW`, label: `Egal în ${what}`, marketType: 'HALF', odds: v, bookmaker: bk });
+          else add({ key: `${prefix}:${side}`, label: `${nameOf(side)} câștigă ${what}`, marketType: 'HALF', odds: v, bookmaker: bk });
+        }
+      }
+      // Single-outcome team markets.
+      for (const [type, prefix, label] of [['To Win by 2 Goals or More', 'WIN2', (n: string) => `${n} câștigă la 2+ goluri diferență`], ['To Win Both Halves', 'WBH', (n: string) => `${n} câștigă ambele reprize`]] as const) {
+        for (const p of of(type)) {
+          const side = sideOf(teamIdFromRef(p)); const v = price(p);
+          if (v && (side === 'HOME' || side === 'AWAY')) add({ key: `${prefix}:${side}`, label: label(nameOf(side)), marketType: 'TEAM_SPECIAL', odds: v, bookmaker: bk });
+        }
+      }
+      // Two-way yes/no markets: the feed lists "yes" first. Accepted only as a complete pair with a plausible margin.
+      const yesNo = (rows: Obj[]) => {
+        if (rows.length !== 2) return null;
+        const yes = price(rows[0]), no = price(rows[1]);
+        if (!yes || !no) return null;
+        const book = 1 / yes + 1 / no;
+        return book >= 1.0 && book <= 1.15 ? { yes, no } : null;
+      };
+      const btts = yesNo(of('Both Teams To Score'));
+      if (btts) {
+        add({ key: 'BTTS:YES', label: 'Ambele echipe marchează – DA', marketType: 'BTTS', odds: btts.yes, bookmaker: bk });
+        add({ key: 'BTTS:NO', label: 'Ambele echipe marchează – NU', marketType: 'BTTS', odds: btts.no, bookmaker: bk });
+      }
+      for (const side of ['HOME', 'AWAY'] as const) {
+        const teamId = side === 'HOME' ? f.homeTeamId : f.awayTeamId;
         if (!teamId) continue;
-        const rows = props.filter((x) => str(obj(x.type).name) === 'Team Total Goals' && teamIdFromRef(x) === teamId)
-          .map((x) => ({ line: numOrNull(obj(obj(x.current).target).value), odds: price(x) }))
-          .filter((r): r is { line: number; odds: number } => r.line !== null && r.odds !== null && Math.abs(r.line % 1) === 0.5);
+        const cs = yesNo(of('Team Clean Sheet').filter((x) => teamIdFromRef(x) === teamId));
+        if (cs) {
+          add({ key: `CS:${side}:YES`, label: `${nameOf(side)} nu primește gol`, marketType: 'CLEAN_SHEET', odds: cs.yes, bookmaker: bk });
+          add({ key: `CS:${side}:NO`, label: `${nameOf(side)} primește cel puțin un gol`, marketType: 'CLEAN_SHEET', odds: cs.no, bookmaker: bk });
+        }
+      }
+
+      // Over/under ladders: labels are not published, so a ladder is accepted only when one side's prices rise strictly
+      // with the line ("over") and the other's fall — otherwise the market is dropped, never guessed.
+      const ladder = (rows: Obj[], maxLine: number) => {
         const byLine = new Map<number, number[]>();
-        for (const r of rows) byLine.set(r.line, [...(byLine.get(r.line) ?? []), r.odds]);
+        for (const r of rows) { const l = target(r), v = price(r); if (l !== null && v !== null && Math.abs(l % 1) === 0.5) byLine.set(l, [...(byLine.get(l) ?? []), v]); }
         const lines = [...byLine.keys()].filter((l) => byLine.get(l)!.length === 2).sort((x, y) => x - y);
-        if (lines.length < 2) continue;
-        // Published order is first-of-pair = one side, second = the other. Verify with monotonicity before labelling.
-        const first = lines.map((l) => byLine.get(l)![0]), second = lines.map((l) => byLine.get(l)![1]);
+        if (lines.length < 2) return [] as Array<{ line: number; over: number; under: number }>;
+        const a = lines.map((l) => byLine.get(l)![0]), b = lines.map((l) => byLine.get(l)![1]);
         const rising = (xs: number[]) => xs.every((v, i) => i === 0 || v > xs[i - 1]);
         const falling = (xs: number[]) => xs.every((v, i) => i === 0 || v < xs[i - 1]);
-        let overs: number[] | null = null, unders: number[] | null = null;
-        if (rising(first) && falling(second)) { overs = first; unders = second; }
-        else if (rising(second) && falling(first)) { overs = second; unders = first; }
-        if (!overs || !unders) continue;
-        lines.forEach((l, i) => {
-          if (l > 3.5) return;
-          add({ key: `TT:${side}:OVER:${l}`, label: `${name} peste ${l} goluri`, marketType: 'TEAM_TOTAL', odds: overs![i], line: l, bookmaker: bk });
-          add({ key: `TT:${side}:UNDER:${l}`, label: `${name} sub ${l} goluri`, marketType: 'TEAM_TOTAL', odds: unders![i], line: l, bookmaker: bk });
-        });
+        const [overs, unders] = rising(a) && falling(b) ? [a, b] : rising(b) && falling(a) ? [b, a] : [null, null];
+        if (!overs || !unders) return [];
+        return lines.map((line, i) => ({ line, over: overs[i], under: unders[i] })).filter((r) => r.line <= maxLine);
+      };
+      for (const side of ['HOME', 'AWAY'] as const) {
+        const teamId = side === 'HOME' ? f.homeTeamId : f.awayTeamId;
+        if (!teamId) continue;
+        for (const r of ladder(of('Team Total Goals').filter((x) => teamIdFromRef(x) === teamId), 3.5)) {
+          add({ key: `TT:${side}:OVER:${r.line}`, label: `${nameOf(side)} peste ${r.line} goluri`, marketType: 'TEAM_TOTAL', odds: r.over, line: r.line, bookmaker: bk });
+          add({ key: `TT:${side}:UNDER:${r.line}`, label: `${nameOf(side)} sub ${r.line} goluri`, marketType: 'TEAM_TOTAL', odds: r.under, line: r.line, bookmaker: bk });
+        }
+        for (const r of ladder(of('Team Total Corners').filter((x) => teamIdFromRef(x) === teamId), 9.5)) {
+          add({ key: `TCORN:${side}:OVER:${r.line}`, label: `${nameOf(side)} peste ${r.line} cornere`, marketType: 'CORNERS', odds: r.over, line: r.line, bookmaker: bk });
+          add({ key: `TCORN:${side}:UNDER:${r.line}`, label: `${nameOf(side)} sub ${r.line} cornere`, marketType: 'CORNERS', odds: r.under, line: r.line, bookmaker: bk });
+        }
+      }
+      for (const r of ladder(of('1st Half Total'), 2.5)) {
+        add({ key: `HTTOT:OVER:${r.line}`, label: `Peste ${r.line} goluri în prima repriză`, marketType: 'HALF', odds: r.over, line: r.line, bookmaker: bk });
+        add({ key: `HTTOT:UNDER:${r.line}`, label: `Sub ${r.line} goluri în prima repriză`, marketType: 'HALF', odds: r.under, line: r.line, bookmaker: bk });
+      }
+      for (const r of ladder(of('Total Corners'), 13.5)) {
+        add({ key: `CORN:OVER:${r.line}`, label: `Peste ${r.line} cornere`, marketType: 'CORNERS', odds: r.over, line: r.line, bookmaker: bk });
+        add({ key: `CORN:UNDER:${r.line}`, label: `Sub ${r.line} cornere`, marketType: 'CORNERS', odds: r.under, line: r.line, bookmaker: bk });
       }
     } catch { /* props optional */ }
   }

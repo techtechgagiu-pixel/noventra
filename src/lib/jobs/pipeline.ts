@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { config } from '../config';
 import { many, one, query, tx } from '../db';
-import { type Prediction, type Revision, AGENTS, DEBATE_SCHEMA_TEXT, DebateOutputSchema, INITIAL_SCHEMA_TEXT, InitialOutputSchema, SCOUT_SCHEMA_TEXT, ScoutOutputSchema, VOTING_AGENTS, agentById, systemPrompt, type AgentDefinition } from '../ai/agents';
+import { type Prediction, type Revision, AGENTS, BRAIN_AGENT_ID, BRAIN_SCHEMA_TEXT, BRAIN_SYSTEM, BrainOutputSchema, DEBATE_SCHEMA_TEXT, DebateOutputSchema, INITIAL_SCHEMA_TEXT, InitialOutputSchema, SCOUT_SCHEMA_TEXT, ScoutOutputSchema, VOTING_AGENTS, agentById, systemPrompt, type AgentDefinition } from '../ai/agents';
 import { activeAssignments } from '../ai/assignments';
-import { BudgetExceededError, RateLimitError, structuredCall } from '../ai/router';
+import { BudgetExceededError, RateLimitError, providerConfigured, structuredCall } from '../ai/router';
 import { optimizeTicket, type Candidate } from '../optimizer';
 import { buildDossier } from '../scout/dossier';
 import { teamHistory } from '../scout/history';
@@ -65,7 +65,25 @@ async function discover(job: JobRow) {
   const ordered = seededShuffle(eligible, job.seed);
   // Ticket B prefers fixtures not used by ticket A (moved to the end, not excluded).
   const avoid = new Set(job.config.avoidFixtures ?? []);
-  const prioritized = [...ordered.filter((e) => !avoid.has(e.fixtureId)), ...ordered.filter((e) => avoid.has(e.fixtureId))].slice(0, job.config.maxFixtures);
+  const preferred = [...ordered.filter((e) => !avoid.has(e.fixtureId)), ...ordered.filter((e) => avoid.has(e.fixtureId))];
+  // Market depth: only fixtures with ≥ minMarkets real, allowed selections enter (checked in parallel, until enough pass).
+  const byId = new Map(fixtures.map((f) => [f.id, f]));
+  const prioritized: CandidateEntry[] = [];
+  const thin: Array<{ fixtureId: string; match: string; league: string; markets: number }> = [];
+  for (let i = 0; i < preferred.length && prioritized.length < job.config.maxFixtures; i += 6) {
+    const chunk = preferred.slice(i, i + 6);
+    const counts = await Promise.all(chunk.map(async (e) => {
+      const f = byId.get(e.fixtureId);
+      if (!f || f.provider !== 'espn') return Number.POSITIVE_INFINITY; // demo/test data is not depth-checked
+      const full = await withExtraMarkets(f).catch(() => f);
+      return (full.odds?.markets ?? []).filter((m) => !isBannedMarket(m.key)).length;
+    }));
+    chunk.forEach((e, k) => {
+      if (counts[k] >= config.limits.minMarkets) { if (prioritized.length < job.config.maxFixtures) prioritized.push(e); }
+      else thin.push({ fixtureId: e.fixtureId, match: `${e.home} – ${e.away}`, league: e.league, markets: counts[k] });
+    });
+  }
+  if (thin.length) await recordEvent(job.id, { type: 'MARKETS_CHECKED', stage: 'SELECTING', payload: { minimum: config.limits.minMarkets, accepted: prioritized.length, rejected: thin.length, items: thin.slice(0, 40) } });
   const batches: string[][] = [];
   for (let i = 0; i < prioritized.length; i += job.config.batchSize) batches.push(prioritized.slice(i, i + job.config.batchSize).map((e) => e.fixtureId));
   const order = [...prioritized, ...entries.filter((e) => !e.eligible)];
@@ -266,13 +284,13 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       if (!item) { await recordEvent(job.id, { type: 'AGENT_FAILED', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { round, error: 'Agentul nu a răspuns pentru acest meci (abținere).' } }); continue; }
       const pos = toPosition(agent.id, item, round, res.provider, res.model, validKeys.get(s.fixture.id)!);
       const market = s.model.markets.find((m) => m.key === pos.marketKey) ?? null;
-      const enriched = { ...item, marketKey: pos.marketKey, decision: pos.decision, availableOdds: market?.odds ?? null, expectedValue: market && pos.estimatedProbability !== null ? Math.round((pos.estimatedProbability * market.odds - 1) * 1000) / 1000 : null, marketLabel: market?.label ?? null };
+      const enriched = { ...item, marketKey: pos.marketKey, decision: pos.decision, availableOdds: market?.odds ?? null, expectedValue: market && pos.estimatedProbability !== null ? Math.round((pos.estimatedProbability * market.odds - 1) * 1000) / 1000 : null, marketLabel: market?.label ?? null, altKeys: pos.alternatives ?? [] };
       await query(
         `INSERT INTO agent_predictions (job_id, fixture_id, agent_id, round, provider, model_id, prompt_version, decision, market_key, estimated_probability, confidence, risk, payload, odds)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (job_id, fixture_id, agent_id, round) DO NOTHING`,
         [job.id, s.fixture.id, agent.id, round, res.provider, res.model, assignment.promptVersion, pos.decision, pos.marketKey, pos.estimatedProbability, Math.round(pos.confidence), pos.risk, JSON.stringify(enriched), market?.odds ?? null],
       );
-      if (round === 0) await recordEvent(job.id, { type: 'PREDICTION_SAVED', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, decision: pos.decision, marketKey: pos.marketKey, marketLabel: market?.label ?? null, odds: market?.odds ?? null, estimatedProbability: pos.estimatedProbability, confidence: pos.confidence, risk: pos.risk, rationale: item.rationale, evidence: 'evidence' in item ? item.evidence : [], failureReasons: 'failureReasons' in item ? item.failureReasons : [], provider: res.provider, model: res.model } });
+      if (round === 0) await recordEvent(job.id, { type: 'PREDICTION_SAVED', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, decision: pos.decision, marketKey: pos.marketKey, marketLabel: market?.label ?? null, odds: market?.odds ?? null, estimatedProbability: pos.estimatedProbability, confidence: pos.confidence, risk: pos.risk, rationale: item.rationale, alternatives: (pos.alternatives ?? []).map((k) => ({ key: k, label: s.model.markets.find((m) => m.key === k)?.label ?? k, odds: s.model.markets.find((m) => m.key === k)?.odds ?? null })), evidence: 'evidence' in item ? item.evidence : [], failureReasons: 'failureReasons' in item ? item.failureReasons : [], provider: res.provider, model: res.model } });
       else {
         const rev = item as { objection?: string; response?: string; changed?: boolean };
         if (rev.objection) await recordEvent(job.id, { type: 'OBJECTION_RECORDED', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { round, objection: rev.objection } });
@@ -294,6 +312,13 @@ function jobPolicy(job: JobRow): LegPolicy {
   return policyFor(job.slot, Number(job.target_odds));
 }
 
+/** Price per leg that reaches the target with a comfortable number of legs (daily: minLegs+1, weekly: exactly 12). */
+function idealPerLeg(job: JobRow) {
+  const p = jobPolicy(job);
+  const legs = p.pick === 'highest' ? p.minLegs : p.minLegs + 1;
+  return Math.min(p.maxOdds, Math.max(p.minOdds, Math.pow(Number(job.target_odds), 1 / legs)));
+}
+
 function ticketBrief(job: JobRow, p: LegPolicy) {
   const base = `țintă cotă ${Number(job.target_odds)}, construit din minimum ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
   if (p.pick === 'highest') {
@@ -310,10 +335,13 @@ function guardPositions(job: JobRow, s: FixtureSnapshot, positions: FinalPositio
   const counted = positions.map((p) => {
     const agent = agentById(p.agentId);
     if (!agent) return p;
+    // Alternatives obey the same character and ticket rules as the main pick; invalid ones are simply dropped.
+    const alternatives = (p.alternatives ?? []).filter((k) => !characterViolation({ ...p, marketKey: k, estimatedProbability: null }, agent, policy, s.model.markets.find((m) => m.key === k)));
     const reason = characterViolation(p, agent, policy, s.model.markets.find((m) => m.key === p.marketKey));
-    if (!reason) return p;
+    if (!reason) return { ...p, alternatives };
     setAside.push({ agentId: p.agentId, marketKey: p.marketKey, reason });
-    return { ...p, decision: 'NO_BET' as const, marketKey: null };
+    // The main pick is set aside, but valid alternatives still count as support.
+    return alternatives.length ? { ...p, marketKey: alternatives[0], alternatives: alternatives.slice(1) } : { ...p, decision: 'NO_BET' as const, marketKey: null, alternatives: [] };
   });
   const keys = s.model.markets
     .filter((m) => !isBannedMarket(m.key) && m.odds >= policy.minOdds && m.odds <= policy.maxOdds && (m.estimatedProbability ?? 0) >= policy.minProbability)
@@ -322,11 +350,15 @@ function guardPositions(job: JobRow, s: FixtureSnapshot, positions: FinalPositio
 }
 
 async function latestPositions(jobId: string, fixtureId: string): Promise<FinalPosition[]> {
-  const rows = await many<{ agent_id: string; round: number; decision: 'BET_CANDIDATE' | 'NO_BET'; market_key: string | null; estimated_probability: string | null; confidence: number; risk: string; payload: { rationale?: string }; provider: string; model_id: string }>(
-    'SELECT DISTINCT ON (agent_id) agent_id, round, decision, market_key, estimated_probability, confidence, risk, payload, provider, model_id FROM agent_predictions WHERE job_id=$1 AND fixture_id=$2 ORDER BY agent_id, round DESC',
+  const rows = await many<{ agent_id: string; round: number; decision: 'BET_CANDIDATE' | 'NO_BET'; market_key: string | null; estimated_probability: string | null; confidence: number; risk: string; payload: { rationale?: string; altKeys?: string[] }; provider: string; model_id: string; first_alts: string[] | null }>(
+    `SELECT DISTINCT ON (p.agent_id) p.agent_id, p.round, p.decision, p.market_key, p.estimated_probability, p.confidence, p.risk, p.payload, p.provider, p.model_id,
+            (SELECT r0.payload->'altKeys' FROM agent_predictions r0 WHERE r0.job_id=p.job_id AND r0.fixture_id=p.fixture_id AND r0.agent_id=p.agent_id AND r0.round=0) AS first_alts
+     FROM agent_predictions p WHERE p.job_id=$1 AND p.fixture_id=$2 ORDER BY p.agent_id, p.round DESC`,
     [jobId, fixtureId],
   );
-  return rows.map((r) => ({ agentId: r.agent_id, decision: r.decision, marketKey: r.market_key, estimatedProbability: r.estimated_probability === null ? null : Number(r.estimated_probability), confidence: r.confidence, risk: r.risk, round: r.round, rationale: r.payload.rationale ?? '', provider: r.provider, model: r.model_id }));
+  // Debate revisions carry only the main pick; the agent's round-0 alternatives still stand unless it switched to NO BET.
+  return rows.map((r) => ({ agentId: r.agent_id, decision: r.decision, marketKey: r.market_key, estimatedProbability: r.estimated_probability === null ? null : Number(r.estimated_probability), confidence: r.confidence, risk: r.risk, round: r.round, rationale: r.payload.rationale ?? '', provider: r.provider, model: r.model_id,
+    alternatives: r.decision === 'BET_CANDIDATE' ? ((r.payload.altKeys ?? r.first_alts ?? []) as string[]).filter((k) => k !== r.market_key) : [] }));
 }
 
 async function stepAgents(job: JobRow, ids: string[], round: number, deadline: number) {
@@ -362,6 +394,63 @@ async function chooseDebate(job: JobRow, ids: string[], round: number) {
   return out;
 }
 
+/**
+ * The team's brain (Mircea Lucescu) picks the ideal selection from each fixture's shortlist — the selections backed by at
+ * least the required number of agents — balancing winning chance and ticket variety. One call per batch. If the brain is
+ * unavailable, the deterministic rule decides instead (never a guess).
+ */
+async function stepBrain(job: JobRow, ids: string[]) {
+  const cp = job.checkpoint;
+  cp.brain = cp.brain ?? {};
+  const pending = ids.filter((id) => !(id in cp.brain!));
+  if (!pending.length) return;
+  await setStage(job, 'VOTING', cp);
+  const threshold = config.limits.consensusThreshold;
+  const items: Array<Record<string, unknown>> = [];
+  for (const s of await batchSnapshots(job, pending)) {
+    const raw = await latestPositions(job.id, s.fixture.id);
+    const { counted, keys } = guardPositions(job, s, raw);
+    const c = consensus(counted, threshold, VOTING_AGENTS.length, keys, jobPolicy(job).pick);
+    if (!c.shortlist.length) continue;
+    const reasons = (key: string) => counted.filter((p) => p.marketKey === key && p.rationale).slice(0, 3).map((p) => `${agentById(p.agentId)?.name}: ${p.rationale.slice(0, 220)}`);
+    items.push({
+      fixtureId: s.fixture.id, match: `${s.fixture.home} – ${s.fixture.away}`, league: s.fixture.league,
+      shortlist: c.shortlist.map((x) => {
+        const m = s.model.markets.find((mm) => mm.key === x.key);
+        return { key: x.key, label: m?.label ?? x.key, odds: x.odds, est: m?.estimatedProbability ?? null, supporters: x.supporters.map((a) => agentById(a)?.name ?? a), arguments: reasons(x.key) };
+      }),
+    });
+  }
+  if (!items.length) { for (const id of pending) cp.brain[id] = { key: null, reason: 'Lista scurtă este goală.', model: null }; return; }
+  const onTicket = await many<{ market_key: string }>("SELECT market_key FROM final_decisions WHERE job_id=$1 AND outcome='QUALIFIED' AND market_key IS NOT NULL", [job.id]);
+  const alreadyOnTicket: Record<string, number> = {};
+  for (const r of onTicket) { const fam = r.market_key.split(':')[0]; alreadyOnTicket[fam] = (alreadyOnTicket[fam] ?? 0) + 1; }
+  const own = (await activeAssignments()).get(BRAIN_AGENT_ID);
+  const strong = providerConfigured('openrouter') ? { provider: 'openrouter' as const, model: 'openai/gpt-6-luna-pro' } : null;
+  const primary = strong ?? own?.primary;
+  if (!primary) return;
+  await recordEvent(job.id, { type: 'BRAIN_STARTED', stage: 'VOTING', agentId: BRAIN_AGENT_ID, payload: { fixtures: items.length, model: `${primary.provider}/${primary.model}` } });
+  try {
+    const res = await structuredCall({
+      primary, fallback: strong ? own?.primary ?? null : own?.fallback ?? null, schema: BrainOutputSchema,
+      input: { system: BRAIN_SYSTEM, user: `Bilet: ${ticketBrief(job, jobPolicy(job))}\nidealOddsPerLeg: ${idealPerLeg(job).toFixed(2)}\nalreadyOnTicket: ${JSON.stringify(alreadyOnTicket)}\nSchema: ${BRAIN_SCHEMA_TEXT}\nMeciuri:\n${JSON.stringify(items)}`, temperature: 0.2, maxOutputTokens: 300 * items.length + 300 },
+      log: { jobId: job.id, agentId: BRAIN_AGENT_ID, stage: 'BRAIN' },
+    });
+    for (const it of items) {
+      const d = res.data.decisions.find((x) => x.fixtureId === it.fixtureId);
+      const list = it.shortlist as Array<{ key: string; label: string; odds: number }>;
+      const choice = d?.choice ?? null;
+      const chosen = choice ? list.find((x) => x.key === choice.trim().toUpperCase()) ?? null : null;
+      if (!d) continue; // no answer for this fixture → automatic rule
+      const backupKey = d.backup ? list.find((x) => x.key === d.backup!.trim().toUpperCase() && x.key !== chosen?.key)?.key ?? null : null;
+      cp.brain[it.fixtureId as string] = { key: chosen?.key ?? null, backup: backupKey, reason: (d.reason || '').slice(0, 400) + (d.choice && !chosen ? ' (alegerea nu era în lista scurtă — respinsă)' : ''), model: `${res.provider}/${res.model}` };
+      await recordEvent(job.id, { type: 'BRAIN_DECISION', stage: 'VOTING', agentId: BRAIN_AGENT_ID, fixtureId: it.fixtureId as string, payload: { match: it.match, choice: chosen?.key ?? null, label: chosen?.label ?? null, odds: chosen?.odds ?? null, reason: cp.brain[it.fixtureId as string].reason, shortlist: list.map((x) => ({ key: x.key, label: x.label, odds: x.odds })), model: `${res.provider}/${res.model}` } });
+    }
+  } catch (error) {
+    await recordEvent(job.id, { type: 'AGENT_FAILED', stage: 'VOTING', agentId: BRAIN_AGENT_ID, payload: { error: (error as Error).message.slice(0, 200), consequence: 'Creierul nu a răspuns — decide regula automată (cel mai susținut pronostic).' } });
+  }
+}
+
 async function stepVote(job: JobRow, ids: string[]) {
   await setStage(job, 'VOTING', job.checkpoint);
   const threshold = config.limits.consensusThreshold;
@@ -374,35 +463,55 @@ async function stepVote(job: JobRow, ids: string[]) {
     const { counted: positions, setAside, keys } = guardPositions(job, s, raw);
     for (const v of setAside) await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage: 'VOTING', agentId: v.agentId, fixtureId: s.fixture.id, payload: { marketKey: v.marketKey, marketLabel: s.model.markets.find((m) => m.key === v.marketKey)?.label ?? null, reason: v.reason, note: 'Vot în afara caracterului agentului sau a regulilor de prudență — nenumărat.' } });
     const c = consensus(positions, threshold, VOTING_AGENTS.length, keys, jobPolicy(job).pick);
+    const brain = job.checkpoint.brain?.[s.fixture.id];
+    let brainNote = '';
+    if (brain && c.shortlist.length) {
+      if (brain.key) {
+        const pickItem = c.shortlist.find((x) => x.key === brain.key);
+        if (pickItem) { Object.assign(c, { outcome: 'QUALIFIED', marketKey: pickItem.key, votesFor: pickItem.supporters.length, directVotes: pickItem.direct, supporters: pickItem.supporters }); brainNote = ` Ales de creier (Mircea Lucescu): ${brain.reason}`; }
+      } else Object.assign(c, { outcome: 'NO_BET', marketKey: null }), (brainNote = ` Creierul a respins lista scurtă: ${brain.reason}`);
+    }
     await recordEvent(job.id, { type: 'CONSENSUS_CALCULATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, ...c, threshold: c.requiredVotes, total: N, setAside: setAside.length } });
     const validation: Record<string, unknown> = {};
     let outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET' | 'REJECTED' = c.outcome;
-    let reason = c.outcome === 'QUALIFIED' ? '' : c.outcome === 'NO_BET' ? `${c.noBetVotes}/${N} agenți au recomandat NO BET.` : `Consens insuficient: maximum ${c.votesFor}/${N} voturi pentru aceeași selecție în limitele de prudență (prag ${c.requiredVotes}/${N}${c.cautiousVeto ? ', ridicat pentru că Mircea Sandu și Mircea Lucescu au refuzat' : ''}${setAside.length ? `; ${setAside.length} voturi nenumărate pentru că erau în afara caracterului` : ''}).`;
+    let reason = c.outcome === 'QUALIFIED' ? '' : c.outcome === 'NO_BET' ? (brainNote ? brainNote.trim() : `${c.noBetVotes}/${N} agenți au recomandat NO BET.`) : `Consens insuficient: maximum ${c.votesFor}/${N} voturi pentru aceeași selecție în limitele de prudență (prag ${c.requiredVotes}/${N}${c.cautiousVeto ? ', ridicat pentru că Mircea Sandu și Mircea Lucescu au refuzat' : ''}${setAside.length ? `; ${setAside.length} voturi nenumărate pentru că erau în afara caracterului` : ''}).`;
     if (c.outcome === 'QUALIFIED' && c.marketKey) {
-      const est = s.model.markets.find((m) => m.key === c.marketKey)!;
+      // The brain's backup is tried when its first choice fails validation (e.g. the price moved).
+      const backup = brain?.backup && brain.backup !== c.marketKey ? c.shortlist.find((x) => x.key === brain.backup) ?? null : null;
+      const tries = [c.marketKey, ...(backup ? [backup.key] : [])];
+      const labels: Record<string, string> = { fixtureStillPreMatch: 'meciul nu mai este pre-meci', oddsAvailable: 'cota nu mai este disponibilă', oddsFresh: 'cota este prea veche', bookmakerIdentified: 'bookmaker neidentificat', selectionConsistent: 'selecție inconsistentă', probabilityPlausible: 'probabilitate estimată prea mică', evNotStronglyNegative: 'valoare așteptată clar negativă', dataSufficient: 'istoric insuficient' };
       const base = await fixtureFromDb(s.fixture.id);
       const fresh = base ? await freshFixture(base).catch(() => null) : null;
-      const freshQuote = fresh?.odds?.markets.find((m) => m.key === c.marketKey) ?? null;
-      const observedAt = fresh?.odds?.observedAt ?? s.odds.observedAt;
-      const ageMin = (Date.now() - Date.parse(observedAt)) / 60_000;
-      const checks = {
-        fixtureStillPreMatch: !!fresh && fresh.status === 'pre' && Date.parse(fresh.kickoff) > Date.now() + MIN_LEAD_MS,
-        oddsAvailable: !!freshQuote,
-        oddsFresh: ageMin <= config.limits.oddsMaxAgeMinutes,
-        bookmakerIdentified: !!(freshQuote?.bookmaker ?? fresh?.odds?.bookmaker),
-        selectionConsistent: s.model.markets.some((m) => m.key === c.marketKey),
-        probabilityPlausible: est.estimatedProbability !== null && est.estimatedProbability >= 0.25,
-        evNotStronglyNegative: est.estimatedProbability !== null && freshQuote ? est.estimatedProbability * freshQuote.odds - 1 >= -0.12 : false,
-        dataSufficient: s.dataQuality.historyHome >= 3 && s.dataQuality.historyAway >= 3,
-      };
-      Object.assign(validation, checks, { originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt, bookmaker: freshQuote?.bookmaker ?? fresh?.odds?.bookmaker ?? s.odds.bookmaker });
-      const failed = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
-      await recordEvent(job.id, { type: 'ODDS_VALIDATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { checks, originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt } });
-      if (failed.length) {
+      const failures: string[] = [];
+      for (const [ti, key] of tries.entries()) {
+        const est = s.model.markets.find((m) => m.key === key)!;
+        const freshQuote = fresh?.odds?.markets.find((m) => m.key === key) ?? null;
+        const observedAt = fresh?.odds?.observedAt ?? s.odds.observedAt;
+        const ageMin = (Date.now() - Date.parse(observedAt)) / 60_000;
+        const checks = {
+          fixtureStillPreMatch: !!fresh && fresh.status === 'pre' && Date.parse(fresh.kickoff) > Date.now() + MIN_LEAD_MS,
+          oddsAvailable: !!freshQuote,
+          oddsFresh: ageMin <= config.limits.oddsMaxAgeMinutes,
+          bookmakerIdentified: !!(freshQuote?.bookmaker ?? fresh?.odds?.bookmaker),
+          selectionConsistent: s.model.markets.some((m) => m.key === key),
+          probabilityPlausible: est.estimatedProbability !== null && est.estimatedProbability >= 0.25,
+          evNotStronglyNegative: est.estimatedProbability !== null && freshQuote ? est.estimatedProbability * freshQuote.odds - 1 >= -0.12 : false,
+          dataSufficient: s.dataQuality.historyHome >= 3 && s.dataQuality.historyAway >= 3,
+        };
+        for (const k of Object.keys(validation)) delete validation[k];
+        Object.assign(validation, checks, { originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt, bookmaker: freshQuote?.bookmaker ?? fresh?.odds?.bookmaker ?? s.odds.bookmaker });
+        const failed = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
+        await recordEvent(job.id, { type: 'ODDS_VALIDATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { marketKey: key, checks, originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt } });
+        if (!failed.length) {
+          if (ti > 0 && backup) Object.assign(c, { marketKey: backup.key, votesFor: backup.supporters.length, directVotes: backup.direct, supporters: backup.supporters });
+          outcome = 'QUALIFIED';
+          reason = `Consens ${c.votesFor}/${N} pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.${ti > 0 ? ` (Alegerea de rezervă a creierului — prima, „${s.model.markets.find((m) => m.key === tries[0])?.label}”, a picat la validare: ${failures[0]}.)` : brainNote}`;
+          break;
+        }
+        failures.push(failed.map((f) => labels[f]).join(', '));
         outcome = 'REJECTED';
-        const labels: Record<string, string> = { fixtureStillPreMatch: 'meciul nu mai este pre-meci', oddsAvailable: 'cota nu mai este disponibilă', oddsFresh: 'cota este prea veche', bookmakerIdentified: 'bookmaker neidentificat', selectionConsistent: 'selecție inconsistentă', probabilityPlausible: 'probabilitate estimată prea mică', evNotStronglyNegative: 'valoare așteptată clar negativă', dataSufficient: 'istoric insuficient' };
-        reason = `Consens ${c.votesFor}/${N}, dar validarea a respins selecția: ${failed.map((f) => labels[f]).join(', ')}.`;
-      } else reason = `Consens ${c.votesFor}/${N} pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.`;
+        reason = `Consens ${c.votesFor}/${N}, dar validarea a respins selecția: ${failures.join(' / rezerva: ')}.`;
+      }
     }
     await query('INSERT INTO final_decisions(job_id, fixture_id, outcome, market_key, votes_for, votes, validation, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (job_id, fixture_id) DO NOTHING',
       [job.id, s.fixture.id, outcome, c.marketKey, c.votesFor, JSON.stringify(positions), JSON.stringify(validation), reason]);
@@ -498,8 +607,8 @@ export async function runJobSlice(job: JobRow, budgetMs = 50_000) {
         if (config.limits.debateRounds >= 1) {
           cp.debateFixtures = await chooseDebate(job, ids, 1);
           if (cp.debateFixtures.length) cp.batchStep = 'DEBATE1';
-          else { await recordEvent(job.id, { type: 'DEBATE_SKIPPED', stage: 'DEBATE', payload: { round: 1, reason: 'Pozițiile sunt deja unanime sau fără candidat comun; dezbaterea nu ar schimba rezultatul.' } }); cp.batchStep = 'VOTE'; }
-        } else cp.batchStep = 'VOTE';
+          else { await recordEvent(job.id, { type: 'DEBATE_SKIPPED', stage: 'DEBATE', payload: { round: 1, reason: 'Pozițiile sunt deja unanime sau fără candidat comun; dezbaterea nu ar schimba rezultatul.' } }); cp.batchStep = 'BRAIN'; }
+        } else cp.batchStep = 'BRAIN';
         await save(job);
         break;
       }
@@ -508,9 +617,15 @@ export async function runJobSlice(job: JobRow, budgetMs = 50_000) {
         if (!(await stepAgents(job, ids, round, deadline))) return 'CONTINUE';
         if (round === 1 && config.limits.debateRounds >= 2) {
           cp.debateFixtures = await chooseDebate(job, cp.debateFixtures ?? [], 2);
-          cp.batchStep = cp.debateFixtures.length ? 'DEBATE2' : 'VOTE';
+          cp.batchStep = cp.debateFixtures.length ? 'DEBATE2' : 'BRAIN';
           if (!cp.debateFixtures.length) await recordEvent(job.id, { type: 'DEBATE_SKIPPED', stage: 'DEBATE', payload: { round: 2, reason: 'Nicio selecție nu este la un singur vot de prag.' } });
-        } else cp.batchStep = 'VOTE';
+        } else cp.batchStep = 'BRAIN';
+        await save(job);
+        break;
+      }
+      case 'BRAIN': {
+        await stepBrain(job, ids);
+        cp.batchStep = 'VOTE';
         await save(job);
         break;
       }

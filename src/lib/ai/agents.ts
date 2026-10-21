@@ -4,7 +4,7 @@ import type { ModelRef } from './router';
 export type VotingAgentId = 'victor' | 'andrei' | 'mihai' | 'alex' | 'diana' | 'robert' | 'ioana' | 'radu' | 'elena' | 'cosmin' | 'hantu';
 export type AgentId = VotingAgentId | 'scout';
 
-export const PROMPT_VERSION = 'v3.2';
+export const PROMPT_VERSION = 'v4.0';
 
 export type AgentDefinition = {
   id: AgentId;
@@ -24,11 +24,12 @@ export type AgentDefinition = {
 
 const COMMON = `Ești un analist într-un sistem cu unsprezece agenți (personaje cu nume de oameni din fotbalul românesc, folosite doar ca identitate; NU imita declarațiile lor reale și nu le atribui opinii reale) care analizează meciuri de fotbal masculin.
 SARCINA: pentru fiecare meci, alege selecția cea mai SIGURĂ bine susținută de date dintre piețele disponibile — sau NO_BET dacă niciuna nu este convingătoare. Biletele se construiesc din multe selecții cu cote mici și probabilitate mare, nu din câteva cote mari. O selecție intră pe bilet doar cu minimum 3 agenți din 11; dacă Mircea Sandu și Mircea Lucescu (cei mai prudenți) o refuză amândoi, e nevoie de 5.
+FLUX: pentru fiecare meci dai pronosticul tău principal și până la 2 alternative (ideal alte tipuri de pariu: rezultat, goluri, ambele marchează, reprize, cornere). Pronosticurile susținute de minimum 3 agenți formează lista scurtă; din ea CREIERUL echipei alege pronosticul ideal pentru bilet, urmărind atât șansa de câștig, cât și varietatea biletului.
 PRUDENȚĂ: între două selecții corecte, alegi pe cea cu probabilitatea mai mare (de ex. șansă dublă în loc de victorie, peste 1.5 în loc de peste 2.5). INTERZIS: orice pronostic „sub” (sub X goluri pe meci sau pe o echipă) — aceste piețe nu există pentru tine. Fiecare agent are o cotă maximă și o probabilitate minimă proprii; un vot în afara lor NU este numărat — respectă-ți caracterul.
 Reguli obligatorii:
 - Folosești EXCLUSIV datele din mesaj (dosarul SCOUT, calculele motorului statistic, cotele observate). Nu inventezi accidentări, loturi, xG, știri, motivații sau cote.
 - Datele lipsă rămân lipsă și le menționezi, dar lipsa xG, a loturilor sau a accidentărilor este normală pentru această sursă și NU este singură un motiv de NO_BET.
-- Poți alege doar o piață al cărei "key" apare în lista "markets" a meciului. Nu modifici cotele. Chei: 1X2:HOME/DRAW/AWAY, DC:1X/X2/12 (șansă dublă), TOTAL:OVER:linie, TT:HOME|AWAY:OVER:linie (goluri pe echipă), AH:HOME|AWAY:linie (handicap). "book" = bookmakerul prețului.
+- Poți alege doar o piață al cărei "key" apare în lista "markets" a meciului. Nu modifici cotele. Chei: 1X2:HOME/DRAW/AWAY, DC:1X/X2/12 (șansă dublă), BTTS:YES/NO (ambele marchează), CS:HOME|AWAY:YES/NO (echipa nu primește gol), WIN2:HOME|AWAY (câștigă la 2+ goluri), WBH:HOME|AWAY (câștigă ambele reprize), HT1X2:… (rezultat la pauză), H21X2:… (repriza a doua), HTTOT:OVER:linie (goluri în prima repriză), CORN:OVER:linie și TCORN:HOME|AWAY:OVER:linie (cornere), TOTAL:OVER:linie, TT:HOME|AWAY:OVER:linie (goluri pe echipă), AH:HOME|AWAY:linie (handicap). "book" = bookmakerul prețului.
 - Câmpuri numerice: "fair" = probabilitatea pieței fără marjă; "model" = modelul Poisson; "est" = estimarea combinată a motorului; "ev" = est × cotă − 1. Un EV ușor negativ (între −0,08 și 0) este normal din cauza marjei bookmakerului și NU descalifică o selecție.
 - "estimatedProbability" este estimarea ta (0–1); pornește de la "est" și justifică abaterea. "confidence" (0–100) este încrederea subiectivă, NU o probabilitate.
 - Un eșantion de 5–8 meciuri este tipic: îl tratezi ca incertitudine, nu ca refuz automat.
@@ -134,6 +135,8 @@ export const PredictionSchema = z.object({
   missingData: shortList,
   failureReasons: shortList,
   rationale: z.string().max(900).default(''),
+  /** Up to two more selections the agent also backs (ideally other market types). */
+  alternatives: z.array(z.object({ marketKey: z.string(), estimatedProbability: z.number().min(0).max(1).nullable().default(null), reason: z.string().max(300).default('') })).max(3).default([]),
 });
 const wrap = (key: string) => (v: unknown) => (Array.isArray(v) ? { [key]: v } : v && typeof v === 'object' && !(key in (v as object)) && 'fixtureId' in (v as object) ? { [key]: [v] } : v);
 export const InitialOutputSchema = z.preprocess(wrap('predictions'), z.object({ predictions: z.array(PredictionSchema).min(1) }));
@@ -158,6 +161,16 @@ export const ScoutOutputSchema = z.preprocess(wrap('fixtures'), z.object({
   fixtures: z.array(z.object({ fixtureId: z.string(), summary: z.string().max(900), keyObservations: z.array(z.string().max(400)).max(5).default([]) })).min(1),
 }));
 
-export const INITIAL_SCHEMA_TEXT = `{"predictions":[{"fixtureId":"<id exact>","decision":"BET_CANDIDATE|NO_BET","marketKey":"<key din markets sau null>","estimatedProbability":0.0-1.0 sau null,"confidence":0-100,"risk":"LOW|MEDIUM|HIGH","evidence":["max 4 dovezi din date"],"counterarguments":["..."],"missingData":["..."],"failureReasons":["cum poate eșua"],"rationale":"1-3 propoziții"}]} — câte un element pentru FIECARE meci primit.`;
+export const INITIAL_SCHEMA_TEXT = `{"predictions":[{"fixtureId":"<id exact>","decision":"BET_CANDIDATE|NO_BET","marketKey":"<key din markets sau null>","estimatedProbability":0.0-1.0 sau null,"confidence":0-100,"risk":"LOW|MEDIUM|HIGH","evidence":["max 4 dovezi din date"],"counterarguments":["..."],"missingData":["..."],"failureReasons":["cum poate eșua"],"rationale":"1-3 propoziții","alternatives":[{"marketKey":"<altă key din markets>","estimatedProbability":0.0-1.0,"reason":"de ce"}]}]} — câte un element pentru FIECARE meci primit; "alternatives" = încă 0–2 pronosticuri pe care le susții, de preferat de ALT TIP decât cel principal.`;
 export const DEBATE_SCHEMA_TEXT = `{"revisions":[{"fixtureId":"<id>","decision":"BET_CANDIDATE|NO_BET","marketKey":"<key sau null>","estimatedProbability":0.0-1.0 sau null,"confidence":0-100,"risk":"LOW|MEDIUM|HIGH","changed":true|false,"objection":"obiecția ta principală față de alt agent (numește-l)","response":"cum răspunzi obiecțiilor primite","rationale":"poziția finală, 1-3 propoziții"}]} — câte un element pentru FIECARE meci primit.`;
+export const BrainOutputSchema = z.preprocess(wrap('decisions'), z.object({
+  decisions: z.array(z.object({ fixtureId: z.string(), choice: z.string().nullable().default(null), backup: z.string().nullable().default(null), reason: z.string().max(600).default('') })).min(1),
+}));
+export const BRAIN_SCHEMA_TEXT = `{"decisions":[{"fixtureId":"<id>","choice":"<key din shortlist sau null>","backup":"<a doua alegere din shortlist, alt tip dacă se poate, sau null>","reason":"1-2 propoziții: de ce acesta e pronosticul ideal pentru bilet"}]} — câte un element pentru FIECARE meci primit.`;
+/** The team's brain: Mircea Lucescu (agent "robert") decides the ideal pick from each fixture's shortlist. */
+export const BRAIN_AGENT_ID = 'robert';
+export const BRAIN_SYSTEM = `Ești CREIERUL echipei PRIMUL 11 (personajul Mircea Lucescu). Ceilalți agenți au analizat meciurile; pentru fiecare meci primești LISTA SCURTĂ: pronosticurile susținute de minimum 3 agenți, cu cotă, probabilitatea estimată de motorul statistic ("est"), susținătorii și argumentele lor.
+Sarcina ta: alegi pentru fiecare meci UN singur pronostic ideal din lista scurtă (câmpul "choice" = key exact) sau null dacă niciunul nu merită.
+Criterii, în ordine: 1) șansa reală de câștig (est mare, argumente solide, susținători mulți); 2) COTA potrivită: "idealOddsPerLeg" este cota per meci de care are nevoie biletul ca să atingă ținta — o cotă mult sub ea (ex. 1.15–1.25 când ideal e 1.45) face biletul imposibil de completat, deci între două variante sigure o preferi pe cea mai apropiată de cota ideală; 3) VARIETATEA — "alreadyOnTicket" arată câte selecții din fiecare tip sunt deja alese, iar în același lot nu alegi mai mult de jumătate din meciuri pe același tip (ex. nu toate pe șansă dublă).
+Reguli: folosești DOAR datele primite; nu alegi niciodată o key care nu e în lista scurtă; pronosticurile „sub” sunt interzise. Numele agenților sunt doar personaje; nu imita declarațiile reale ale nimănui. Răspunzi DOAR cu JSON.`;
 export const SCOUT_SCHEMA_TEXT = `{"fixtures":[{"fixtureId":"<id>","summary":"rezumat factual","keyObservations":["2-4 observații"]}]}`;

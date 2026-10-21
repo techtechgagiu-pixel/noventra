@@ -27,7 +27,9 @@ export const config = {
     maxFixturesDaily: num('MAX_FIXTURES_PER_JOB', 30),
     maxFixturesWeekly: num('MAX_FIXTURES_WEEKLY_JOB', 48),
     batchSize: num("ANALYSIS_BATCH_SIZE", 4),
-    debateRounds: Math.min(2, num('DEBATE_ROUNDS', 2)),
+    /** A fixture enters the analysis only with at least this many real, allowed (non-„sub”) priced selections. */
+    minMarkets: num('MIN_MARKETS_PER_FIXTURE', 30),
+    debateRounds: Math.min(2, num('DEBATE_ROUNDS', 1)),
     maxOutputTokens: num('AI_MAX_OUTPUT_TOKENS', 2200),
     consensusThreshold: num('CONSENSUS_THRESHOLD', 3),
     oddsMaxAgeMinutes: num('ODDS_MAX_AGE_MINUTES', 180),

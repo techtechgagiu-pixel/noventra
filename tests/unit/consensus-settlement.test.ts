@@ -22,7 +22,7 @@ describe('voting', () => {
     expect(canonicalMarket(' 1x2:home ', keys)).toBe('1X2:HOME');
     expect(canonicalMarket('1X', keys)).toBe('DC:1X');
     expect(canonicalMarket('BTTS:YES', keys)).toBeNull();
-    expect(toPosition('a', { fixtureId: 'f', decision: 'BET_CANDIDATE', marketKey: 'INVENTED', estimatedProbability: 0.7, confidence: 80, risk: 'LOW', evidence: [], counterarguments: [], missingData: [], failureReasons: [], rationale: '' }, 0, 'groq', 'm', keys).decision).toBe('NO_BET');
+    expect(toPosition('a', { fixtureId: 'f', decision: 'BET_CANDIDATE', marketKey: 'INVENTED', estimatedProbability: 0.7, confidence: 80, risk: 'LOW', evidence: [], counterarguments: [], missingData: [], failureReasons: [], rationale: '', alternatives: [] }, 0, 'groq', 'm', keys).decision).toBe('NO_BET');
   });
   it('debate only for contested fixtures', () => {
     expect(contested([pos('a', '1X2:HOME'), pos('b', '1X2:HOME'), pos('c', null)])).toBe(true);
@@ -154,5 +154,43 @@ describe('no Under selections', () => {
     const five = { minOdds: 1.15, maxOdds: 1.65, minProbability: 0.6 };
     const p = { ...pos('ioana', 'TOTAL:UNDER:3.5'), estimatedProbability: 0.8 };
     expect(characterViolation(p, agent, five, { odds: 1.3, estimatedProbability: 0.8 })).toMatch(/interzise/);
+  });
+});
+
+describe('new markets (settlement & implication)', () => {
+  it('settles from the final score, the half-time score and corners — and waits when a fact is missing', async () => {
+    const { settleMarket } = await import('@/lib/settlement');
+    expect(settleMarket('BTTS:YES', 2, 1)).toBe('WON');
+    expect(settleMarket('BTTS:NO', 2, 1)).toBe('LOST');
+    expect(settleMarket('CS:HOME:YES', 2, 0)).toBe('WON');
+    expect(settleMarket('CS:AWAY:NO', 2, 0)).toBe('WON');
+    expect(settleMarket('WIN2:HOME', 2, 1)).toBe('LOST');
+    expect(settleMarket('HT1X2:HOME', 2, 2, { ht: [2, 1] })).toBe('WON');
+    expect(settleMarket('H21X2:AWAY', 2, 2, { ht: [2, 1] })).toBe('WON');
+    expect(settleMarket('WBH:HOME', 3, 1, { ht: [1, 0] })).toBe('WON');
+    expect(settleMarket('HTTOT:OVER:1.5', 2, 2, { ht: [2, 1] })).toBe('WON');
+    expect(settleMarket('CORN:OVER:9.5', 1, 0, { corners: [6, 5] })).toBe('WON');
+    expect(settleMarket('TCORN:AWAY:OVER:4.5', 1, 0, { corners: [6, 4] })).toBe('LOST');
+    expect(settleMarket('HT1X2:HOME', 2, 2)).toBeNull();
+    expect(settleMarket('CORN:OVER:9.5', 1, 0)).toBeNull();
+  });
+  it('score-based new markets join the logical implication (Home wins by 2+ ⇒ Home wins)', async () => {
+    const { selectionImplies } = await import('@/lib/stats/engine');
+    expect(selectionImplies('WIN2:HOME', '1X2:HOME')).toBe(true);
+    expect(selectionImplies('CS:HOME:YES', 'BTTS:NO')).toBe(true);
+    expect(selectionImplies('BTTS:YES', 'TOTAL:OVER:1.5')).toBe(true);
+    expect(selectionImplies('HT1X2:HOME', '1X2:HOME')).toBe(false); // needs half-time data: never assumed
+  });
+});
+
+describe('shortlist for the brain', () => {
+  it('alternatives count as support; only proposed (not merely implied) selections reach the shortlist', () => {
+    const keys = [{ key: 'DC:1X', odds: 1.3 }, { key: 'BTTS:YES', odds: 1.6 }, { key: 'TOTAL:OVER:1.5', odds: 1.25 }, { key: '1X2:HOME', odds: 1.9 }];
+    const p = (a: string, k: string, alts: string[] = []) => ({ ...pos(a, k), alternatives: alts });
+    const c = consensus([p('a', '1X2:HOME', ['BTTS:YES']), p('b', 'DC:1X', ['BTTS:YES']), p('c', 'BTTS:YES'), p('d', 'DC:1X')], 3, 11, keys);
+    const sl = c.shortlist.map((x) => x.key);
+    expect(sl).toContain('BTTS:YES');
+    expect(sl).toContain('DC:1X');
+    expect(sl).not.toContain('TOTAL:OVER:1.5'); // implied by BTTS, but nobody proposed it
   });
 });
