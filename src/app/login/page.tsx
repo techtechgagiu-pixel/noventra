@@ -39,7 +39,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
           <button disabled={!codes} className="w-full rounded-xl bg-cyan px-4 py-3 font-bold text-ink disabled:opacity-50">INTRĂ CU CODUL</button>
         </form>
       </details>
-      <p className="text-xs leading-relaxed text-muted">Administrarea se face doar cu codul de administrator. Contul Google îți dă acces la crearea și urmărirea biletelor. 18+</p>
+      <p className="text-xs leading-relaxed text-muted">Administrarea se face doar cu codul de administrator. Contul Google îți dă acces la crearea și urmărirea biletelor. 18+ · <a href="/confidentialitate" className="text-cyan">Confidențialitate</a> · <a href="/termeni" className="text-cyan">Termeni</a></p>
     </section>
   </main>;
 }
