@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { Activity, BarChart3, ClipboardCheck, History, SlidersHorizontal, Ticket } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { many } from '@/lib/db';
@@ -34,7 +35,8 @@ const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
 /** PRIMUL 11 — the whole app on one page, organised in three tabs. */
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string }> }) {
-  const user = (await currentUser())!;
+  const user = await currentUser();
+  if (!user) redirect('/login');
   const sp = await searchParams;
   const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' || sp.tab === 'statistici' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
@@ -52,13 +54,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
           <Link href="/" aria-label="Acasă" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
             <img src="/logo.svg" alt="" className="h-9 w-9" />
             <span className="hidden sm:inline">PRIMUL <span className="text-cyan">11</span></span>
             <span className="rounded-md border border-gold/60 bg-gold/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold">Beta</span>
           </Link>
-          <nav className="ml-auto flex gap-1 rounded-xl border border-line bg-panel p-1" aria-label="Secțiuni">
+          <nav className="order-last flex w-full justify-center gap-1 rounded-xl border border-line bg-panel p-1 sm:order-none sm:ml-auto sm:w-auto" aria-label="Secțiuni">
             {tabs.map(({ id, label, icon: Icon, badge }) => (
               <Link key={id} href={`/?tab=${id}`} title={label} aria-label={label} aria-current={tab === id ? 'page' : undefined}
                 className={`relative flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition md:px-4 ${tab === id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:text-text'}`}>
@@ -67,6 +69,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
               </Link>
             ))}
           </nav>
+          {user.role === 'admin' && <Link href="/admin/invitations" className="text-xs text-cyan" title="Coduri de invitație">Invitații</Link>}
+          <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
         </div>
       </header>
 
@@ -76,7 +80,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
         {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
-        {tab === 'statistici' && <StatisticiTab userId={user.id} />}
+        {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} />}
       </main>
       <footer className="mx-auto max-w-6xl px-4 pb-8 text-xs text-muted">18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</footer>
@@ -274,8 +278,8 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
   );
 }
 
-async function StatisticiTab({ userId }: { userId: string }) {
-  const { agents, totals } = await agentStats(userId);
+async function StatisticiTab({ userId, admin }: { userId: string; admin: boolean }) {
+  const { agents, totals } = await agentStats(userId, admin);
   return <StatsView agents={plain(agents)} totals={totals} />;
 }
 

@@ -59,8 +59,11 @@ test('another user cannot open the ticket', async ({ page, browser }) => {
   expect(list.tickets).toBeDefined();
 });
 
-test('single-owner app: no login wall, old links still lead to the single page', async ({ request }) => {
-  expect((await request.get('/api/ticket-slots')).status()).toBe(200);
+test('anonymous visitors need an access code; legacy links remain redirects', async ({ request }) => {
+  expect((await request.get('/api/ticket-slots')).status()).toBe(401);
+  expect((await request.get('/api/admin/models')).status()).toBe(401);
+  const home = await request.get('/', { maxRedirects: 0 });
+  expect(home.headers().location).toBe('/login');
   const r = await request.get('/dashboard', { maxRedirects: 0 });
   expect([307, 308]).toContain(r.status());
 });

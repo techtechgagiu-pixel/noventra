@@ -1,16 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { SESSION_COOKIE, ownerUser, userFromToken, type User } from './auth';
+import { SESSION_COOKIE, userFromToken, type User } from './auth';
 import { config } from './config';
 
 export const json = (data: unknown, status = 200) => NextResponse.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 export const fail = (message: string, status = 400) => json({ error: message }, status);
 
 export async function requireUser(req: NextRequest): Promise<User | NextResponse> {
-  if (config.allowDemoProviders) {
-    const u = await userFromToken(req.cookies.get(SESSION_COOKIE)?.value);
-    if (u) return u;
-  }
-  return ownerUser();
+  const user = await userFromToken(req.cookies.get(SESSION_COOKIE)?.value);
+  return user ?? fail('Introdu codul de invitație pentru a continua.', 401);
 }
 export async function requireAdmin(req: NextRequest): Promise<User | NextResponse> {
   const u = await requireUser(req);

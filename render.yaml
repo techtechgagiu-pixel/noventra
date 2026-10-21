@@ -14,7 +14,7 @@ services:
       - key: NODE_VERSION
         value: "22"
       - key: APP_BASE_URL
-        value: https://nexus.noventra.ro
+        value: https://primul11.noventra.ro
       - key: APP_TIMEZONE
         value: Europe/Bucharest
       - key: DATABASE_URL
@@ -23,6 +23,8 @@ services:
         sync: false
       - key: AUTH_SECRET
         generateValue: true
+      - key: OWNER_ACCESS_CODE_HASH
+        sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET

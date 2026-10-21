@@ -27,6 +27,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       const started = Date.now();
       req.signal.addEventListener('abort', () => { closed = true; });
       while (!closed && Date.now() - started < 4 * 60_000) {
+        if (await requireUser(req) instanceof NextResponse) break;
         const events = (await jobEvents(user.id, id, cursor)) ?? [];
         for (const e of events) { send(`id: ${e.seq}\nevent: job\ndata: ${JSON.stringify(e)}\n\n`); cursor = e.seq; }
         const m = await jobMeta(user.id, id);

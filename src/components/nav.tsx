@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Network, Shield, Ticket } from 'lucide-react';
+import { BarChart3, KeyRound, Network, Shield, Ticket } from 'lucide-react';
 
 // Used only around the admin pages; the app itself is the single page at "/".
 const items = [
@@ -12,7 +12,7 @@ const items = [
 
 export function Nav({ admin, name }: { admin: boolean; name: string }) {
   const path = usePathname();
-  const all = admin ? [...items, { href: '/admin/models', label: 'Admin', icon: Shield }] : items;
+  const all = admin ? [...items, { href: '/admin/models', label: 'Admin', icon: Shield }, { href: '/admin/invitations', label: 'Invitații', icon: KeyRound }] : items;
   return (
     <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/80 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">

@@ -10,6 +10,7 @@ export const config = {
   timezone: process.env.APP_TIMEZONE || 'Europe/Bucharest',
   databaseUrl: process.env.DATABASE_URL || '',
   authSecret: process.env.AUTH_SECRET || '',
+  ownerAccessCodeHash: process.env.OWNER_ACCESS_CODE_HASH || '',
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   adminEmails: (process.env.ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
