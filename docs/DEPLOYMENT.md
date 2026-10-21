@@ -12,11 +12,11 @@ See `.env.example`. Required: `DATABASE_URL`, `DIRECT_DATABASE_URL`, `AUTH_SECRE
 ## Google OAuth
 Google Cloud project `betmind-six-noventra`, existing Web client. Authorized redirect URIs to add:
 - `https://<service>.onrender.com/auth/callback` (staging)
-- `https://nexus.noventra.ro/auth/callback` (production)
+- `https://primul11.noventra.ro/auth/callback` (production)
 Scopes: `openid email profile` only. While the consent screen is in *Testing*, only listed test users can sign in.
 
 ## Custom domain
-1. Render → service → Settings → Custom Domains → add `nexus.noventra.ro`.
+1. Render → service → Settings → Custom Domains → add `primul11.noventra.ro`.
 2. Cloudflare DNS (zone `noventra.ro`): `CNAME nexus → <service>.onrender.com`, **DNS only** (grey cloud) so Render can issue the certificate.
-3. Set `APP_BASE_URL=https://nexus.noventra.ro`, redeploy, verify `/api/health` and Google login.
+3. Set `APP_BASE_URL=https://primul11.noventra.ro`, redeploy, verify `/api/health` and Google login.
 `betmindsix.noventra.ro` (Cloudflare Worker) is not touched.

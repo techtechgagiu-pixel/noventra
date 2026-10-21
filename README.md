@@ -18,7 +18,7 @@
 
 **Six Minds. One Decision.** — analiză de fotbal cu șase agenți AI, pe date reale, cu replay complet al deciziilor.
 
-- Producție (nouă): https://nexus.noventra.ro · Render Free (Frankfurt) · Neon PostgreSQL Free (Frankfurt)
+- Producție (nouă): https://primul11.noventra.ro · Render Free (Frankfurt) · Neon PostgreSQL Free (Frankfurt)
 - Versiunea veche rămâne neatinsă pe https://betmindsix.noventra.ro (Cloudflare Worker `betmind-six`) — rezervă / rollback.
 - UI în română, cod și documentație tehnică în engleză. Fus orar: Europe/Bucharest.
 
