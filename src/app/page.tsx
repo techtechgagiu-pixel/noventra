@@ -18,7 +18,8 @@ import { allTrackRecords } from '@/lib/track-record';
 import { customJobs, jobQueue, reviewJobs } from '@/lib/jobs/service';
 import { ReviewBuilder } from '@/components/review/review-builder';
 import { HomeStage } from '@/components/home/home-stage';
-import { homeReel, homeStats } from '@/lib/home-reel';
+import { homeReel, homeStats, homeThreads } from '@/lib/home-reel';
+import { HomeThreads } from '@/components/home/home-threads';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
@@ -80,7 +81,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
 }
 
 async function AcasaTab({ userId }: { userId: string }) {
-  const [reel, stats, slots, queue] = await Promise.all([homeReel(userId), homeStats(userId), slotStates(userId), jobQueue(userId)]);
+  const [reel, stats, slots, queue, frag] = await Promise.all([homeReel(userId), homeStats(userId), slotStates(userId), jobQueue(userId), homeThreads(userId)]);
   const ready = slots.filter((x) => x.ticket).length;
   const decided = stats.legsWon + stats.legsLost;
   const tiles: Array<{ href: string; title: string; text: string; foot: string; accent: string; icon: typeof Ticket; wide?: boolean }> = [
@@ -104,6 +105,7 @@ async function AcasaTab({ userId }: { userId: string }) {
           </Link>
         ))}
       </nav>
+      <HomeThreads threads={plain(frag.threads)} news={frag.news ? plain(frag.news) : null} />
       {queue.length > 0 && <JobQueue initial={plain(queue)} />}
     </div>
   );
