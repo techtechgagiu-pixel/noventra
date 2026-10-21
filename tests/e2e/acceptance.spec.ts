@@ -57,11 +57,16 @@ test('another account sees shared tickets but not missing ones', async ({ page, 
   expect(list.tickets).toBeDefined();
 });
 
-test('anonymous visitors need an access code; legacy links remain redirects', async ({ request }) => {
+test('anonymous home is public while application sections and APIs remain protected', async ({ request }) => {
   expect((await request.get('/api/ticket-slots')).status()).toBe(401);
   expect((await request.get('/api/admin/models')).status()).toBe(401);
   const home = await request.get('/', { maxRedirects: 0 });
-  expect(home.headers().location).toBe('/login');
+  expect(home.status()).toBe(200);
+  expect(await home.text()).toContain('Conectează-te cu Google');
+  const privateTab = await request.get('/?tab=custom', { maxRedirects: 0 });
+  expect(privateTab.headers().location).toBe('/login');
+  const ticket = await request.get('/?ticket=00000000-0000-4000-8000-000000000000', { maxRedirects: 0 });
+  expect(ticket.headers().location).toBe('/login');
   const r = await request.get('/dashboard', { maxRedirects: 0 });
   expect([307, 308]).toContain(r.status());
 });

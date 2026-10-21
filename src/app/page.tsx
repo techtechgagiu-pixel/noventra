@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Activity, BarChart3, CalendarDays, ClipboardCheck, History, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
 import { MatchesView } from '@/components/matches/matches-view';
-import { currentUser } from '@/lib/auth';
+import { currentUser, googleConfigured } from '@/lib/auth';
+import { PublicHome } from '@/components/home/public-home';
 import { many } from '@/lib/db';
 import { slotStates } from '@/lib/jobs/service';
 import { jobEvents, jobMeta, listTickets, ticketDetail } from '@/lib/views';
@@ -37,8 +38,11 @@ const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 /** PRIMUL 11 — the whole app on one page, organised in three tabs. */
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string; luna?: string }> }) {
   const user = await currentUser();
-  if (!user) redirect('/login');
   const sp = await searchParams;
+  if (!user) {
+    if ((sp.tab && sp.tab !== 'acasa') || sp.ticket || sp.job || sp.replay) redirect('/login');
+    return <PublicHome google={googleConfigured()} />;
+  }
   const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' || sp.tab === 'statistici' || sp.tab === 'azi' || sp.tab === 'meciuri' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
