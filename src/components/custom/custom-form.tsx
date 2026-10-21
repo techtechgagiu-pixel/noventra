@@ -13,17 +13,26 @@ const GROUPS: Array<{ label: string; ids: (a: AgentCard[]) => string[] }> = [
   { label: 'Vânătorii de cote', ids: (a) => a.filter((x) => x.maxOdds >= 1.85).map((x) => x.id) },
 ];
 
+/** Selectable offsets, from 30 minutes to one week. */
+const STOPS = [0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 36, 42, 48, 60, 72, 84, 96, 120, 144, 168];
+const dur = (h: number) => (h < 1 ? `${Math.round(h * 60)} min` : h < 24 ? `${h} h` : h % 24 === 0 ? `${h / 24} ${h === 24 ? 'zi' : 'zile'}` : `${Math.floor(h / 24)} ${h < 48 ? 'zi' : 'zile'} și ${h % 24} h`);
+const at = (h: number) => new Date(Date.now() + h * 3600_000).toLocaleString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
+const span = (a: number, b: number) => `${at(a)} – ${at(b)}`;
+
 export function CustomForm({ agents }: { agents: AgentCard[] }) {
   const router = useRouter();
   const [target, setTarget] = useState(5);
   const [legs, setLegs] = useState(4);
-  const [win, setWin] = useState<'24h' | '48h' | '7d'>('48h');
+  const [fromI, setFromI] = useState(STOPS.indexOf(2));
+  const [toI, setToI] = useState(STOPS.indexOf(48));
+  const fromHours = STOPS[fromI], toHours = STOPS[toI];
+  const win = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
   const [chosen, setChosen] = useState<string[]>(['victor', 'andrei', 'alex', 'robert', 'ioana']);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const perLeg = Math.pow(target, 1 / legs);
-  const policy = useMemo(() => customPolicy({ target, legs, agents: chosen, window: win }), [target, legs, chosen, win]);
+  const policy = useMemo(() => customPolicy({ target, legs, agents: chosen, window: win, fromHours, toHours }), [target, legs, chosen, win, fromHours, toHours]);
   const tooLow = perLeg < 1.1; const tooHigh = perLeg > 3.2;
   const risk = perLeg <= 1.3 ? { t: 'prudent', c: 'text-emerald' } : perLeg <= 1.6 ? { t: 'echilibrat', c: 'text-cyan' } : perLeg <= 2.1 ? { t: 'curajos', c: 'text-gold' } : { t: 'riscant', c: 'text-rose' };
   const fits = (a: AgentCard) => Math.min(a.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds) >= perLeg * 0.92;
@@ -32,7 +41,7 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
   async function create() {
     setBusy(true); setError(null);
     try {
-      const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ target, legs, agents: chosen, window: win }) });
+      const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ target, legs, agents: chosen, fromHours, toHours }) });
       router.push(`/?tab=custom&job=${r.jobId}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -59,10 +68,16 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
           <p className="text-xs font-semibold uppercase tracking-wider text-muted">Cotă necesară pe meci</p>
           <p className={`mt-2 font-display text-3xl font-bold tabular ${tooLow || tooHigh ? 'text-rose' : risk.c}`}>≈ {Number.isFinite(perLeg) ? perLeg.toFixed(2) : '—'}</p>
           <p className="mt-1 text-xs text-muted">{tooLow ? 'Prea mică — pune mai puține meciuri.' : tooHigh ? 'Prea mare — pune mai multe meciuri.' : <>Profil <strong className={risk.c}>{risk.t}</strong> · cote acceptate {policy.minOdds.toFixed(2)}–{policy.maxOdds.toFixed(2)}, prob. ≥ {Math.round(policy.minProbability * 100)}%</>}</p>
-          <p className="mt-3 text-xs text-muted">Meciuri care încep peste 2 h și cel mult:</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Fereastra meciurilor">
-            {(['24h', '48h', '7d'] as const).map((w) => <button key={w} onClick={() => setWin(w)} aria-pressed={win === w} className={`chip ${win === w ? 'text-cyan' : 'text-muted'}`}>{w === '24h' ? 'Maxim 24 h' : w === '48h' ? 'Maxim 48 h' : 'Maxim o săptămână'}</button>)}
-          </div>
+          <fieldset className="mt-3 space-y-2" aria-label="Intervalul meciurilor">
+            <legend className="text-xs text-muted">Meciuri care încep între <strong className="text-text">peste {dur(fromHours)}</strong> și <strong className="text-text">peste {dur(toHours)}</strong></legend>
+            <label className="block text-[11px] text-muted">De la
+              <input type="range" min={0} max={STOPS.length - 2} value={fromI} onChange={(e) => { const v = Number(e.target.value); setFromI(v); if (toI <= v) setToI(v + 1); }} className="mt-1 w-full accent-cyan" aria-valuetext={`peste ${dur(fromHours)}`} />
+            </label>
+            <label className="block text-[11px] text-muted">Până la
+              <input type="range" min={1} max={STOPS.length - 1} value={toI} onChange={(e) => { const v = Number(e.target.value); setToI(v); if (fromI >= v) setFromI(v - 1); }} className="mt-1 w-full accent-cyan" aria-valuetext={`peste ${dur(toHours)}`} />
+            </label>
+            <p className="text-[11px] text-muted tabular" suppressHydrationWarning>{span(fromHours, toHours)}</p>
+          </fieldset>
         </div>
       </div>
 

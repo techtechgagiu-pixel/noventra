@@ -19,3 +19,15 @@ describe('custom policy', () => {
     expect(slotInfo('FIVE_A', 5).id).toBe('FIVE_A');
   });
 });
+
+describe('custom interval', () => {
+  it('uses the exact interval chosen by the user', async () => {
+    const p = customPolicy({ target: 3, legs: 2, agents: ['alex'], window: '48h', fromHours: 0.5, toHours: 30 });
+    expect(p.minLeadHours).toBe(0.5); expect(p.maxAheadHours).toBe(30);
+    const { parseCustom } = await import('@/lib/jobs/service');
+    const c = parseCustom({ target: 3, legs: 2, agents: ['alex'], fromHours: 0.1, toHours: 500 });
+    expect(c.fromHours).toBe(0.5); expect(c.toHours).toBe(168);
+    const d = parseCustom({ target: 3, legs: 2, agents: ['alex'], fromHours: 10, toHours: 5 });
+    expect(d.toHours).toBe(11);
+  });
+});

@@ -109,14 +109,18 @@ export function parseCustom(input: unknown): CustomConfig {
   const legs = Math.round(Number(o.legs));
   const ids = new Set<string>(VOTING_AGENTS.map((a) => a.id));
   const agents = [...new Set(Array.isArray(o.agents) ? o.agents.map(String) : [])].filter((a) => ids.has(a));
-  const window = o.window === '7d' ? '7d' : o.window === '24h' ? '24h' : '48h';
+  let fromHours = o.fromHours === undefined ? 2 : Math.round(Number(o.fromHours) * 4) / 4;
+  let toHours = o.toHours === undefined ? (o.window === '7d' ? 168 : o.window === '24h' ? 24 : 48) : Math.round(Number(o.toHours) * 4) / 4;
+  if (!Number.isFinite(fromHours) || !Number.isFinite(toHours)) throw new SlotError('Intervalul meciurilor nu este valid.');
+  fromHours = Math.min(167, Math.max(0.5, fromHours)); toHours = Math.min(168, Math.max(fromHours + 1, toHours));
+  const window = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
   if (!Number.isFinite(target) || target < 1.2 || target > 1000) throw new SlotError('Cota țintă trebuie să fie între 1.20 și 1000.');
   if (!Number.isInteger(legs) || legs < 1 || legs > 15) throw new SlotError('Numărul de meciuri trebuie să fie între 1 și 15.');
   if (!agents.length) throw new SlotError('Alege cel puțin un agent.');
   const perLeg = Math.pow(target, 1 / legs);
   if (perLeg < 1.1) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea mică pentru cotele reale. Pune mai puține meciuri sau o cotă mai mare.`);
   if (perLeg > 3.2) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea riscant. Pune mai multe meciuri sau o cotă mai mică.`);
-  return { target, legs, agents, window };
+  return { target, legs, agents, window, fromHours, toHours };
 }
 
 /** Creates a custom ticket job (CUSTOM_1…CUSTOM_10 per day): the user's target, exact legs and chosen agents. */
@@ -127,8 +131,8 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
   if (usage.requests + 20 > config.limits.aiDailyCalls) throw new SlotError(`Cota AI zilnică este aproape epuizată (${usage.requests}/${config.limits.aiDailyCalls} apeluri).`, 503);
   const key = localDate(at);
   const policy = customPolicy(custom);
-  const weekly = custom.window === '7d';
-  const days = custom.window === '7d' ? 8 : custom.window === '24h' ? 2 : 3;
+  const weekly = (custom.toHours ?? 48) > 48;
+  const days = Math.min(8, Math.ceil((custom.toHours ?? 48) / 24) + 1);
   const maxFixtures = Math.min(weekly ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, Math.max(12, custom.legs * 4));
   const cfg = { windowStart: key, windowDays: days, top10Only: false, maxFixtures, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], custom };
   const seed = randomBytes(16).toString('hex');
