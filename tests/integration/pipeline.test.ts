@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { one, many } from '@/lib/db';
-import { createCustomJob, createOrGetJob, resumeJob, slotStates } from '@/lib/jobs/service';
+import { createCustomJob, createReviewJob, createOrGetJob, resumeJob, slotStates } from '@/lib/jobs/service';
 import { _processOneForTests } from '@/lib/jobs/worker';
 import { aiCallCount, clearModelExhaustionForTests } from '@/lib/ai/router';
 import { jobEvents, listTickets, ticketDetail } from '@/lib/views';
@@ -196,5 +196,35 @@ describe('custom ticket', () => {
     const slots = await many<{ slot: string; config: { custom: { agents: string[] } } }>('SELECT slot, config FROM ticket_generation_jobs WHERE id = ANY($1) ORDER BY slot', [[a.jobId, b.jobId]]);
     expect(slots.map((s) => s.slot)).toEqual(['CUSTOM_1', 'CUSTOM_2']);
     expect(slots[0].config.custom.agents).toEqual(['alex']);
+  });
+});
+
+describe('your own ticket brought for review', () => {
+  it('keeps the user legs, gives a verdict per leg and advice, and tracks the ticket', async () => {
+    // Agents back HOME on even fixtures only; the user picks AWAY on demo:1 (nobody backs it) and HOME on demo:0.
+    const ai: FakeAi = { calls: [], pick: (id) => (Number(id.split(':')[1]) % 2 ? 'TOTAL:OVER:1.5' : '1X2:HOME') };
+    installFakes(demoFixtures(4, (i) => ({ home: 1.5 + i * 0.05, draw: 4.2, away: 5.5, dc: 1.15 })), ai);
+    const u = await makeUser();
+    await expect(createReviewJob(u, { legs: [{ fixtureId: 'demo:0', marketKey: 'TOTAL:UNDER:1.5' }] })).rejects.toThrow(/sub/);
+    const { jobId } = await createReviewJob(u, { legs: [{ fixtureId: 'demo:0', marketKey: '1X2:HOME' }, { fixtureId: 'demo:1', marketKey: '1X2:AWAY' }], advice: 'Cred că gazdele sunt în formă.' });
+    const status = await drain(jobId);
+    expect(status).toBe('COMPLETED');
+    const t = await one<{ id: string; slot: string; leg_count: number; actual_odds: string; summary: { review: { legs: Array<{ fixtureId: string; verdict: string; supporters: string[] }>; advice: string[]; overall: string; userAdvice: string } } }>('SELECT id, slot, leg_count, actual_odds, summary FROM tickets WHERE job_id=$1', [jobId]);
+    expect(t!.slot).toBe('REVIEW_1');
+    expect(t!.leg_count).toBe(2);
+    expect(Number(t!.actual_odds)).toBeCloseTo(1.5 * 5.5, 2);
+    const byFx = Object.fromEntries(t!.summary.review.legs.map((l) => [l.fixtureId, l]));
+    expect(byFx['demo:0'].supporters.length).toBeGreaterThan(5);
+    expect(byFx['demo:1'].supporters).toHaveLength(0);
+    expect(byFx['demo:1'].verdict).toBe('SLAB');
+    expect(t!.summary.review.overall.length).toBeGreaterThan(10);
+    expect(t!.summary.review.userAdvice).toContain('gazdele');
+    const sels = await many<{ market_key: string }>('SELECT market_key FROM ticket_selections WHERE ticket_id=$1 ORDER BY position', [t!.id]);
+    expect(sels.map((x) => x.market_key)).toEqual(['1X2:HOME', '1X2:AWAY']);
+    const ev = (await jobEvents(u, jobId, 0))!.map((e) => e.type);
+    expect(ev.filter((x) => x === 'LEG_REVIEWED')).toHaveLength(2);
+    expect(ev).toContain('REVIEW_ADVICE');
+    const d = await ticketDetail(u, t!.id);
+    expect(d!.title).toBe(`BILETUL TĂU — COTĂ ${Math.round(1.5 * 5.5 * 100) / 100}`);
   });
 });

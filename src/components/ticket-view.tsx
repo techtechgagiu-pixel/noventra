@@ -8,12 +8,13 @@ import { superbetPick } from '@/lib/superbet-format';
 type Sel = { position: number; fixture_id: string; market_key: string; market_label: string; odds: number; bookmaker: string; quote_observed_at: string; votes_for: number; model_probability: number | null; risk: string; snapshot: { match: string; home: string; away: string; league: string; kickoff: string; source: string }; outcome: string; home_score: number | null; away_score: number | null };
 export type TicketData = {
   id: string; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string;
-  summary: { digest?: { lines: string[]; source: 'ai' | 'data'; model: string | null; createdAt: string }; agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
+  summary: { review?: { legs: Array<{ fixtureId: string; match: string; label: string; odds: number; verdict: 'SOLID' | 'RISCANT' | 'SLAB' | 'NEANALIZAT'; supporters: string[]; responded: number; engineProbability: number | null; suggestion: { label: string; odds: number; supporters: number } | null; note: string }>; overall: string; advice: string[]; chance: number | null; model: string | null; userAdvice: string | null; solid: number; risky: number; weak: number }; digest?: { lines: string[]; source: 'ai' | 'data'; model: string | null; createdAt: string }; agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
   selections: Sel[];
   decisions: Array<{ fixture_id: string; outcome: string; market_key: string | null; votes_for: number; votes: Array<{ agentId: string; decision: string; marketKey: string | null; model: string; provider: string }>; reason: string }>;
   fixtures: Array<{ fixtureId: string; fixture: { home: string; away: string; league: string; kickoff: string } }>;
   dossiers: Array<{ fixture_id: string; dossier: { home: { team: string; resultsVsPerformance: string; record: { w: number; d: number; l: number }; sample: number }; away: { team: string; resultsVsPerformance: string; record: { w: number; d: number; l: number }; sample: number }; modeMessage: string; missing: string[] }; narrative: { summary: string; keyObservations: string[] } | null; model: string | null }>;
 };
+const VERDICT: Record<string, { t: string; c: string }> = { SOLID: { t: '✓ SOLID', c: 'text-emerald' }, RISCANT: { t: '⚠ RISCANT', c: 'text-gold' }, SLAB: { t: '✗ SLAB', c: 'text-rose' }, NEANALIZAT: { t: '— NEANALIZAT', c: 'text-muted' } };
 const RISK_RO: Record<string, string> = { LOW: 'Risc scăzut', MEDIUM: 'Risc mediu', HIGH: 'Risc ridicat' };
 
 export function ticketText(t: TicketData) {
@@ -70,8 +71,8 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
             <p className="text-sm text-muted">Creat {fmtDateTime(t.createdAt)} · {t.summary.analyzed ?? 0} meciuri analizate</p>
           </div>
           <div className="flex gap-6 text-right">
-            <div><p className="text-xs text-muted">Țintă</p><p className="font-display text-2xl font-bold tabular">{t.target}</p></div>
-            <div><p className="text-xs text-muted">Cotă reală</p><p className="font-display text-4xl font-bold text-emerald tabular">{completed ? odds(t.actualOdds) : '—'}</p></div>
+            {!t.summary.review && <div><p className="text-xs text-muted">Țintă</p><p className="font-display text-2xl font-bold tabular">{t.target}</p></div>}
+            <div><p className="text-xs text-muted">{t.summary.review ? 'Cota biletului tău' : 'Cotă reală'}</p><p className="font-display text-4xl font-bold text-emerald tabular">{completed ? odds(t.actualOdds) : '—'}</p></div>
           </div>
         </div>
         {completed ? (
@@ -83,7 +84,8 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
                   <p className="text-lg font-semibold">{s.snapshot.home} <span className="text-muted">vs</span> {s.snapshot.away}{s.home_score != null && s.outcome !== 'PENDING' && <span className="ml-2 text-sm text-muted">({s.home_score}–{s.away_score})</span>}</p>
                   <p className="mt-1 text-sm"><span className="font-semibold text-cyan">{s.market_label}</span> <span className="text-muted">· {s.market_key}</span></p>
                   {(() => { const p = superbetPick(s.market_key, s.snapshot.home, s.snapshot.away); return <p className="text-xs text-muted">Pe Superbet: <span className="text-text">{p.market} → {p.pick}</span>{p.note ? ` (${p.note})` : ''}</p>; })()}
-                  <p className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="chip">{s.votes_for}/{t.summary.agents ?? 6} voturi</span><span className="chip">{RISK_RO[s.risk]}</span><span className="chip">{s.bookmaker} · observat {fmtDateTime(s.quote_observed_at)}</span>{s.model_probability != null && <span className="chip">p estimat {Math.round(s.model_probability * 100)}%</span>}</p>
+                  {(() => { const rv = t.summary.review?.legs.find((l) => l.fixtureId === s.fixture_id); return rv ? <p className="mt-1 text-xs"><span className={`chip mr-2 font-bold ${VERDICT[rv.verdict].c}`}>{VERDICT[rv.verdict].t}</span><span className="text-muted">{rv.note}</span></p> : null; })()}
+                  <p className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="chip">{s.votes_for}/{t.summary.agents ?? 6} {t.summary.review ? 'agenți susțin' : 'voturi'}</span><span className="chip">{RISK_RO[s.risk]}</span><span className="chip">{s.bookmaker} · observat {fmtDateTime(s.quote_observed_at)}</span>{s.model_probability != null && <span className="chip">p estimat {Math.round(s.model_probability * 100)}%</span>}</p>
                 </div>
                 <div className="text-right"><p className="font-display text-3xl font-bold tabular">{odds(s.odds)}</p><p className={`text-xs font-bold ${s.outcome === 'WON' ? 'text-emerald' : s.outcome === 'LOST' ? 'text-rose' : 'text-muted'}`}>{s.outcome === 'WON' ? '✓ A intrat' : s.outcome === 'LOST' ? '✗ Nu a intrat' : s.outcome === 'VOID' ? 'Anulat' : 'În așteptare'}</p></div>
               </li>
@@ -106,7 +108,17 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
         {completed && <p className="border-t border-line p-4 text-xs text-muted">Stare rezultat: <strong className="text-text">{OUTCOME_RO[t.outcomeStatus]}</strong>. Cotele sunt cele observate la creare (sursa ESPN, furnizor {t.selections[0]?.bookmaker}); pot fi diferite acum.</p>}
       </div>
 
-      {completed && (
+      {t.summary.review && (
+        <div className="card border-gold/40 p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold"><Sparkles size={18} className="text-gold" aria-hidden /> Verdictul echipei · sfaturile creierului</h2>
+          <p className="mb-3 text-xs text-muted">{t.summary.review.solid} solide · {t.summary.review.risky} riscante · {t.summary.review.weak} slabe{t.summary.review.chance !== null ? ` · șansă estimată ca toate să iasă ≈ ${Math.round(t.summary.review.chance * 100)}%` : ''}</p>
+          <p className="text-sm leading-relaxed">{t.summary.review.overall}</p>
+          {t.summary.review.advice.length > 0 && <ul className="mt-3 space-y-1.5 text-sm">{t.summary.review.advice.map((a, i) => <li key={i} className="flex gap-2"><span className="text-gold">→</span><span>{a}</span></li>)}</ul>}
+          {t.summary.review.userAdvice && <p className="mt-4 rounded-xl border border-line bg-ink/40 p-3 text-xs text-muted">Sfaturile tale pentru tacticieni: <span className="text-text">„{t.summary.review.userAdvice}”</span></p>}
+          <p className="mt-3 text-xs text-muted">Mircea Lucescu (creierul){t.summary.review.model ? ` · ${t.summary.review.model}` : ' · compus din voturile echipei'}. Analiza nu garantează rezultatul.</p>
+        </div>
+      )}
+      {completed && !t.summary.review && (
         <div className="card p-5">
           <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold"><Sparkles size={18} className="text-cyan" aria-hidden /> Rezumat de la Primul 11</h2>
           {digest ? (

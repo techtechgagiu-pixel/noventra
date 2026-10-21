@@ -168,10 +168,20 @@ export function modelFixture(input: { homeHistory: HistoricalMatch[]; awayHistor
   const fair = fairProbabilities(input.markets);
   const minSample = Math.min(homeAll.sample, awayAll.sample);
   const modelWeight = minSample >= 8 ? 0.3 : minSample >= 5 ? 0.2 : minSample >= 3 ? 0.15 : 0.1;
+  // The same event priced in two markets (e.g. "Arsenal primește gol" ≡ "Bayern peste 0.5") gets the same fair price:
+  // a selection with no complete pair borrows the de-margined probability of an equivalent one.
+  const equivalentFair = (key: string): number | null => {
+    for (const other of input.markets) {
+      if (other.key === key) continue;
+      const of = fair.get(other.key)?.fair;
+      if (of != null && selectionWins(key, 0, 0) !== null && selectionWins(other.key, 0, 0) !== null && selectionImplies(key, other.key) && selectionImplies(other.key, key)) return of;
+    }
+    return null;
+  };
   const markets = input.markets.map((m) => {
     const modelP = marketProbability(matrix, m.key);
     const f = fair.get(m.key);
-    const fairP = f?.fair ?? null;
+    const fairP = f?.fair ?? equivalentFair(m.key);
     const est = fairP !== null && modelP !== null ? (1 - modelWeight) * fairP + modelWeight * modelP : fairP ?? (modelP !== null ? 0.5 * modelP + 0.5 * (f?.implied ?? modelP) : null);
     return {
       key: m.key, label: m.label, odds: m.odds, bookmaker: m.bookmaker,

@@ -10,7 +10,7 @@ type Vec = { x: number; y: number };
 type FxState = 'QUEUED' | 'RESEARCH' | 'ANALYSIS' | 'DEBATE' | 'VOTING' | 'ACCEPTED' | 'REJECTED';
 type Fx = {
   id: string; home: string; away: string; state: FxState; pos: Vec; alpha: number; order: number; flash: number; flashColor: string;
-  odds: number | null; market: string | null; votes: string | null; acceptedIndex: number; seen: boolean; chosen: boolean;
+  odds: number | null; market: string | null; votes: string | null; acceptedIndex: number; seen: boolean; chosen: boolean; verdict?: string;
 };
 type AgentStatus = 'IDLE' | 'ANALYZING' | 'DEBATING' | 'DONE' | 'FAILED' | 'WAITING';
 type AgentNode = { id: string; status: AgentStatus; pulse: number; bubble: { text: string; color: string; t0: number } | null; picks: Record<string, string | null>; activity: number };
@@ -70,6 +70,7 @@ export class MapScene {
   private banner: { text: string; color: string } | null = null;
   private final: { totalOdds: number | null; generation: string; legs: number; target: number } | null = null;
   private acceptedCount = 0;
+  private reviewCounts: { solid: number; risky: number; weak: number } | null = null;
   private target = 0;
   private lastSeq = 0;
   speed = 1;
@@ -242,6 +243,17 @@ export class MapScene {
         break;
       case 'SELECTION_REJECTED':
         if (e.fixtureId) { this.setFx(e.fixtureId, { state: 'REJECTED', market: p.marketLabel ?? null }); if (go) this.burst(F(e.fixtureId), C.rose, now, 1); }
+        break;
+      case 'LEG_REVIEWED':
+        if (e.fixtureId) {
+          const col = p.verdict === 'SOLID' ? C.emerald : p.verdict === 'RISCANT' ? C.gold : C.rose;
+          this.setFx(e.fixtureId, { state: 'ACCEPTED', odds: p.odds ?? null, market: p.label ?? null, acceptedIndex: this.acceptedCount++, verdict: p.verdict });
+          if (go) { this.burst(F(e.fixtureId), col, now, 1.4, 1100); for (const id of ((p.supporters ?? []) as string[]).slice(0, 6)) this.send(A(id), F(e.fixtureId), col, now, { size: 0.6, delay: Math.random() * 250 }); }
+        }
+        break;
+      case 'REVIEW_ADVICE':
+        this.reviewCounts = { solid: p.solid ?? 0, risky: p.risky ?? 0, weak: p.weak ?? 0 };
+        if (go) { this.say(BRAIN, `🧠 ${String((p.advice ?? [])[0] ?? p.overall ?? 'verdict gata')}`, C.gold, now); this.burst(A(BRAIN), C.gold, now, 1.8, 1300); }
         break;
       case 'OPTIMIZATION_COMPLETED':
         for (const id of (p.legs ?? []) as string[]) this.setFx(id, { chosen: true });
@@ -562,12 +574,13 @@ export class MapScene {
         if (f.state === 'REJECTED' && f.alpha < 0.3) continue;
         const tw = L.mode === 'wide' ? L.tray.w - 20 : (L.tray.w - 24) / 2; const h = 20;
         const dim = this.final?.generation === 'COMPLETED' && f.state === 'ACCEPTED' && !f.chosen; if (dim) ctx.globalAlpha = f.alpha * 0.35;
-        roundRect(ctx, x, y - h / 2, tw, h, 8); ctx.fillStyle = f.state === 'ACCEPTED' ? 'rgba(52,211,153,0.12)' : 'rgba(251,113,133,0.12)'; ctx.fill();
-        ctx.strokeStyle = f.state === 'ACCEPTED' ? 'rgba(52,211,153,0.55)' : 'rgba(251,113,133,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+        const vc = f.verdict === 'SOLID' ? C.emerald : f.verdict === 'RISCANT' ? C.gold : f.verdict ? C.rose : f.state === 'ACCEPTED' ? C.emerald : C.rose;
+        roundRect(ctx, x, y - h / 2, tw, h, 8); ctx.fillStyle = hexA(vc, 0.12); ctx.fill();
+        ctx.strokeStyle = hexA(vc, 0.55); ctx.lineWidth = 1; ctx.stroke();
         ctx.font = `600 10px ${this.font}`; ctx.textAlign = 'left'; ctx.fillStyle = C.text;
         const oddsTxt = f.odds ? Number(f.odds).toFixed(2) : '';
         ctx.fillText(fit(ctx, L.mode === 'wide' ? `${teamShort(f.home)} – ${teamShort(f.away)} · ${f.market ?? ''}` : `${code(f.home)}–${code(f.away)} · ${f.market ?? ''}`, tw - 44), x + 7, y + 0.5);
-        ctx.textAlign = 'right'; ctx.fillStyle = C.emerald; ctx.font = `700 10.5px ${this.font}`; ctx.fillText(oddsTxt, x + tw - 7, y + 0.5);
+        ctx.textAlign = 'right'; ctx.fillStyle = vc; ctx.font = `700 10.5px ${this.font}`; ctx.fillText(oddsTxt, x + tw - 7, y + 0.5);
         continue;
       }
       // Active card
@@ -593,7 +606,7 @@ export class MapScene {
     const total = accepted.reduce((m, f) => m * Number(f.odds), 1);
     ctx.textAlign = 'right'; ctx.font = `700 11px ${this.font}`;
     ctx.fillStyle = this.final ? (this.final.generation === 'COMPLETED' ? C.emerald : C.gold) : C.text;
-    const head = this.final ? (this.final.generation === 'COMPLETED' ? `COTĂ ${Number(this.final.totalOdds).toFixed(2)} ✓` : this.final.generation === 'NO_BET' ? 'NO BET' : 'INCOMPLET') : accepted.length ? `${accepted.length} sel. · ${total.toFixed(2)}${this.target ? ` / ${this.target}` : ''}` : this.target ? `țintă ${this.target}` : '';
+    const head = this.reviewCounts ? `✓${this.reviewCounts.solid} ⚠${this.reviewCounts.risky} ✗${this.reviewCounts.weak} · ${total.toFixed(2)}` : this.final ? (this.final.generation === 'COMPLETED' ? `COTĂ ${Number(this.final.totalOdds).toFixed(2)} ✓` : this.final.generation === 'NO_BET' ? 'NO BET' : 'INCOMPLET') : accepted.length ? `${accepted.length} sel. · ${total.toFixed(2)}${this.target ? ` / ${this.target}` : ''}` : this.target ? `țintă ${this.target}` : '';
     ctx.fillText(head, L.tray.x + L.tray.w - 10, L.tray.y + 13);
     ctx.restore();
   }
@@ -648,8 +661,9 @@ function layout(w: number, h: number): Layout {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.min(r, w / 2, h / 2);
-  g.beginPath(); g.moveTo(x + rr, y); g.arcTo(x + w, y, x + w, y + h, rr); g.arcTo(x + w, y + h, x, y + h, rr); g.arcTo(x, y + h, x, y, rr); g.arcTo(x, y, x + w, y, rr); g.closePath();
+  g.beginPath();
+  if (!(w > 0 && h > 0)) return;
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2)); g.moveTo(x + rr, y); g.arcTo(x + w, y, x + w, y + h, rr); g.arcTo(x + w, y + h, x, y + h, rr); g.arcTo(x, y + h, x, y, rr); g.arcTo(x, y, x + w, y, rr); g.closePath();
 }
 function hexA(hex: string, a: number) {
   const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);

@@ -52,7 +52,19 @@ export function slotById(id: string): SlotDefinition | undefined {
 /** Custom ticket chosen by the user: exact number of legs, a target price, a subset of agents and a time window. */
 export type CustomConfig = { target: number; legs: number; agents: string[]; window: '48h' | '7d' };
 export const CUSTOM_LIMIT_PER_DAY = 10;
+/** Votes a selection needs in a custom team of n agents: 1 (≤3), 2 (4–6), at least 3 from 7 agents up. */
+export const customThreshold = (n: number) => (n <= 3 ? 1 : n <= 6 ? 2 : Math.max(3, Math.round(n * 0.3)));
 export const isCustomSlot = (id: string) => /^CUSTOM_\d+$/.test(id);
+
+/** A ticket the user built himself and brought to the agents for review. */
+export type ReviewLeg = { fixtureId: string; marketKey: string; label: string; odds: number; match: string; league: string; kickoff: string };
+export type ReviewConfig = { legs: ReviewLeg[]; advice: string | null };
+export const REVIEW_LIMIT_PER_DAY = 10;
+export const isReviewSlot = (id: string) => /^REVIEW_\d+$/.test(id);
+/** Review jobs judge the user's own picks: wide price band, no probability floor, exactly the user's legs. */
+export function reviewPolicy(r: ReviewConfig): LegPolicy {
+  return { minOdds: 1.01, maxOdds: 50, minProbability: 0, minLegs: r.legs.length, maxLegs: r.legs.length, agentCapBonus: 0, pick: 'safest' };
+}
 
 /** Price band and probability floor derived from the price each leg needs (target^(1/legs)). */
 export function customPolicy(c: CustomConfig): LegPolicy {
@@ -71,6 +83,7 @@ export function customPolicy(c: CustomConfig): LegPolicy {
 export function slotInfo(id: string, target: number, legs?: number | null): { id: string; title: string; subtitle: string } {
   const slot = slotById(id);
   if (slot) return { id: slot.id, title: slot.title, subtitle: slot.subtitle };
+  if (isReviewSlot(id)) return { id, title: `BILETUL TĂU — COTĂ ${target}`, subtitle: `Adus la analiză${legs ? ` · ${legs} meciuri` : ''}` };
   if (isCustomSlot(id)) return { id, title: `CUSTOM — COTĂ ${target}`, subtitle: `Bilet personalizat${legs ? ` · ${legs} meciuri` : ''}` };
   if (id === 'TEN_A' || id === 'TEN_B') return { id, title: `COTĂ 10 — BILETUL ${id.slice(-1)} (vechi)`, subtitle: 'Bilet zilnic (format retras)' };
   return { id, title: id, subtitle: '' };

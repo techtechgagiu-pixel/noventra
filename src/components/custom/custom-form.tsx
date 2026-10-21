@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Minus, Plus, Sparkles } from 'lucide-react';
 import { AGENT_META, api } from '@/lib/format';
-import { customPolicy } from '@/lib/slots';
+import { customPolicy, customThreshold } from '@/lib/slots';
 
 export type AgentCard = { id: string; name: string; title: string; specialty: string; risk: number; maxOdds: number; minProbability: number; model: string | null; record: string | null };
 const TARGETS = [2, 3, 5, 10, 20, 50, 100];
@@ -99,7 +99,7 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
 
       <div className="card sticky bottom-3 z-10 flex flex-col gap-3 p-4 shadow-2xl backdrop-blur md:flex-row md:items-center" style={{ background: 'rgba(10,18,40,0.97)' }}>
         <p className="text-sm text-muted md:flex-1">
-          Cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · intră pe bilet o selecție susținută de minimum <strong className="text-text">{chosen.length >= 11 ? 3 : Math.max(1, Math.round(chosen.length * 0.3))}</strong> dintre ei. Fără „sub”. Creierul (M. Lucescu) alege pronosticul final.
+          Cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · intră pe bilet o selecție susținută de minimum <strong className="text-text">{chosen.length >= agents.length ? 3 : customThreshold(chosen.length)}</strong> dintre ei. Fără „sub”. Creierul (M. Lucescu) alege pronosticul final.
         </p>
         {error && <p className="text-sm text-rose" role="alert">{error}</p>}
         <button onClick={create} disabled={busy || !chosen.length || tooLow || tooHigh || target < 1.2} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : 'CREEAZĂ BILETUL CUSTOM'}</button>

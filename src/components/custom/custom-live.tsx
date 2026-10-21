@@ -11,7 +11,7 @@ import { DebateChat } from './debate-chat';
 type Info = Record<string, { title: string; specialty: string; maxOdds: number; minProbability: number; model?: string | null }>;
 const STATUS: Record<string, string> = { QUEUED: 'în coadă', RUNNING: 'live', WAITING: 'așteaptă limita furnizorului', PAUSED: 'în pauză', COMPLETED: 'bilet gata', INCOMPLETE: 'incomplet', NO_BET: 'NO BET', FAILED: 'eșuat' };
 
-export function CustomLive({ jobId, initialMeta, initialEvents, info }: { jobId: string; initialMeta: JobMeta; initialEvents: NexusEvent[]; info: Info }) {
+export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { href: '/?tab=custom', label: '← Bilet custom nou' } }: { jobId: string; initialMeta: JobMeta; initialEvents: NexusEvent[]; info: Info; back?: { href: string; label: string } }) {
   const { events, meta, setMeta, connected } = useJobEvents(jobId, initialEvents, initialMeta);
   const [upTo, setUpTo] = useState(0);
   const map = useRef<AgentMapHandle>(null);
@@ -25,7 +25,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info }: { jobId:
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href="/?tab=custom" className="text-sm text-muted hover:text-text">← Bilet custom nou</Link>
+        <Link href={back.href} className="text-sm text-muted hover:text-text">{back.label}</Link>
         <h2 className="font-display text-lg font-bold md:ml-2">{meta.title}</h2>
         {meta.subtitle && <span className="text-sm text-muted">{meta.subtitle}</span>}
         <span className={`chip ml-auto ${live ? 'text-emerald' : done && meta.status === 'COMPLETED' ? 'text-emerald' : 'text-muted'}`}>
@@ -47,11 +47,42 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info }: { jobId:
       </div>
       {done && meta.ticketId && (
         <div className="card flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-          <p className="text-sm text-muted">{meta.status === 'COMPLETED' ? 'Biletul tău custom e gata.' : 'Analiza s-a încheiat — vezi ce au decis agenții.'}</p>
+          <p className="text-sm text-muted">{events.some((e) => e.type === 'REVIEW_ADVICE') ? 'Analiza biletului tău e gata — verdictul e salvat cu biletul și îl urmărim până la final.' : meta.status === 'COMPLETED' ? 'Biletul tău custom e gata.' : 'Analiza s-a încheiat — vezi ce au decis agenții.'}</p>
           <Link href={`/?tab=bilete&ticket=${meta.ticketId}`} className="btn btn-primary px-5 py-3">VEZI BILETUL</Link>
         </div>
       )}
+      <ReviewVerdict events={events} upTo={upTo} />
       <DebateChat events={events} upTo={upTo} live={live} />
     </div>
+  );
+}
+
+const V: Record<string, { t: string; c: string }> = { SOLID: { t: '✓ SOLID', c: 'text-emerald border-emerald/50' }, RISCANT: { t: '⚠ RISCANT', c: 'text-gold border-gold/50' }, SLAB: { t: '✗ SLAB', c: 'text-rose border-rose/50' }, NEANALIZAT: { t: '— NEANALIZAT', c: 'text-muted border-line' } };
+
+/** Verdict for a ticket the user brought: per leg (as the map reaches it) and the brain's advice. */
+function ReviewVerdict({ events, upTo }: { events: NexusEvent[]; upTo: number }) {
+  const seen = events.filter((e) => e.seq <= upTo);
+  const legs = seen.filter((e) => e.type === 'LEG_REVIEWED');
+  const advice = seen.find((e) => e.type === 'REVIEW_ADVICE');
+  if (!legs.length && !advice) return null;
+  return (
+    <section className="card border-gold/40 p-4" aria-label="Verdictul echipei">
+      <h3 className="mb-3 font-display text-base font-bold">Verdictul echipei pentru biletul tău</h3>
+      <ul className="space-y-2">
+        {legs.map((e) => { const p = e.payload; const v = V[p.verdict] ?? V.NEANALIZAT; return (
+          <li key={e.seq} className="card-soft flex flex-wrap items-start gap-2 p-3">
+            <span className={`chip shrink-0 font-bold ${v.c}`}>{v.t}</span>
+            <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{p.match} · <span className="text-cyan">{p.label}</span> @ {Number(p.odds).toFixed(2)}</p><p className="text-xs text-muted">{p.note}</p></div>
+          </li>
+        ); })}
+      </ul>
+      {advice && (
+        <div className="mt-4 flex gap-3">
+          <img src="/agents/robert.webp" alt="" className="h-10 w-10 shrink-0 rounded-full border-2 border-gold object-cover" />
+          <div className="text-sm"><p className="font-bold text-gold">Mircea Lucescu · creierul echipei</p><p className="mt-1 leading-relaxed">{advice.payload.overall}</p>
+            <ul className="mt-2 space-y-1">{(advice.payload.advice ?? []).map((a: string, i: number) => <li key={i} className="flex gap-2"><span className="text-gold">→</span><span>{a}</span></li>)}</ul></div>
+        </div>
+      )}
+    </section>
   );
 }

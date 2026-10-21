@@ -7,18 +7,19 @@ import type { QueueItem } from '@/lib/jobs/service';
 
 const STAGE: Record<string, string> = { QUEUED: 'așteaptă să înceapă', SELECTING: 'alege meciurile', SCOUT: 'adună istoric și știri', STATS: 'calculează statistici', ANALYSIS: 'agenții analizează', DEBATE: 'agenții dezbat', VOTING: 'votează · creierul alege', BUILDING: 'construiește biletul', DONE: 'gata' };
 const ACTIVE = ['QUEUED', 'RUNNING', 'WAITING', 'PAUSED'];
-const ago = (iso: string, now: number) => { const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000)); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
+const ago = (iso: string, now: number) => { if (!now) return '…'; const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000)); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
 
 /** Live queue of analyses: what is running, what waits its turn (max 2 at once) and what just finished. */
 export function JobQueue({ initial, onlyCustom = false }: { initial: QueueItem[]; onlyCustom?: boolean }) {
   const [items, setItems] = useState(initial);
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(0); // set after mount: server and browser clocks differ (hydration)
   const active = items.some((i) => ACTIVE.includes(i.status));
 
   useEffect(() => {
     let stop = false;
     const load = async () => { try { const r = await api<{ queue: QueueItem[] }>('/api/queue'); if (!stop) setItems(r.queue); } catch { /* keep last state */ } };
     const t = setInterval(load, active ? 4000 : 20000);
+    setNow(Date.now());
     const c = setInterval(() => setNow(Date.now()), 1000);
     return () => { stop = true; clearInterval(t); clearInterval(c); };
   }, [active]);
@@ -37,7 +38,7 @@ export function JobQueue({ initial, onlyCustom = false }: { initial: QueueItem[]
         {list.map((i) => {
           const live = ACTIVE.includes(i.status);
           const pct = i.status === 'QUEUED' ? 0 : !live ? 100 : i.batches ? Math.min(98, Math.round(((i.batch - 1) / i.batches) * 100 + 100 / i.batches / 2)) : 5;
-          const href = i.custom ? `/?tab=custom&job=${i.id}` : !live && i.ticketId ? `/?tab=bilete&ticket=${i.ticketId}` : `/?tab=analiza&job=${i.id}`;
+          const href = i.custom ? `/?tab=custom&job=${i.id}` : i.review ? `/?tab=verifica&job=${i.id}` : !live && i.ticketId ? `/?tab=bilete&ticket=${i.ticketId}` : `/?tab=analiza&job=${i.id}`;
           const tone = i.status === 'PAUSED' || i.status === 'WAITING' ? 'text-gold' : i.status === 'RUNNING' ? 'text-emerald' : i.status === 'QUEUED' ? 'text-cyan' : i.generation === 'COMPLETED' ? 'text-emerald' : 'text-muted';
           return (
             <li key={i.id}>

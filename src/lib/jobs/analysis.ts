@@ -121,8 +121,8 @@ export function characterViolation(
   const cap = Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds);
   if (market.odds > cap + 1e-9) return `cota ${market.odds.toFixed(2)} depășește limita ${cap.toFixed(2)} (${agent.name} max ${agent.maxOdds.toFixed(2)}, bilet max ${policy.maxOdds.toFixed(2)})`;
   if (market.odds < policy.minOdds - 1e-9) return `cota ${market.odds.toFixed(2)} este sub minimul biletului (${policy.minOdds.toFixed(2)})`;
-  if (p.estimatedProbability !== null && p.estimatedProbability < agent.minProbability) return `probabilitatea proprie ${Math.round(p.estimatedProbability * 100)}% este sub pragul personal de ${Math.round(agent.minProbability * 100)}%`;
-  if (market.estimatedProbability === null || market.estimatedProbability < policy.minProbability) return `motorul statistic dă ${market.estimatedProbability === null ? 'n/d' : Math.round(market.estimatedProbability * 100) + '%'}, sub minimul biletului de ${Math.round(policy.minProbability * 100)}%`;
+  if (p.estimatedProbability !== null && p.estimatedProbability < agent.minProbability) return `probabilitatea proprie ${(p.estimatedProbability * 100).toFixed(1)}% este sub pragul personal de ${Math.round(agent.minProbability * 100)}%`;
+  if (market.estimatedProbability === null || market.estimatedProbability < policy.minProbability) return `motorul statistic dă ${market.estimatedProbability === null ? 'n/d' : (market.estimatedProbability * 100).toFixed(1) + '%'}, sub minimul biletului de ${(policy.minProbability * 100).toFixed(1).replace(/\.0$/, '')}%`;
   return null;
 }
 

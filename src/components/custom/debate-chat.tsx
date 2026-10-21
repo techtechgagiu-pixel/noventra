@@ -21,7 +21,7 @@ export function eventsToMessages(events: NexusEvent[]): { messages: Msg[]; match
     const base = { seq: e.seq, at: e.createdAt, fixture: e.fixtureId };
     const sys = (text: string, tone: 'info' | 'good' | 'bad' | 'warn' = 'info') => out.push({ kind: 'system', ...base, tone, text });
     switch (e.type) {
-      case 'JOB_CREATED': sys(p.custom ? `Bilet custom: cotă ${p.custom.target} din ${p.custom.legs} ${p.custom.legs === 1 ? 'meci' : 'meciuri'} · în teren: ${(p.custom.names ?? []).join(', ')}` : `Analiză pornită: ${p.title}`); break;
+      case 'JOB_CREATED': sys(p.review ? `Biletul tău a venit la analiză: ${(p.review.legs ?? []).map((l: { match: string; label: string; odds: number }) => `${l.match} — ${l.label} @ ${Number(l.odds).toFixed(2)}`).join(' · ')}` : p.custom ? `Bilet custom: cotă ${p.custom.target} din ${p.custom.legs} ${p.custom.legs === 1 ? 'meci' : 'meciuri'} · în teren: ${(p.custom.names ?? []).join(', ')}` : `Analiză pornită: ${p.title}`); break;
       case 'POOL_BUILT': sys(`${p.totalFixtures} meciuri găsite, ${p.eligible} eligibile.`); break;
       case 'MARKETS_CHECKED': sys(`${p.accepted} meciuri au minimum ${p.minimum} pronosticuri cu cotă reală; ${p.rejected} lăsate deoparte.`); break;
       case 'BATCH_STARTED': sys(`Lotul ${p.batch}/${p.of} intră la discuție: ${(p.fixtures ?? []).map((f: string) => matches[f] ?? f).join(' · ')}`); break;
@@ -45,8 +45,10 @@ export function eventsToMessages(events: NexusEvent[]): { messages: Msg[]; match
       case 'CONSENSUS_CALCULATED': sys(`${p.match}: ${p.outcome === 'QUALIFIED' ? `consens ${p.votesFor}/${p.total}` : p.outcome === 'NO_BET' ? `NO BET (${p.noBetVotes}/${p.total})` : `fără consens (max ${p.votesFor}/${p.total})`}`, p.outcome === 'QUALIFIED' ? 'good' : 'info'); break;
       case 'SELECTION_ACCEPTED': sys(`✓ Pe bilet: ${p.match} — ${p.marketLabel} @ ${Number(p.odds).toFixed(2)}`, 'good'); break;
       case 'SELECTION_REJECTED': sys(`✗ ${p.match}: ${p.reason ?? 'respins'}`, 'bad'); break;
+      case 'LEG_REVIEWED': sys(`${p.verdict === 'SOLID' ? '✓ SOLID' : p.verdict === 'RISCANT' ? '⚠ RISCANT' : '✗ SLAB'} · ${p.match} — „${p.label}” @ ${Number(p.odds).toFixed(2)}: ${p.note}`, p.verdict === 'SOLID' ? 'good' : p.verdict === 'RISCANT' ? 'warn' : 'bad'); break;
+      case 'REVIEW_ADVICE': out.push({ kind: 'agent', ...base, agent: 'robert', tone: 'brain', head: '🧠 verdictul pentru biletul tău', body: [p.overall, ...(p.advice ?? []).map((a: string) => `→ ${a}`)].join('\n') }); break;
       case 'OPTIMIZATION_COMPLETED': sys(`Construcția biletului: ${p.reason}`, p.status === 'COMPLETED' ? 'good' : 'warn'); break;
-      case 'TICKET_FINALIZED': sys(p.generation === 'COMPLETED' ? `🎟️ Bilet gata: cota ${Number(p.totalOdds).toFixed(2)} din ${p.legs} meciuri.` : p.generation === 'NO_BET' ? 'Rezultat: NO BET — niciun meci nu a trecut de agenți.' : `Bilet incomplet: ${p.reason ?? ''}`, p.generation === 'COMPLETED' ? 'good' : 'warn'); break;
+      case 'TICKET_FINALIZED': if (p.review) { sys(`🎟️ Analiza biletului tău e gata: cota ${Number(p.totalOdds).toFixed(2)} din ${p.legs} meciuri.`, 'good'); break; } sys(p.generation === 'COMPLETED' ? `🎟️ Bilet gata: cota ${Number(p.totalOdds).toFixed(2)} din ${p.legs} meciuri.` : p.generation === 'NO_BET' ? 'Rezultat: NO BET — niciun meci nu a trecut de agenți.' : `Bilet incomplet: ${p.reason ?? ''}`, p.generation === 'COMPLETED' ? 'good' : 'warn'); break;
       case 'JOB_WAITING': sys(`Așteptare ${p.retryInSeconds}s: ${p.reason}`, 'warn'); break;
       case 'JOB_PAUSED': sys(`Pauză: ${p.reason}`, 'bad'); break;
       case 'JOB_RESUMED': sys('Analiza continuă de unde a rămas.', 'warn'); break;

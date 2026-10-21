@@ -111,6 +111,8 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
     case 'JOB_PAUSED': s.status = 'PAUSED'; for (const a of VOTERS) if (['ANALYZING', 'DEBATING'].includes(s.agents[a].status)) setAgent(a, { status: 'WAITING' }); log(`Analiză pusă în pauză: ${short(p.reason, 160)}`, 'bad'); break;
     case 'JOB_RESUMED': log(p.note, 'warn'); break;
     case 'VOTE_SET_ASIDE': log(`${NAMES[e.agentId ?? ''] ?? 'Agent'}: vot nenumărat (${p.marketLabel ?? p.marketKey}) — ${short(p.reason, 140)}.`, 'warn'); break;
+    case 'LEG_REVIEWED': if (e.fixtureId) setFx(e.fixtureId, { state: p.verdict === 'SLAB' ? 'REJECTED' : 'ACCEPTED', marketLabel: p.label, odds: p.odds, votesFor: p.supporters?.length ?? 0, reason: p.note }); log(`${p.verdict === 'SOLID' ? '✓ SOLID' : p.verdict === 'RISCANT' ? '⚠ RISCANT' : '✗ SLAB'}: ${p.match} — ${p.label} @ ${p.odds}. ${short(p.note, 140)}`, p.verdict === 'SOLID' ? 'good' : p.verdict === 'RISCANT' ? 'warn' : 'bad'); break;
+    case 'REVIEW_ADVICE': log(`🧠 Mircea Lucescu: ${short(p.overall, 200)}`, 'info'); break;
     case 'ODDS_VALIDATED': break;
   }
   return s;

@@ -46,3 +46,17 @@ describe('statistical engine', () => {
     expect(s.providerUpdatedAt).toBeNull(); // ESPN does not publish change time
   });
 });
+
+describe('equivalent selections', () => {
+  it('gives "away concedes" and "home over 0.5" the same de-margined price', async () => {
+    const { modelFixture } = await import('@/lib/stats/engine');
+    const m = modelFixture({ homeHistory: [], awayHistory: [], markets: [
+      { key: '1X2:HOME', label: '1', marketType: '1X2', odds: 1.8 }, { key: '1X2:DRAW', label: 'X', marketType: '1X2', odds: 3.8 }, { key: '1X2:AWAY', label: '2', marketType: '1X2', odds: 4.2 },
+      { key: 'CS:AWAY:NO', label: 'Oaspeții primesc gol', marketType: 'CLEAN_SHEET', odds: 1.13 }, { key: 'CS:AWAY:YES', label: 'Oaspeții fără gol primit', marketType: 'CLEAN_SHEET', odds: 6 },
+      { key: 'TT:HOME:OVER:0.5', label: 'Gazdele peste 0.5', marketType: 'TEAM_TOTAL', odds: 1.14, line: 0.5 },
+    ] });
+    const cs = m.markets.find((x) => x.key === 'CS:AWAY:NO')!, tt = m.markets.find((x) => x.key === 'TT:HOME:OVER:0.5')!;
+    expect(tt.fairMarketProbability).toBe(cs.fairMarketProbability);
+    expect(Math.abs(tt.estimatedProbability! - cs.estimatedProbability!)).toBeLessThan(0.001);
+  });
+});

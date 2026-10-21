@@ -3,12 +3,15 @@ import { config } from '../config';
 import { many, one, tx } from '../db';
 import { providerConfigured, resetModelExhaustion } from '../ai/router';
 import { aiUsageToday } from '../usage';
-import { CUSTOM_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, slotInfo, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
+import { CUSTOM_LIMIT_PER_DAY, REVIEW_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, isReviewSlot, slotInfo, type ReviewLeg, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
 import { VOTING_AGENTS } from '../ai/agents';
 import { localDate } from '../time';
 import { recordEvent } from './events';
 import type { Checkpoint } from './types';
 import { kickWorker } from './worker';
+import { loadFixtures } from '../sports/fixtures';
+import { withExtraMarkets } from './pipeline';
+import { isBannedMarket } from './analysis';
 
 export class SlotError extends Error {
   constructor(message: string, public status = 400) { super(message); }
@@ -161,6 +164,64 @@ export async function customJobs(userId: string, limit = 20) {
      WHERE j.user_id=$1 AND j.slot LIKE 'CUSTOM\\_%' ORDER BY j.created_at DESC LIMIT $2`, [userId, limit]);
 }
 
+/** "Vino cu biletul tău": validates the user's own ticket against live prices and queues it for the agents. */
+export async function createReviewJob(userId: string, input: unknown, at = new Date()) {
+  const o = (input ?? {}) as { legs?: unknown; advice?: unknown };
+  const raw = Array.isArray(o.legs) ? o.legs : [];
+  const picks = raw.map((x) => ({ fixtureId: String((x as Record<string, unknown>)?.fixtureId ?? ''), marketKey: String((x as Record<string, unknown>)?.marketKey ?? '') })).filter((x) => x.fixtureId && x.marketKey);
+  if (!picks.length) throw new SlotError('Adaugă cel puțin un meci pe bilet.');
+  if (picks.length > 15) throw new SlotError('Maximum 15 meciuri pe bilet.');
+  if (new Set(picks.map((p) => p.fixtureId)).size !== picks.length) throw new SlotError('Un meci poate apărea o singură dată pe bilet.');
+  if (picks.some((p) => isBannedMarket(p.marketKey))) throw new SlotError('Pronosticurile „sub” nu sunt analizate în PRIMUL 11.');
+  const advice = typeof o.advice === 'string' && o.advice.trim() ? o.advice.trim().slice(0, 800) : null;
+  if (!providerConfigured('groq') && !providerConfigured('gemini') && !providerConfigured('openrouter') && !config.allowDemoProviders) throw new SlotError('Niciun furnizor AI nu este configurat pe server.', 503);
+  const usage = await aiUsageToday();
+  if (usage.requests + 20 > config.limits.aiDailyCalls) throw new SlotError(`Cota AI zilnică este aproape epuizată (${usage.requests}/${config.limits.aiDailyCalls} apeluri).`, 503);
+  const key = localDate(at);
+  const { fixtures } = await loadFixtures(key, 7, { top10Only: false });
+  const legs: ReviewLeg[] = [];
+  for (const p of picks) {
+    const f = fixtures.find((x) => x.id === p.fixtureId);
+    if (!f) throw new SlotError('Un meci de pe bilet nu mai apare la sursă. Reîncarcă lista.', 409);
+    const match = `${f.home} – ${f.away}`;
+    if (f.status !== 'pre' || Date.parse(f.kickoff) < Date.now() + 20 * 60_000) throw new SlotError(`${match} a început sau începe în mai puțin de 20 de minute.`, 409);
+    const full = await withExtraMarkets(f).catch(() => f);
+    const m = full.odds?.markets.find((x) => x.key === p.marketKey);
+    if (!m) throw new SlotError(`Pronosticul ales pentru ${match} nu mai este listat. Alege din nou.`, 409);
+    legs.push({ fixtureId: f.id, marketKey: m.key, label: m.label, odds: m.odds, match, league: `${f.country} · ${f.leagueName}`, kickoff: f.kickoff });
+  }
+  const target = Math.min(99999, Math.round(legs.reduce((x, l) => x * l.odds, 1) * 100) / 100);
+  const cfg = { windowStart: key, windowDays: 7, top10Only: false, maxFixtures: legs.length, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], review: { legs, advice } };
+  const seed = randomBytes(16).toString('hex');
+  const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
+  const id = await tx(async (c) => {
+    await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`review:${userId}:${key}`]);
+    const n = Number((await c.query("SELECT count(*) AS n FROM ticket_generation_jobs WHERE user_id=$1 AND period_key=$2 AND slot LIKE 'REVIEW\\_%'", [userId, key])).rows[0].n);
+    if (n >= REVIEW_LIMIT_PER_DAY) throw new SlotError(`Ai trimis deja ${REVIEW_LIMIT_PER_DAY} bilete la analiză azi. Revino mâine.`, 429);
+    const slot = `REVIEW_${n + 1}`;
+    const ins = await c.query(
+      `INSERT INTO ticket_generation_jobs (user_id, slot, period_key, target_odds, required_legs, seed, config, checkpoint, status, stage)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'QUEUED','QUEUED') RETURNING id`,
+      [userId, slot, key, target, legs.length, seed, JSON.stringify(cfg), JSON.stringify(checkpoint)],
+    );
+    const jobId = ins.rows[0].id as string;
+    await recordEvent(jobId, { type: 'JOB_CREATED', stage: 'QUEUED', payload: { slot, title: `BILETUL TĂU — COTĂ ${target}`, period: key, authorizedBy: 'click TRIMITE LA ANALIZĂ', review: { legs: legs.map((l) => ({ match: l.match, label: l.label, odds: l.odds })), advice } } }, c);
+    await recordEvent(jobId, { type: 'TARGET_SELECTED', stage: 'QUEUED', payload: { target, requiredLegs: legs.length, tolerance: 0, window: { windowStart: key, windowDays: 7 } } }, c);
+    await c.query("INSERT INTO audit_logs(user_id, action, detail) VALUES ($1,'job_created',$2)", [userId, JSON.stringify({ jobId, slot, period: key, legs: legs.length })]);
+    return jobId;
+  });
+  kickWorker();
+  return { jobId: id, created: true };
+}
+
+/** The user's reviewed tickets, newest first. */
+export async function reviewJobs(userId: string, limit = 12) {
+  return many<{ id: string; status: string; target_odds: string; required_legs: number; created_at: Date; ticket_id: string | null; outcome_status: string | null; summary: { review?: { solid: number; risky: number; weak: number } } | null }>(
+    `SELECT j.id, j.status, j.target_odds, j.required_legs, j.created_at, t.id AS ticket_id, t.outcome_status, t.summary
+     FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
+     WHERE j.user_id=$1 AND j.slot LIKE 'REVIEW\\_%' ORDER BY j.created_at DESC LIMIT $2`, [userId, limit]);
+}
+
 /** Resumes the SAME job (same seed, same candidate order). Never creates a new draw. */
 export async function resumeJob(userId: string, jobId: string) {
   const job = await one<{ status: string }>('SELECT status FROM ticket_generation_jobs WHERE id=$1 AND user_id=$2', [jobId, userId]);
@@ -191,7 +252,7 @@ export async function jobQueue(userId: string) {
       id: r.id, slot: r.slot, title: info.title, status: r.status, stage: r.stage, createdAt: r.created_at.toISOString(),
       startedAt: r.started_at?.toISOString() ?? null, finishedAt: r.finished_at?.toISOString() ?? null, nextRunAt: r.next_run_at.toISOString(), lastError: r.last_error,
       batch: Math.min(batches, (r.checkpoint.batchIndex ?? 0) + (r.status === 'COMPLETED' ? 0 : 1)), batches, analyzed: r.checkpoint.analyzed ?? 0, qualified: r.checkpoint.qualified ?? 0,
-      agents: r.config.custom?.agents ?? null, custom: isCustomSlot(r.slot), position: r.status === 'QUEUED' ? waiting.indexOf(r.id) + 1 : null,
+      agents: r.config.custom?.agents ?? null, custom: isCustomSlot(r.slot), review: isReviewSlot(r.slot), position: r.status === 'QUEUED' ? waiting.indexOf(r.id) + 1 : null,
       ticketId: r.ticket_id, actualOdds: r.actual_odds ? Number(r.actual_odds) : null, generation: r.generation_status,
     };
   });

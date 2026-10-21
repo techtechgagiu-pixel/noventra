@@ -31,6 +31,7 @@ export type Checkpoint = {
   debateFixtures?: string[];
   resumedCount?: number;
   /** The brain's choice per fixture (key, or null = reject the shortlist). Absent = brain unavailable → automatic rule. */
+  review?: Record<string, LegReview>;
   brain?: Record<string, { key: string | null; backup?: string | null; reason: string; model: string | null }>;
 };
 
@@ -45,4 +46,14 @@ export type FixtureSnapshot = {
   dataQuality: { historyHome: number; historyAway: number; shotsAvailable: boolean; standings: boolean; oddsObservedAt: string };
   /** Real dated headlines for HANȚU (Google News); absent for older snapshots and demo data. */
   news?: { home: NewsItem[]; away: NewsItem[]; errors: string[] };
+};
+
+/** Verdict on one leg of a ticket the user brought for review. */
+export type LegReview = {
+  fixtureId: string; match: string; marketKey: string; label: string; odds: number;
+  verdict: 'SOLID' | 'RISCANT' | 'SLAB' | 'NEANALIZAT';
+  supporters: string[]; against: Array<{ agentId: string; pick: string | null }>; noBet: string[]; responded: number;
+  engineProbability: number | null; fairProbability: number | null;
+  suggestion: { key: string; label: string; odds: number; supporters: number; probability: number | null } | null;
+  note: string;
 };

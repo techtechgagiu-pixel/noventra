@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, History, SlidersHorizontal, Ticket } from 'lucide-react';
+import { Activity, ClipboardCheck, History, SlidersHorizontal, Ticket } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { many } from '@/lib/db';
 import { slotStates } from '@/lib/jobs/service';
@@ -15,14 +15,15 @@ import { slotById } from '@/lib/slots';
 import { VOTING_AGENTS } from '@/lib/ai/agents';
 import { activeAssignments } from '@/lib/ai/assignments';
 import { allTrackRecords } from '@/lib/track-record';
-import { customJobs, jobQueue } from '@/lib/jobs/service';
+import { customJobs, jobQueue, reviewJobs } from '@/lib/jobs/service';
+import { ReviewBuilder } from '@/components/review/review-builder';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'bilete' | 'custom' | 'analiza' | 'istoric';
+type Tab = 'bilete' | 'custom' | 'verifica' | 'analiza' | 'istoric';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -30,13 +31,14 @@ const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string }> }) {
   const user = (await currentUser())!;
   const sp = await searchParams;
-  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' ? sp.tab : 'bilete';
+  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' ? sp.tab : 'bilete';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof Ticket; badge?: boolean }> = [
     { id: 'bilete', label: 'Bilete', icon: Ticket },
     { id: 'custom', label: 'Custom', icon: SlidersHorizontal, badge: running.some((j) => j.slot.startsWith('CUSTOM_')) },
+    { id: 'verifica', label: 'Biletul tău', icon: ClipboardCheck, badge: running.some((j) => j.slot.startsWith('REVIEW_')) },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
     { id: 'istoric', label: 'Istoric', icon: History },
   ];
@@ -54,7 +56,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
             {tabs.map(({ id, label, icon: Icon, badge }) => (
               <Link key={id} href={`/?tab=${id}`} aria-current={tab === id ? 'page' : undefined}
                 className={`relative flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition md:px-4 ${tab === id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:text-text'}`}>
-                <Icon size={16} aria-hidden /> <span className={id === 'custom' || id === 'istoric' ? 'hidden min-[420px]:inline' : ''}>{label}</span>
+                <Icon size={16} aria-hidden /> <span className={id === 'bilete' || id === 'analiza' ? 'hidden sm:inline' : 'hidden md:inline'}>{label}</span>
                 {badge && <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-emerald" aria-label="analiză în curs" />}
               </Link>
             ))}
@@ -65,6 +67,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-6">
         {tab === 'bilete' && <BileteTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} running={running.length} />}
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
+        {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} />}
       </main>
@@ -180,6 +183,49 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">Cotă {Number(j.target_odds)} · {j.required_legs} meciuri{j.actual_odds ? <span className="text-emerald"> → {Number(j.actual_odds).toFixed(2)}</span> : null}</p>
                     <p className="text-xs text-muted">{fmtDateTime(j.created_at.toISOString())} · {(c?.agents ?? []).length} agenți</p>
+                  </div>
+                  <span className="chip text-muted">{j.outcome_status === 'WON' ? 'câștigat' : j.outcome_status === 'LOST' ? 'pierdut' : CUSTOM_STATUS[j.status] ?? j.status}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
+  if (job && UUID.test(job)) {
+    const meta = await jobMeta(userId, job);
+    if (meta) {
+      const cards = await agentCards();
+      const events = (await jobEvents(userId, job, 0)) ?? [];
+      const info = Object.fromEntries(cards.map((c) => [c.id, { title: c.title, specialty: c.specialty, maxOdds: c.maxOdds, minProbability: c.minProbability, model: c.model }]));
+      return <CustomLive key={job} jobId={job} initialMeta={plain(meta)} initialEvents={plain(events)} info={info} back={{ href: '/?tab=verifica', label: '← Alt bilet la analiză' }} />;
+    }
+  }
+  const recent = await reviewJobs(userId, 9);
+  return (
+    <div className="space-y-6 pb-16 lg:pb-0">
+      <div>
+        <h1 className="font-display text-2xl font-bold">Vino cu biletul tău la analiză</h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Îți faci biletul din meciurile cu cote reale, le lași tacticienilor sfaturile tale și îl trimiți la analiză. Cei 12 agenți îl dezbat live pe hartă, îți spun ce meci e solid, riscant sau slab, ce să înlocuiești, iar Mircea Lucescu îți dă verdictul final. Biletul rămâne salvat și îl urmărim verde/roșu până la final.</p>
+      </div>
+      <JobQueue initial={plain(await jobQueue(userId))} />
+      <ReviewBuilder />
+      {recent.length > 0 && (
+        <section>
+          <h3 className="mb-2 font-display text-lg font-bold">Biletele tale analizate</h3>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {recent.map((j) => {
+              const r = j.summary?.review;
+              const tone = j.outcome_status === 'WON' ? 'border-emerald/60' : j.outcome_status === 'LOST' ? 'border-rose/60' : '';
+              return (
+                <Link key={j.id} href={`/?tab=verifica&job=${j.id}`} className={`card-soft flex items-center gap-3 p-3 hover:border-cyan/50 ${tone}`}>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">Cotă {Number(j.target_odds)} · {j.required_legs} meciuri</p>
+                    <p className="text-xs text-muted">{fmtDateTime(j.created_at.toISOString())}{r ? ` · ✓${r.solid} ⚠${r.risky} ✗${r.weak}` : ''}</p>
                   </div>
                   <span className="chip text-muted">{j.outcome_status === 'WON' ? 'câștigat' : j.outcome_status === 'LOST' ? 'pierdut' : CUSTOM_STATUS[j.status] ?? j.status}</span>
                 </Link>
