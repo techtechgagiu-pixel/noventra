@@ -24,6 +24,7 @@ export type JobRow = {
   id: string; user_id: string; slot: string; period_key: string; target_odds: string; required_legs: number | null; seed: string;
   config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[] };
   status: string; stage: Stage; checkpoint: Checkpoint; candidate_order: CandidateEntry[] | null; eligible_count: number | null; attempt_count: number;
+  created_at?: Date | string;
 };
 
 /** Deterministic seeded PRNG (mulberry32 over a SHA-256 of the seed). Same seed → same ordering. */
@@ -53,10 +54,17 @@ async function discover(job: JobRow) {
   await setStage(job, 'SELECTING', cp);
   const { fixtures, errors } = await loadFixtures(job.config.windowStart, job.config.windowDays, { top10Only: job.config.top10Only });
   const now = Date.now();
+  const pol = jobPolicy(job);
+  // Daily tickets use a rolling window measured from the job's creation: start ≥ minLeadHours, ≤ maxAheadHours.
+  const createdAt = job.created_at ? new Date(job.created_at).getTime() : now;
+  const leadMs = pol.minLeadHours ? pol.minLeadHours * 3600_000 : MIN_LEAD_MS;
+  const aheadMs = pol.maxAheadHours ? pol.maxAheadHours * 3600_000 : Number.POSITIVE_INFINITY;
   const entries: CandidateEntry[] = fixtures.map((f) => {
     let reason: string | undefined;
+    const ko = Date.parse(f.kickoff);
     if (f.status !== 'pre') reason = 'Meciul a început sau s-a încheiat';
-    else if (Date.parse(f.kickoff) < now + MIN_LEAD_MS) reason = 'Începe în mai puțin de 20 de minute';
+    else if (ko < Math.max(now + MIN_LEAD_MS, createdAt + leadMs)) reason = pol.minLeadHours ? `Începe în mai puțin de ${pol.minLeadHours} ore` : 'Începe în mai puțin de 20 de minute';
+    else if (ko > createdAt + aheadMs) reason = `Începe peste mai mult de ${pol.maxAheadHours} de ore`;
     else if (!f.odds) reason = f.provider === 'lpf' ? 'Sursa oficială LPF nu publică cote verificabile' : 'Fără cote verificabile la sursă';
     else if (!f.odds.markets.some((m) => m.marketType === '1X2')) reason = 'Piața 1X2 lipsește';
     return { fixtureId: f.id, home: f.home, away: f.away, league: f.leagueName, kickoff: f.kickoff, eligible: !reason, reason };

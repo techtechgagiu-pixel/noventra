@@ -24,21 +24,24 @@ export type LegPolicy = {
   minOdds: number; maxOdds: number; minProbability: number; minLegs: number; maxLegs: number;
   /** Added to every agent's own max price (weekly needs bigger legs). */
   agentCapBonus?: number;
+  /** Daily tickets: kickoff must be at least minLeadHours and at most maxAheadHours from the moment of creation. */
+  minLeadHours?: number;
+  maxAheadHours?: number;
   /** Which qualified selection wins a fixture: the one most agents back ('safest') or the highest price still ≥ threshold ('highest'). */
   pick?: 'safest' | 'highest';
 };
 export const POLICIES = {
-  five: { minOdds: 1.15, maxOdds: 1.65, minProbability: 0.6, minLegs: 3, maxLegs: 7 },
-  two: { minOdds: 1.12, maxOdds: 1.45, minProbability: 0.68, minLegs: 2, maxLegs: 4 },
+  five: { minOdds: 1.15, maxOdds: 1.65, minProbability: 0.6, minLegs: 3, maxLegs: 7, minLeadHours: 2, maxAheadHours: 48 },
+  two: { minOdds: 1.12, maxOdds: 1.45, minProbability: 0.68, minLegs: 2, maxLegs: 4, minLeadHours: 2, maxAheadHours: 48 },
   // 12 legs × ~1.47 average ≈ 100: small prices alone cannot reach it, so the weekly band starts at 1.35 and allows up to 2.00.
   weekly: { minOdds: 1.35, maxOdds: 2.0, minProbability: 0.5, minLegs: 12, maxLegs: 12, agentCapBonus: 0.3, pick: 'highest' },
 } satisfies Record<string, LegPolicy>;
 
 export const SLOTS: readonly SlotDefinition[] = [
-  { id: 'FIVE_A', title: 'COTĂ 5 — BILETUL A', subtitle: 'Azi și mâine · minimum 3 meciuri, cote 1.15–1.65', target: 5, period: 'daily', requiredLegs: null, variant: 'A', windowDays: 2, policy: POLICIES.five },
-  { id: 'FIVE_B', title: 'COTĂ 5 — BILETUL B', subtitle: 'Azi și mâine · minimum 3 meciuri, cote 1.15–1.65', target: 5, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 2, policy: POLICIES.five },
-  { id: 'TWO_A', title: 'COTĂ 2 — BILETUL A', subtitle: 'Azi și mâine · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'A', windowDays: 2, policy: POLICIES.two },
-  { id: 'TWO_B', title: 'COTĂ 2 — BILETUL B', subtitle: 'Azi și mâine · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 2, policy: POLICIES.two },
+  { id: 'FIVE_A', title: 'COTĂ 5 — BILETUL A', subtitle: 'Meciuri peste 2–48 de ore · minimum 3 meciuri, cote 1.15–1.65', target: 5, period: 'daily', requiredLegs: null, variant: 'A', windowDays: 3, policy: POLICIES.five },
+  { id: 'FIVE_B', title: 'COTĂ 5 — BILETUL B', subtitle: 'Meciuri peste 2–48 de ore · minimum 3 meciuri, cote 1.15–1.65', target: 5, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 3, policy: POLICIES.five },
+  { id: 'TWO_A', title: 'COTĂ 2 — BILETUL A', subtitle: 'Meciuri peste 2–48 de ore · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'A', windowDays: 3, policy: POLICIES.two },
+  { id: 'TWO_B', title: 'COTĂ 2 — BILETUL B', subtitle: 'Meciuri peste 2–48 de ore · cote mici 1.12–1.45', target: 2, period: 'daily', requiredLegs: null, variant: 'B', windowDays: 3, policy: POLICIES.two },
   { id: 'WEEKLY_100', title: 'BILETUL SĂPTĂMÂNII', subtitle: 'COTĂ 100 — 12 MECIURI · cote 1.35–2.00', target: 100, period: 'weekly', requiredLegs: 12, variant: 'W', windowDays: 7, policy: POLICIES.weekly },
 ] as const;
 

@@ -47,7 +47,9 @@ export async function teamHistory(fixture: Fixture, side: 'home' | 'away', limit
   if (fixture.provider === 'demo' && hg.__bmHistoryHook) return { matches: hg.__bmHistoryHook(fixture, side).filter((m) => Date.parse(m.date) < Date.parse(fixture.kickoff)), missing: ['DEMO: istoric sintetic de test'] };
   const teamId = side === 'home' ? fixture.homeTeamId : fixture.awayTeamId;
   if (fixture.provider !== 'espn' || !teamId) return { matches: [], missing: ['Istoricul echipei nu este disponibil la această sursă.'] };
-  const events = await espnTeamPastEvents(fixture.leagueKey, teamId, fixture.kickoff, limit);
+  let events: Awaited<ReturnType<typeof espnTeamPastEvents>> = [];
+  try { events = await espnTeamPastEvents(fixture.leagueKey, teamId, fixture.kickoff, limit); }
+  catch (error) { return { matches: [], missing: [`Istoricul echipei nu a putut fi citit acum (${(error as Error).message}).`] }; }
   const missing: string[] = [];
   const matches: HistoricalMatch[] = [];
   for (const e of events) {

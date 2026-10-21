@@ -20,7 +20,7 @@ async function claim(): Promise<(JobRow & { recovered: boolean }) | null> {
        ORDER BY next_run_at LIMIT 1 FOR UPDATE SKIP LOCKED)
      UPDATE ticket_generation_jobs j SET lease_owner=$1, lease_expires_at=now() + ($2 || ' milliseconds')::interval, status='RUNNING', started_at=COALESCE(started_at, now())
      FROM picked WHERE j.id = picked.id
-     RETURNING j.id, j.user_id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.target_odds, j.required_legs, j.seed, j.config, j.status, j.stage, j.checkpoint, j.candidate_order, j.eligible_count, j.attempt_count, picked.recovered`,
+     RETURNING j.id, j.user_id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.target_odds, j.required_legs, j.seed, j.config, j.status, j.stage, j.checkpoint, j.candidate_order, j.eligible_count, j.attempt_count, j.created_at, picked.recovered`,
     [WORKER_ID, String(LEASE_MS)],
   );
 }

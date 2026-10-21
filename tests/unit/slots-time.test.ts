@@ -29,7 +29,7 @@ describe('ticket slots', () => {
   });
   it('fixture windows: daily today+4 days, weekly 7 days from creation', () => {
     const at = new Date('2026-10-22T08:00:00Z');
-    expect(fixtureWindow(slotById('TWO_B')!, at)).toMatchObject({ startDate: '2026-10-22', endDateExclusive: '2026-10-24', days: 2 });
+    expect(fixtureWindow(slotById('TWO_B')!, at)).toMatchObject({ startDate: '2026-10-22', endDateExclusive: '2026-10-25', days: 3 });
     expect(fixtureWindow(slotById('WEEKLY_100')!, at)).toMatchObject({ startDate: '2026-10-22', endDateExclusive: '2026-10-29', days: 7 });
   });
   it('local midnight conversion handles DST', () => {
