@@ -77,6 +77,8 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
   };
   if (ref.provider === 'groq' && ref.model.startsWith('openai/gpt-oss')) { body.reasoning_effort = 'low'; body.include_reasoning = false; }
   if (ref.provider === 'groq' && ref.model.startsWith('qwen/')) { body.reasoning_effort = 'none'; }
+  // Reasoning models would spend the whole output budget thinking; agents need the JSON, not the chain of thought.
+  if (ref.provider === 'openrouter') { body.reasoning = { effort: 'low', exclude: true }; }
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
