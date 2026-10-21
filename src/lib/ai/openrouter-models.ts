@@ -11,7 +11,8 @@ export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; 
   mihai: { model: 'openai/gpt-6-luna', inPerM: 0.1, outPerM: 0.5 },
   alex: { model: 'xiaomi/mimo-v2.6-flash', inPerM: 0.14, outPerM: 0.28 },
   diana: { model: 'z-ai/glm-5.3-flash', inPerM: 0.041, outPerM: 0.12 },
-  robert: { model: 'mistralai/mistral-small-3.2-24b-instruct', inPerM: 0.094, outPerM: 0.25 },
+  // Mircea Lucescu is also the team's brain: one strong model for both his vote and his decisions (2026-10-21).
+  robert: { model: 'openai/gpt-6-luna-pro', inPerM: 0.1, outPerM: 0.5 },
   ioana: { model: 'qwen/qwen3.8-flash', inPerM: 0.15, outPerM: 0.47 },
   radu: { model: 'meta-llama/llama-4-maverick', inPerM: 0.188, outPerM: 0.652 },
   elena: { model: 'google/gemma-4-31b-it', inPerM: 0.2, outPerM: 0.4 },
