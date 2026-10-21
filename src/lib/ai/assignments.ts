@@ -1,20 +1,29 @@
 import { many, query, tx } from '../db';
 import { AGENTS, PROMPT_VERSION, systemPrompt } from './agents';
 import type { ModelRef, Provider } from './router';
+import { config } from '../config';
+import { openRouterDefault } from './openrouter-models';
 
 export type Assignment = { agentId: string; primary: ModelRef; fallback: ModelRef | null; promptVersion: string };
 
 let seeded = false;
 /** Ensures prompt versions and a default model assignment exist (idempotent). */
+/** Code default for an agent: its own OpenRouter model when a key is configured (free model as fallback), else the free models. */
+function codeDefault(a: (typeof AGENTS)[number]): { primary: ModelRef; fallback: ModelRef | null } {
+  const or = config.openRouterApiKey ? openRouterDefault(a.id, a.defaultModel) : null;
+  return or ?? { primary: a.defaultModel, fallback: a.defaultFallback };
+}
+
 export async function ensureAgentConfig() {
   if (seeded) return;
   for (const a of AGENTS) {
+    const d = codeDefault(a);
     await query('INSERT INTO agent_prompt_versions(agent_id, version, content) VALUES ($1,$2,$3) ON CONFLICT (agent_id, version) DO NOTHING', [a.id, PROMPT_VERSION, systemPrompt(a)]);
     await query(
       `INSERT INTO agent_model_assignments(agent_id, provider, model_id, fallback_provider, fallback_model_id, active, reason)
        SELECT $1,$2,$3,$4,$5,true,'Configurație implicită verificată în catalogul furnizorului'
        WHERE NOT EXISTS (SELECT 1 FROM agent_model_assignments WHERE agent_id=$1 AND active)`,
-      [a.id, a.defaultModel.provider, a.defaultModel.model, a.defaultFallback?.provider ?? null, a.defaultFallback?.model ?? null],
+      [a.id, d.primary.provider, d.primary.model, d.fallback?.provider ?? null, d.fallback?.model ?? null],
     );
     // A system default (never edited by an admin) follows the code's current verified default, as a new version.
     await query(
@@ -22,8 +31,8 @@ export async function ensureAgentConfig() {
          AND (provider, model_id, COALESCE(fallback_provider,''), COALESCE(fallback_model_id,'')) IS DISTINCT FROM ($2::text, $3::text, COALESCE($4::text,''), COALESCE($5::text,''))),
        off AS (UPDATE agent_model_assignments SET active=false WHERE id IN (SELECT id FROM cur) RETURNING id)
        INSERT INTO agent_model_assignments(agent_id, provider, model_id, fallback_provider, fallback_model_id, active, reason)
-       SELECT $1,$2,$3,$4,$5,true,'Implicit actualizat: încărcare mutată pe Gemini pentru limita zilnică Groq (200k tokeni/model)' FROM off`,
-      [a.id, a.defaultModel.provider, a.defaultModel.model, a.defaultFallback?.provider ?? null, a.defaultFallback?.model ?? null],
+       SELECT $1,$2,$3,$4,$5,true,'Implicit actualizat din cod (model propriu OpenRouter sau modele gratuite)' FROM off`,
+      [a.id, d.primary.provider, d.primary.model, d.fallback?.provider ?? null, d.fallback?.model ?? null],
     );
   }
   seeded = true;

@@ -4,6 +4,10 @@
 > `ADMIN_EMAILS` entry); tickets from former Google accounts were merged into it. The UI is one page (`/`) with three tabs —
 > `?tab=bilete` (slots, `&ticket=<id>`), `?tab=analiza` (live NEXUS `&job=<id>`, replay `&replay=<ticketId>`), `?tab=istoric`.
 > Old routes (/dashboard, /tickets/…, /nexus, …) redirect there. Agents run in parallel within a batch (batch size 4).
+>
+> Rules added 2026-10-21: no „Under” selections at all (`isBannedMarket`); a ticket with 3+ legs may not have more than half
+> of its legs on one market type. With `OPENROUTER_API_KEY` set, each voting agent runs on its own vendor's model
+> (`src/lib/ai/openrouter-models.ts`, free Gemini/Groq model as fallback) under a daily cap `OPENROUTER_DAILY_USD` (default 1.5).
 
 **Six Minds. One Decision.** — analiză de fotbal cu șase agenți AI, pe date reale, cu replay complet al deciziilor.
 

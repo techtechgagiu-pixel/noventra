@@ -423,7 +423,7 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
     const est = s.model.markets.find((m) => m.key === r.market_key)!;
     const risk = riskClass(est.estimatedProbability, s.model.uncertainty);
     const quality = (r.votes_for / VOTING_AGENTS.length) * (s.model.uncertainty === 'scăzută' ? 1 : s.model.uncertainty === 'medie' ? 0.85 : 0.65) * (est.estimatedProbability ?? 0.3);
-    return [{ fixtureId: r.fixture_id, teams: [s.fixture.home, s.fixture.away], odds: r.validation.currentOdds, bookmaker: r.validation.bookmaker, quality, risk, marketKey: r.market_key, label: est.label, observedAt: r.validation.observedAt, probability: est.estimatedProbability, riskLabel: risk, snapshot: s }];
+    return [{ fixtureId: r.fixture_id, teams: [s.fixture.home, s.fixture.away], odds: r.validation.currentOdds, bookmaker: r.validation.bookmaker, quality, risk, family: r.market_key.split(':')[0], marketKey: r.market_key, label: est.label, observedAt: r.validation.observedAt, probability: est.estimatedProbability, riskLabel: risk, snapshot: s }];
   });
 }
 

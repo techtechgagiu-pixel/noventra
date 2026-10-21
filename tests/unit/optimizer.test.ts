@@ -55,3 +55,18 @@ describe('prudent tickets', () => {
     expect(r.legs.map((l) => l.fixtureId).sort()).toEqual(['x', 'z']);
   });
 });
+
+describe('variety rule', () => {
+  const c = (id: string, odds: number, family: string): Candidate => ({ fixtureId: id, teams: [id + 'h', id + 'a'], odds, bookmaker: 'DK', quality: 0.5, risk: 'LOW', probability: 0.9 / odds, family });
+  it('with 3+ legs, no market type fills more than half of the ticket', () => {
+    const r = optimizeTicket({ candidates: [c('a', 1.5, 'DC'), c('b', 1.5, 'DC'), c('d', 1.5, 'DC'), c('e', 1.55, '1X2'), c('f', 1.45, 'TOTAL')], target: 5, requiredLegs: null, tolerance: 0.15, minLegs: 3, maxLegs: 7, maxLegOdds: 1.65 });
+    expect(r.status).toBe('COMPLETED');
+    const counts = r.legs.reduce<Record<string, number>>((m, l) => ({ ...m, [l.family!]: (m[l.family!] ?? 0) + 1 }), {});
+    expect(Math.max(...Object.values(counts))).toBeLessThanOrEqual(Math.ceil(r.legs.length / 2));
+  });
+  it('all-same-type candidates give an honest INCOMPLETE', () => {
+    const r = optimizeTicket({ candidates: [c('a', 1.5, 'DC'), c('b', 1.5, 'DC'), c('d', 1.55, 'DC'), c('e', 1.5, 'DC')], target: 5, requiredLegs: null, tolerance: 0.15, minLegs: 3, maxLegs: 7, maxLegOdds: 1.65 });
+    expect(r.status).toBe('INCOMPLETE');
+    expect(r.reason).toMatch(/prea asemănătoare/);
+  });
+});

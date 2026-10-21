@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { config } from '../config';
 import { many, query } from '../db';
 import { aiUsageToday, recordProviderUsage } from '../usage';
+import { OPENROUTER_PRICE } from './openrouter-models';
 
 export type Provider = 'groq' | 'gemini' | 'openrouter';
 export type ModelRef = { provider: Provider; model: string };
@@ -27,7 +28,7 @@ export function providerConfigured(p: Provider) {
 
 // Pacing so a single instance stays inside free-tier limits. Groq free tier allows ~8,000 tokens/min
 // per model; we read the provider's x-ratelimit headers and wait instead of triggering 429s.
-const MIN_INTERVAL_MS: Record<Provider, number> = { groq: 2500, gemini: 7000, openrouter: 3000 };
+const MIN_INTERVAL_MS: Record<Provider, number> = { groq: 2500, gemini: 7000, openrouter: 400 };
 const lastCall = new Map<string, number>();
 const tokenWindow = new Map<string, { remaining: number; resetAt: number }>();
 const MAX_INLINE_WAIT_MS = 45_000;
@@ -198,6 +199,7 @@ export async function structuredCall<T>(opts: {
     const exhausted = exhaustedModels();
     const until = exhausted.get(key) ?? 0;
     if (until > Date.now()) { shortestWait = Math.min(shortestWait, until - Date.now()); continue; }
+    if (ref.provider === 'openrouter' && !(await openRouterBudgetLeft())) { lastError = new ProviderUnavailableError('openrouter', `Plafonul zilnic OpenRouter (${config.openRouterDailyUsd} USD) a fost atins.`); continue; }
     try {
       return await attempt(ref, i > 0);
     } catch (error) {
@@ -226,6 +228,19 @@ export function resetModelExhaustion() {
   const m = exhaustedModels();
   for (const [k, until] of m) if (until - Date.now() < 15 * 60_000) m.delete(k);
 }
+
+/** Estimated OpenRouter spend today (UTC), from logged tokens × catalogue prices; cached 20 s. */
+let spendCache: { at: number; usd: number } | null = null;
+export async function openRouterSpendToday(): Promise<number> {
+  if (spendCache && Date.now() - spendCache.at < 20_000) return spendCache.usd;
+  const rows = await many<{ model: string; i: string | null; o: string | null }>(
+    `SELECT requested_model_id AS model, sum(input_tokens) AS i, sum(output_tokens) AS o FROM model_usage_logs
+     WHERE provider='openrouter' AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' GROUP BY 1`).catch(() => []);
+  const usd = rows.reduce((sum, r) => { const p = OPENROUTER_PRICE.get(r.model) ?? { inPerM: 1, outPerM: 3 }; return sum + (Number(r.i ?? 0) * p.inPerM + Number(r.o ?? 0) * p.outPerM) / 1e6; }, 0);
+  spendCache = { at: Date.now(), usd };
+  return usd;
+}
+async function openRouterBudgetLeft() { return (await openRouterSpendToday()) < config.openRouterDailyUsd; }
 
 /** Tests only: simulates the providers' quota reset (e.g. the next day). */
 export function clearModelExhaustionForTests() { exhaustedModels().clear(); }

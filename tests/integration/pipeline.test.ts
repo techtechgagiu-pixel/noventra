@@ -41,7 +41,7 @@ describe('slot locking', () => {
 
 describe('daily ticket end-to-end (DEMO data, fake AI transport)', () => {
   it('generates, persists, locks, and replays with zero AI calls', async () => {
-    const ai: FakeAi = { calls: [], pick: (id) => (['demo:0', 'demo:1', 'demo:2', 'demo:3', 'demo:4'].includes(id) ? '1X2:HOME' : null) };
+    const ai: FakeAi = { calls: [], pick: (id) => (['demo:0', 'demo:1', 'demo:2', 'demo:3', 'demo:4'].includes(id) ? (Number(id.split(':')[1]) % 2 ? 'TOTAL:OVER:1.5' : '1X2:HOME') : null) };
     // Prudent COTĂ 5: small prices only (≤ 1.65), at least 3 legs.
     installFakes(demoFixtures(9, (i) => ({ home: 1.4 + (i % 3) * 0.1, draw: 4.2, away: 6.5, dc: 1.1 })), ai);
     const u = await makeUser();
@@ -143,7 +143,7 @@ describe('provider quota failure and recovery', () => {
 
 describe('weekly ticket', () => {
   it('builds exactly 12 distinct fixtures when enough qualify', async () => {
-    const ai: FakeAi = { calls: [], pick: () => '1X2:HOME' };
+    const ai: FakeAi = { calls: [], pick: (id) => (Number(id.split(':')[1]) % 2 ? 'TOTAL:OVER:1.5' : '1X2:HOME') };
     installFakes(demoFixtures(16, (i) => ({ home: [1.4, 1.45, 1.5, 1.55][i % 4], draw: 4.2, away: 7, dc: 1.1 })), ai);
     const u = await makeUser();
     const { jobId } = await createOrGetJob(u, 'WEEKLY_100');

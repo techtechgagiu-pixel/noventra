@@ -15,6 +15,7 @@ export function demoFixtures(n: number, oddsFor = (i: number) => ({ home: 1.6 + 
       odds: { bookmaker: 'DEMO Book', source: 'DEMO', observedAt: new Date().toISOString(), providerUpdatedAt: null, markets: [
         { key: '1X2:HOME', label: `DEMO Home ${i} câștigă (1)`, marketType: '1X2', odds: o.home }, { key: '1X2:DRAW', label: 'Egal (X)', marketType: '1X2', odds: o.draw }, { key: '1X2:AWAY', label: `DEMO Away ${i} câștigă (2)`, marketType: '1X2', odds: o.away },
         { key: 'DC:1X', label: `DEMO Home ${i} sau egal (1X)`, marketType: 'DOUBLE_CHANCE', odds: o.dc },
+        { key: 'TOTAL:OVER:1.5', label: 'Peste 1.5 goluri', marketType: 'TOTAL', odds: o.home, line: 1.5 }, { key: 'TOTAL:UNDER:1.5', label: 'Sub 1.5 goluri', marketType: 'TOTAL', odds: 3.2, line: 1.5 },
       ] }, fetchedAt: new Date().toISOString(),
     } satisfies Fixture;
   });

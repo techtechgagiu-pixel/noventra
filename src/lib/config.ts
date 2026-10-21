@@ -16,6 +16,8 @@ export const config = {
   groqApiKey: process.env.GROQ_API_KEY || '',
   geminiApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
   openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
+  /** Daily spend cap for paid OpenRouter models (USD, UTC day). Over the cap, agents fall back to their free models. */
+  openRouterDailyUsd: Number(process.env.OPENROUTER_DAILY_USD || '1.5'),
   oddsApiKey: process.env.ODDS_API_KEY || '',
   limits: {
     aiDailyCalls: num('AI_DAILY_CALL_LIMIT', 3000),

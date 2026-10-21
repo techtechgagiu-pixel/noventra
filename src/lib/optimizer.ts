@@ -10,6 +10,7 @@ export type Candidate = {
   quality: number; // 0..1 — consensus strength × data quality
   risk: 'LOW' | 'MEDIUM' | 'HIGH';
   probability?: number | null; // stats-engine probability that this leg wins
+  family?: string; // market type (1X2, DC, TOTAL, TT, AH) — at most half of a ticket may share one
 };
 
 export type OptimizerResult = {
@@ -58,7 +59,16 @@ export function optimizeTicket(input: { candidates: Candidate[]; target: number;
     }
     layers = next.map((l, size) => prune(l, size, goal, input.requiredLegs));
   }
-  const pool = input.requiredLegs ? layers[input.requiredLegs] : layers.slice(minLegs).flat();
+  const allPool = input.requiredLegs ? layers[input.requiredLegs] : layers.slice(minLegs).flat();
+  // Variety rule (user request 2026-10-21): with 3+ legs, no market type may fill more than half of the ticket.
+  const varied = (s: { idx: number[] }) => {
+    if (s.idx.length < 3) return true;
+    const counts = new Map<string, number>();
+    for (const i of s.idx) { const f = items[i].family ?? `fixture:${items[i].fixtureId}`; counts.set(f, (counts.get(f) ?? 0) + 1); }
+    return Math.max(...counts.values()) <= Math.ceil(s.idx.length / 2);
+  };
+  const pool = allPool.filter(varied);
+  if (!pool.length && allPool.length) return { status: 'INCOMPLETE', legs: [], totalOdds: 0, withinTolerance: false, mixedBookmakers: false, closest: null, reason: 'Selecțiile calificate sunt prea asemănătoare: niciun bilet nu respectă regula „maximum jumătate din meciuri pe același tip de pronostic”.' };
   if (!pool.length) return { status: 'INCOMPLETE', legs: [], totalOdds: 0, withinTolerance: false, mixedBookmakers: false, closest: null, reason: 'Nicio combinație validă din selecțiile calificate.' };
   const avoid = input.avoidFixtures ?? new Set();
   const score = (s: State) => {
