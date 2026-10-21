@@ -1,19 +1,17 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Pause, Volume2, VolumeX, WifiOff } from 'lucide-react';
 import { NexusView } from './nexus-view';
 import { useNexusSound } from './use-sound';
 import { api } from '@/lib/format';
+import { TERMINAL, useJobEvents, type JobMeta } from './use-job-events';
 import { agentDetailsFromEvents, reduceEvents, type NexusEvent } from '@/lib/nexus-state';
 
-type Meta = { id: string; title: string; target: number; status: string; lastError: string | null; ticketId: string | null; nextRunAt: string };
-const TERMINAL = ['COMPLETED', 'INCOMPLETE', 'NO_BET', 'FAILED'];
+type Meta = JobMeta;
 
 export function NexusLive({ jobId, initialMeta, initialEvents }: { jobId: string; initialMeta: Meta; initialEvents: NexusEvent[] }) {
-  const [events, setEvents] = useState(initialEvents);
-  const [meta, setMeta] = useState(initialMeta);
-  const [connected, setConnected] = useState(true);
+  const { events, meta, setMeta, connected } = useJobEvents(jobId, initialEvents, initialMeta);
   const router = useRouter();
   const cursor = useRef(initialEvents.at(-1)?.seq ?? 0);
   const state = useMemo(() => reduceEvents(events), [events]);
@@ -34,30 +32,6 @@ export function NexusLive({ jobId, initialMeta, initialEvents }: { jobId: string
       else if (e.type === 'JOB_PAUSED') sound.cue('error');
     }
   }, [events, sound]);
-
-  // SSE first; polling fallback when EventSource is unavailable or keeps failing.
-  useEffect(() => {
-    if (TERMINAL.includes(meta.status)) return;
-    let es: EventSource | null = null; let poll: ReturnType<typeof setInterval> | null = null; let failures = 0; let stopped = false;
-    const add = (list: NexusEvent[]) => { const fresh = list.filter((e) => e.seq > cursor.current); if (fresh.length) { cursor.current = fresh.at(-1)!.seq; setEvents((prev) => [...prev, ...fresh]); } };
-    const startPolling = () => {
-      if (poll) return;
-      poll = setInterval(async () => {
-        try { const r = await api<{ events: NexusEvent[]; meta: Meta }>(`/api/jobs/${jobId}/events?format=json&after=${cursor.current}`); add(r.events); setMeta(r.meta); setConnected(true); }
-        catch { setConnected(false); }
-      }, 3000);
-    };
-    const open = () => {
-      if (stopped || typeof EventSource === 'undefined') return startPolling();
-      es = new EventSource(`/api/jobs/${jobId}/events?after=${cursor.current}`);
-      es.addEventListener('job', (m) => { add([JSON.parse((m as MessageEvent).data)]); setConnected(true); failures = 0; });
-      es.addEventListener('meta', (m) => { const d = JSON.parse((m as MessageEvent).data); if (d) setMeta(d); setConnected(true); });
-      es.addEventListener('end', () => { es?.close(); if (!stopped) setTimeout(open, 1000); });
-      es.onerror = () => { es?.close(); failures++; setConnected(false); if (failures >= 3) startPolling(); else setTimeout(open, 2000 * failures); };
-    };
-    open();
-    return () => { stopped = true; es?.close(); if (poll) clearInterval(poll); };
-  }, [jobId, meta.status]);
 
   // Open the final result automatically — only when the analysis finishes while it is being watched,
   // never when an already-finished analysis is simply opened in the Analiză tab.

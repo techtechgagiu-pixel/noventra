@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { one, many } from '@/lib/db';
-import { createOrGetJob, resumeJob, slotStates } from '@/lib/jobs/service';
+import { createCustomJob, createOrGetJob, resumeJob, slotStates } from '@/lib/jobs/service';
 import { _processOneForTests } from '@/lib/jobs/worker';
 import { aiCallCount, clearModelExhaustionForTests } from '@/lib/ai/router';
 import { jobEvents, listTickets, ticketDetail } from '@/lib/views';
@@ -162,5 +162,39 @@ describe('weekly ticket', () => {
     expect(await drain(jobId, 1000)).toBe('INCOMPLETE');
     const sel = await one<{ n: string }>('SELECT count(*) n FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.job_id=$1', [jobId]);
     expect(Number(sel!.n)).toBe(0);
+  });
+});
+
+describe('custom ticket', () => {
+  it('uses ONLY the chosen agents, the exact number of legs and the user target', async () => {
+    const ai: FakeAi = { calls: [], pick: (id) => (Number(id.split(':')[1]) % 2 ? 'TOTAL:OVER:1.5' : '1X2:HOME') };
+    installFakes(demoFixtures(8, (i) => ({ home: 1.4 + (i % 3) * 0.05, draw: 4.2, away: 6.5, dc: 1.1 })), ai);
+    const u = await makeUser();
+    const { jobId } = await createCustomJob(u, { target: 2, legs: 2, agents: ['andrei', 'alex', 'ioana'], window: '48h' });
+    const job = await one<{ slot: string; required_legs: number; target_odds: string }>('SELECT slot, required_legs, target_odds FROM ticket_generation_jobs WHERE id=$1', [jobId]);
+    expect(job!.slot).toBe('CUSTOM_1');
+    expect(job!.required_legs).toBe(2);
+    const status = await drain(jobId);
+    expect(['COMPLETED', 'INCOMPLETE', 'NO_BET']).toContain(status);
+    const agents = await many<{ agent_id: string }>('SELECT DISTINCT agent_id FROM agent_predictions WHERE job_id=$1', [jobId]);
+    expect(agents.map((a) => a.agent_id).sort()).toEqual(['alex', 'andrei', 'ioana']);
+    const started = (await jobEvents(u, jobId, 0))!.filter((e) => e.type === 'AGENT_STARTED').map((e) => e.agentId);
+    expect(new Set(started)).toEqual(new Set(['andrei', 'alex', 'ioana']));
+    const t = await one<{ id: string; leg_count: number; generation_status: string }>('SELECT id, leg_count, generation_status FROM tickets WHERE job_id=$1', [jobId]);
+    if (t!.generation_status === 'COMPLETED') expect(t!.leg_count).toBe(2);
+    const detail = await ticketDetail(u, t!.id);
+    expect(detail!.title).toBe('CUSTOM — COTĂ 2');
+  });
+  it('validates input and numbers custom slots per day', async () => {
+    installFakes(demoFixtures(4), { calls: [], pick: () => null });
+    const u = await makeUser();
+    await expect(createCustomJob(u, { target: 2, legs: 2, agents: [] })).rejects.toThrow(/agent/);
+    await expect(createCustomJob(u, { target: 1.05, legs: 2, agents: ['alex'] })).rejects.toThrow();
+    await expect(createCustomJob(u, { target: 500, legs: 2, agents: ['alex'] })).rejects.toThrow(/riscant/);
+    const a = await createCustomJob(u, { target: 3, legs: 2, agents: ['alex', 'nobody'] });
+    const b = await createCustomJob(u, { target: 3, legs: 2, agents: ['alex'] });
+    const slots = await many<{ slot: string; config: { custom: { agents: string[] } } }>('SELECT slot, config FROM ticket_generation_jobs WHERE id = ANY($1) ORDER BY slot', [[a.jobId, b.jobId]]);
+    expect(slots.map((s) => s.slot)).toEqual(['CUSTOM_1', 'CUSTOM_2']);
+    expect(slots[0].config.custom.agents).toEqual(['alex']);
   });
 });

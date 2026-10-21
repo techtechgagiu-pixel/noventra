@@ -3,7 +3,9 @@ import { config } from '../config';
 import { many, one, tx } from '../db';
 import { providerConfigured, resetModelExhaustion } from '../ai/router';
 import { aiUsageToday } from '../usage';
-import { SLOTS, fixtureWindow, nextReset, periodKey, slotById, type SlotDefinition } from '../slots';
+import { CUSTOM_LIMIT_PER_DAY, SLOTS, customPolicy, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
+import { VOTING_AGENTS } from '../ai/agents';
+import { localDate } from '../time';
 import { recordEvent } from './events';
 import type { Checkpoint } from './types';
 import { kickWorker } from './worker';
@@ -95,6 +97,68 @@ export async function createOrGetJob(userId: string, slotId: string, at = new Da
   }
   kickWorker();
   return { jobId: created, created: true };
+}
+
+/** Validates a custom request; returns a normalised config or throws a SlotError with a readable message. */
+export function parseCustom(input: unknown): CustomConfig {
+  const o = (input ?? {}) as Record<string, unknown>;
+  const target = Math.round(Number(o.target) * 100) / 100;
+  const legs = Math.round(Number(o.legs));
+  const ids = new Set<string>(VOTING_AGENTS.map((a) => a.id));
+  const agents = [...new Set(Array.isArray(o.agents) ? o.agents.map(String) : [])].filter((a) => ids.has(a));
+  const window = o.window === '7d' ? '7d' : '48h';
+  if (!Number.isFinite(target) || target < 1.2 || target > 1000) throw new SlotError('Cota țintă trebuie să fie între 1.20 și 1000.');
+  if (!Number.isInteger(legs) || legs < 1 || legs > 15) throw new SlotError('Numărul de meciuri trebuie să fie între 1 și 15.');
+  if (!agents.length) throw new SlotError('Alege cel puțin un agent.');
+  const perLeg = Math.pow(target, 1 / legs);
+  if (perLeg < 1.1) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea mică pentru cotele reale. Pune mai puține meciuri sau o cotă mai mare.`);
+  if (perLeg > 3.2) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea riscant. Pune mai multe meciuri sau o cotă mai mică.`);
+  return { target, legs, agents, window };
+}
+
+/** Creates a custom ticket job (CUSTOM_1…CUSTOM_10 per day): the user's target, exact legs and chosen agents. */
+export async function createCustomJob(userId: string, input: unknown, at = new Date()) {
+  const custom = parseCustom(input);
+  if (!providerConfigured('groq') && !providerConfigured('gemini') && !providerConfigured('openrouter') && !config.allowDemoProviders) throw new SlotError('Niciun furnizor AI nu este configurat pe server.', 503);
+  const usage = await aiUsageToday();
+  if (usage.requests + 20 > config.limits.aiDailyCalls) throw new SlotError(`Cota AI zilnică este aproape epuizată (${usage.requests}/${config.limits.aiDailyCalls} apeluri).`, 503);
+  const key = localDate(at);
+  const policy = customPolicy(custom);
+  const weekly = custom.window === '7d';
+  const days = weekly ? 7 : 3;
+  const maxFixtures = Math.min(weekly ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, Math.max(12, custom.legs * 4));
+  const cfg = { windowStart: key, windowDays: days, top10Only: false, maxFixtures, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], custom };
+  const seed = randomBytes(16).toString('hex');
+  const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
+  const id = await tx(async (c) => {
+    await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`custom:${userId}:${key}`]);
+    const n = Number((await c.query("SELECT count(*) AS n FROM ticket_generation_jobs WHERE user_id=$1 AND period_key=$2 AND slot LIKE 'CUSTOM\\_%'", [userId, key])).rows[0].n);
+    if (n >= CUSTOM_LIMIT_PER_DAY) throw new SlotError(`Ai folosit toate cele ${CUSTOM_LIMIT_PER_DAY} bilete custom de azi. Revino mâine.`, 429);
+    const slot = `CUSTOM_${n + 1}`;
+    const ins = await c.query(
+      `INSERT INTO ticket_generation_jobs (user_id, slot, period_key, target_odds, required_legs, seed, config, checkpoint, status, stage)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'QUEUED','QUEUED') RETURNING id`,
+      [userId, slot, key, custom.target, custom.legs, seed, JSON.stringify(cfg), JSON.stringify(checkpoint)],
+    );
+    const jobId = ins.rows[0].id as string;
+    const names = VOTING_AGENTS.filter((a) => custom.agents.includes(a.id)).map((a) => a.name);
+    await recordEvent(jobId, { type: 'JOB_CREATED', stage: 'QUEUED', payload: { slot, title: `CUSTOM — COTĂ ${custom.target}`, period: key, authorizedBy: 'click CREEAZĂ BILETUL CUSTOM', custom: { ...custom, names } } }, c);
+    await recordEvent(jobId, { type: 'TARGET_SELECTED', stage: 'QUEUED', payload: { target: custom.target, requiredLegs: custom.legs, tolerance: config.limits.targetTolerance, window: cfg, policy } }, c);
+    await recordEvent(jobId, { type: 'SEED_GENERATED', stage: 'QUEUED', payload: { seedPrefix: seed.slice(0, 12), note: 'Seed generat pe server; determină doar ordinea de explorare a meciurilor.' } }, c);
+    await c.query("INSERT INTO audit_logs(user_id, action, detail) VALUES ($1,'job_created',$2)", [userId, JSON.stringify({ jobId, slot, period: key, custom })]);
+    return jobId;
+  });
+  kickWorker();
+  return { jobId: id, created: true };
+}
+
+/** Custom jobs of the last days, newest first (with their ticket, if built). */
+export async function customJobs(userId: string, limit = 20) {
+  return many<{ id: string; slot: string; period_key: string; status: string; stage: string; target_odds: string; required_legs: number; config: { custom?: CustomConfig }; created_at: Date; ticket_id: string | null; generation_status: string | null; actual_odds: string | null; outcome_status: string | null }>(
+    `SELECT j.id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.status, j.stage, j.target_odds, j.required_legs, j.config, j.created_at,
+            t.id AS ticket_id, t.generation_status, t.actual_odds, t.outcome_status
+     FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
+     WHERE j.user_id=$1 AND j.slot LIKE 'CUSTOM\\_%' ORDER BY j.created_at DESC LIMIT $2`, [userId, limit]);
 }
 
 /** Resumes the SAME job (same seed, same candidate order). Never creates a new draw. */

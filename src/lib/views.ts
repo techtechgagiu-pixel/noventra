@@ -1,6 +1,6 @@
 import { many, one } from './db';
 import { eventsAfter } from './jobs/events';
-import { slotById } from './slots';
+import { slotInfo } from './slots';
 
 export async function jobMeta(userId: string, jobId: string) {
   const j = await one<Record<string, unknown>>(
@@ -9,7 +9,7 @@ export async function jobMeta(userId: string, jobId: string) {
     [jobId, userId],
   );
   if (!j) return null;
-  const slot = slotById(j.slot as string)!;
+  const slot = slotInfo(j.slot as string, Number(j.target_odds), j.required_legs as number | null);
   const cp = j.checkpoint as { batches?: string[][]; batchIndex?: number; analyzed?: number; qualified?: number };
   return {
     id: j.id as string, slot: slot.id, title: slot.title, subtitle: slot.subtitle, target: Number(j.target_odds), requiredLegs: j.required_legs as number | null,
@@ -53,7 +53,7 @@ export async function ticketDetail(userId: string, ticketId: string) {
   const predictions = await many<Record<string, unknown>>('SELECT fixture_id, agent_id, round, provider, model_id, prompt_version, decision, market_key, estimated_probability::float AS estimated_probability, confidence, risk, payload FROM agent_predictions WHERE job_id=$1 ORDER BY fixture_id, agent_id, round', [t.job_id]);
   const dossiers = await many<Record<string, unknown>>('SELECT fixture_id, mode, dossier, narrative, model FROM scout_dossiers WHERE job_id=$1', [t.job_id]);
   const snapshots = await many<{ fixture_id: string; payload: { fixture: unknown; model: unknown; odds: unknown; dataQuality: unknown } }>('SELECT DISTINCT ON (fixture_id) fixture_id, payload FROM fixture_snapshots WHERE job_id=$1 ORDER BY fixture_id, id', [t.job_id]);
-  const slot = slotById(t.slot as string)!;
+  const slot = slotInfo(t.slot as string, Number(t.target_odds), t.leg_count as number);
   return {
     id: t.id as string, jobId: t.job_id as string, slot: slot.id, title: slot.title, subtitle: slot.subtitle, target: t.target as number, actualOdds: t.actual as number | null,
     legCount: t.leg_count as number, generationStatus: t.generation_status as string, outcomeStatus: t.outcome_status as string, mixedBookmakers: t.mixed_bookmakers as boolean,

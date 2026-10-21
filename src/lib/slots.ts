@@ -49,6 +49,33 @@ export function slotById(id: string): SlotDefinition | undefined {
   return SLOTS.find((s) => s.id === id);
 }
 
+/** Custom ticket chosen by the user: exact number of legs, a target price, a subset of agents and a time window. */
+export type CustomConfig = { target: number; legs: number; agents: string[]; window: '48h' | '7d' };
+export const CUSTOM_LIMIT_PER_DAY = 10;
+export const isCustomSlot = (id: string) => /^CUSTOM_\d+$/.test(id);
+
+/** Price band and probability floor derived from the price each leg needs (target^(1/legs)). */
+export function customPolicy(c: CustomConfig): LegPolicy {
+  const perLeg = Math.pow(c.target, 1 / c.legs);
+  const minOdds = Math.max(1.1, Math.round(perLeg * 0.72 * 100) / 100);
+  const maxOdds = Math.min(4, Math.round((perLeg * 1.4 + 0.05) * 100) / 100);
+  const minProbability = Math.min(0.75, Math.max(0.3, Math.round((0.95 / perLeg - 0.1) * 100) / 100));
+  return {
+    minOdds, maxOdds, minProbability, minLegs: c.legs, maxLegs: c.legs,
+    agentCapBonus: Math.max(0, Math.round((perLeg - 1.4) * 100) / 100), pick: perLeg >= 1.45 ? 'highest' : 'safest',
+    ...(c.window === '48h' ? { minLeadHours: 2, maxAheadHours: 48 } : {}),
+  };
+}
+
+/** Display info for any slot id, including custom and retired (COTĂ 10) ones. */
+export function slotInfo(id: string, target: number, legs?: number | null): { id: string; title: string; subtitle: string } {
+  const slot = slotById(id);
+  if (slot) return { id: slot.id, title: slot.title, subtitle: slot.subtitle };
+  if (isCustomSlot(id)) return { id, title: `CUSTOM — COTĂ ${target}`, subtitle: `Bilet personalizat${legs ? ` · ${legs} meciuri` : ''}` };
+  if (id === 'TEN_A' || id === 'TEN_B') return { id, title: `COTĂ 10 — BILETUL ${id.slice(-1)} (vechi)`, subtitle: 'Bilet zilnic (format retras)' };
+  return { id, title: id, subtitle: '' };
+}
+
 /** Policy for any slot id, including retired ones (COTĂ 10) still present in history. */
 export function policyFor(slotId: string, target?: number): LegPolicy {
   const slot = slotById(slotId);

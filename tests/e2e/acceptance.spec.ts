@@ -56,3 +56,26 @@ test('single-owner app: no login wall, old links still lead to the single page',
   const r = await request.get('/dashboard', { maxRedirects: 0 });
   expect([307, 308]).toContain(r.status());
 });
+
+test('custom ticket: choose target, legs and agents → live map + chat → ticket', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await page.goto('/auth/test-login?email=e2e@test.local');
+  await page.goto('/?tab=custom');
+  await expect(page.getByRole('heading', { name: 'Bilet custom' })).toBeVisible();
+  await page.getByLabel('Cota dorită').fill('3');
+  await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
+  await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
+  await page.getByRole('button', { name: 'Toți 11' }).click();
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/custom-form.png`, fullPage: true });
+  await page.getByRole('button', { name: /CREEAZĂ BILETUL CUSTOM/ }).click();
+  await expect(page).toHaveURL(/tab=custom&job=[0-9a-f-]{36}/);
+  await expect(page.getByRole('img', { name: /Harta live a agenților/ })).toBeVisible();
+  if (process.env.SHOTS) for (const [i, ms] of [1500, 4000, 8000].entries()) { await page.waitForTimeout(ms - (i ? [1500, 4000][i - 1] : 0)); await page.screenshot({ path: `${process.env.SHOTS}/custom-${i}.png`, fullPage: false }); }
+  await expect(page.getByRole('log')).toContainText(/Bilet custom: cotă 3 din 2 meciuri/);
+  await expect(page.getByRole('link', { name: 'VEZI BILETUL' })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole('log')).toContainText(/propune|NO BET/, { timeout: 30_000 });
+  if (process.env.SHOTS) { await page.waitForTimeout(3000); await page.screenshot({ path: `${process.env.SHOTS}/custom-done.png`, fullPage: true }); await page.setViewportSize({ width: 390, height: 844 }); await page.getByRole('button', { name: /Redă dezbaterea/ }).click(); await page.waitForTimeout(2500); await page.screenshot({ path: `${process.env.SHOTS}/custom-mobile.png`, fullPage: true }); }
+  expect(errors.filter((e) => !/favicon|404/.test(e))).toEqual([]);
+});

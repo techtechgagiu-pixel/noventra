@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, History, Ticket } from 'lucide-react';
+import { Activity, History, SlidersHorizontal, Ticket } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { many } from '@/lib/db';
 import { slotStates } from '@/lib/jobs/service';
@@ -12,10 +12,16 @@ import { ReplayPlayer } from '@/components/replay-player';
 import { PerformancePanel } from '@/components/performance-panel';
 import { STATUS_RO, fmtDateTime } from '@/lib/format';
 import { slotById } from '@/lib/slots';
+import { VOTING_AGENTS } from '@/lib/ai/agents';
+import { activeAssignments } from '@/lib/ai/assignments';
+import { allTrackRecords } from '@/lib/track-record';
+import { customJobs } from '@/lib/jobs/service';
+import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
+import { CustomLive } from '@/components/custom/custom-live';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'bilete' | 'analiza' | 'istoric';
+type Tab = 'bilete' | 'custom' | 'analiza' | 'istoric';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -23,12 +29,13 @@ const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string }> }) {
   const user = (await currentUser())!;
   const sp = await searchParams;
-  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' ? sp.tab : 'bilete';
+  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' ? sp.tab : 'bilete';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof Ticket; badge?: boolean }> = [
     { id: 'bilete', label: 'Bilete', icon: Ticket },
+    { id: 'custom', label: 'Custom', icon: SlidersHorizontal, badge: running.some((j) => j.slot.startsWith('CUSTOM_')) },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
     { id: 'istoric', label: 'Istoric', icon: History },
   ];
@@ -45,8 +52,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
           <nav className="ml-auto flex gap-1 rounded-xl border border-line bg-panel p-1" aria-label="Secțiuni">
             {tabs.map(({ id, label, icon: Icon, badge }) => (
               <Link key={id} href={`/?tab=${id}`} aria-current={tab === id ? 'page' : undefined}
-                className={`relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition md:px-4 ${tab === id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:text-text'}`}>
-                <Icon size={16} aria-hidden /> <span>{label}</span>
+                className={`relative flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition md:px-4 ${tab === id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:text-text'}`}>
+                <Icon size={16} aria-hidden /> <span className={id === 'custom' || id === 'istoric' ? 'hidden min-[420px]:inline' : ''}>{label}</span>
                 {badge && <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-emerald" aria-label="analiză în curs" />}
               </Link>
             ))}
@@ -56,6 +63,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-6">
         {tab === 'bilete' && <BileteTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} running={running.length} />}
+        {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} />}
       </main>
@@ -117,12 +125,66 @@ async function AnalizaTab({ userId, job, replay, running }: { userId: string; jo
         <div className="flex flex-wrap gap-2">
           {running.map((j) => (
             <Link key={j.id} href={`/?tab=analiza&job=${j.id}`} className={`chip ${j.id === jobId ? 'text-cyan' : 'text-muted'}`}>
-              {slotById(j.slot)?.title ?? j.slot} · {STATUS_RO[j.status]} · {fmtDateTime(j.created_at.toISOString())}
+              {slotById(j.slot)?.title ?? (j.slot.startsWith('CUSTOM_') ? 'CUSTOM' : j.slot)} · {STATUS_RO[j.status]} · {fmtDateTime(j.created_at.toISOString())}
             </Link>
           ))}
         </div>
       )}
       <NexusLive key={jobId} jobId={jobId} initialMeta={plain(meta)} initialEvents={plain(events)} />
+    </div>
+  );
+}
+
+async function agentCards(): Promise<AgentCard[]> {
+  const a = await activeAssignments().catch(() => new Map());
+  const records = new Map((await allTrackRecords(VOTING_AGENTS.map((x) => x.id)).catch(() => [])).map((r) => [r.id, r.record]));
+  return VOTING_AGENTS.map((x) => {
+    const r = records.get(x.id);
+    return { id: x.id, name: x.name, title: x.title, specialty: x.specialty, risk: x.risk, maxOdds: x.maxOdds, minProbability: x.minProbability, model: a.get(x.id)?.primary?.model ?? null, record: r && r.decided >= 3 ? `${r.won}/${r.decided} verzi` : null };
+  });
+}
+
+const CUSTOM_STATUS: Record<string, string> = { QUEUED: 'în coadă', RUNNING: 'live', WAITING: 'așteaptă', PAUSED: 'pauză', COMPLETED: 'gata', INCOMPLETE: 'incomplet', NO_BET: 'NO BET', FAILED: 'eșuat' };
+
+async function CustomTab({ userId, job }: { userId: string; job?: string }) {
+  const cards = await agentCards();
+  if (job && UUID.test(job)) {
+    const meta = await jobMeta(userId, job);
+    if (meta) {
+      const events = (await jobEvents(userId, job, 0)) ?? [];
+      const info = Object.fromEntries(cards.map((c) => [c.id, { title: c.title, specialty: c.specialty, maxOdds: c.maxOdds, minProbability: c.minProbability, model: c.model }]));
+      return <CustomLive key={job} jobId={job} initialMeta={plain(meta)} initialEvents={plain(events)} info={info} />;
+    }
+  }
+  const recent = await customJobs(userId, 12);
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-display text-2xl font-bold">Bilet custom</h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Tu alegi cota, numărul de meciuri și cine intră în teren. Agenții aleși analizează și dezbat live pe hartă, iar jurnalul de sub hartă arată tot ce și-au spus. Maximum 10 bilete custom pe zi.</p>
+      </div>
+      <CustomForm agents={cards} />
+      {recent.length > 0 && (
+        <section>
+          <h3 className="mb-2 font-display text-lg font-bold">Biletele tale custom</h3>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {recent.map((j) => {
+              const c = j.config.custom;
+              const tone = j.outcome_status === 'WON' ? 'border-emerald/60' : j.outcome_status === 'LOST' ? 'border-rose/60' : '';
+              return (
+                <Link key={j.id} href={`/?tab=custom&job=${j.id}`} className={`card-soft flex items-center gap-3 p-3 hover:border-cyan/50 ${tone}`}>
+                  <div className="flex -space-x-2">{(c?.agents ?? []).slice(0, 4).map((a) => <img key={a} src={`/agents/${a}.webp`} alt="" className="h-7 w-7 rounded-full border-2 border-ink object-cover" />)}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">Cotă {Number(j.target_odds)} · {j.required_legs} meciuri{j.actual_odds ? <span className="text-emerald"> → {Number(j.actual_odds).toFixed(2)}</span> : null}</p>
+                    <p className="text-xs text-muted">{fmtDateTime(j.created_at.toISOString())} · {(c?.agents ?? []).length} agenți</p>
+                  </div>
+                  <span className="chip text-muted">{j.outcome_status === 'WON' ? 'câștigat' : j.outcome_status === 'LOST' ? 'pierdut' : CUSTOM_STATUS[j.status] ?? j.status}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

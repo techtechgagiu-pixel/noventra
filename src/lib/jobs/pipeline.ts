@@ -7,7 +7,7 @@ import { BudgetExceededError, RateLimitError, providerConfigured, structuredCall
 import { optimizeTicket, type Candidate } from '../optimizer';
 import { buildDossier } from '../scout/dossier';
 import { teamHistory } from '../scout/history';
-import { policyFor, slotById, type LegPolicy } from '../slots';
+import { customPolicy, policyFor, slotById, type CustomConfig, type LegPolicy } from '../slots';
 import { espnExtraMarkets, espnLeagueDay, espnSummary, mergeMarkets, standingFor } from '../sports/espn';
 import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sports/fixtures';
 import type { Fixture } from '../sports/types';
@@ -22,7 +22,7 @@ import type { CandidateEntry, Checkpoint, FixtureSnapshot, Stage } from './types
 
 export type JobRow = {
   id: string; user_id: string; slot: string; period_key: string; target_odds: string; required_legs: number | null; seed: string;
-  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[] };
+  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; custom?: CustomConfig };
   status: string; stage: Stage; checkpoint: Checkpoint; candidate_order: CandidateEntry[] | null; eligible_count: number | null; attempt_count: number;
   created_at?: Date | string;
 };
@@ -267,9 +267,9 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       fixtureId: f.fixtureId, match: f.match, markets: f.markets.map((m) => ({ key: m.key, odds: m.odds, estimated: m.est, ev: m.ev })),
       yourPosition: prior.find((p) => p.fixture_id === f.fixtureId && p.agent_id === agent.id) ? summarize(prior.find((p) => p.fixture_id === f.fixtureId && p.agent_id === agent.id)!) : 'fără poziție (eroare anterioară)',
       others: prior.filter((p) => p.fixture_id === f.fixtureId && p.agent_id !== agent.id).map((p) => `${agentById(p.agent_id)?.name}: ${summarize(p)}`),
-      leadingCandidate: (() => { const t: Record<string, number> = {}; for (const p of prior.filter((x) => x.fixture_id === f.fixtureId && x.decision === 'BET_CANDIDATE' && x.market_key)) t[p.market_key!] = (t[p.market_key!] ?? 0) + 1; const top = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; return top ? `${top[0]} (${top[1]}/${VOTING_AGENTS.length} voturi)` : 'niciunul'; })(),
+      leadingCandidate: (() => { const t: Record<string, number> = {}; for (const p of prior.filter((x) => x.fixture_id === f.fixtureId && x.decision === 'BET_CANDIDATE' && x.market_key)) t[p.market_key!] = (t[p.market_key!] ?? 0) + 1; const top = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; return top ? `${top[0]} (${top[1]}/${jobAgents(job).length} voturi)` : 'niciunul'; })(),
     }));
-    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Spune explicit dacă poți susține „leadingCandidate” (selecția cu cele mai multe voturi); o selecție intră pe bilet cu minimum ${config.limits.consensusThreshold}/${VOTING_AGENTS.length} voturi (5/10 dacă Mircea Sandu și Mircea Lucescu o refuză amândoi; un vot pentru o selecție mai strictă o susține și pe cea mai largă, iar câștigă selecția susținută de cei mai mulți). Rămâi în limitele tale de cotă și probabilitate, dar nu vota împotriva propriei analize doar pentru consens. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
+    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Spune explicit dacă poți susține „leadingCandidate” (selecția cu cele mai multe voturi); o selecție intră pe bilet cu minimum ${jobThreshold(job)}/${jobAgents(job).length} voturi (5 dacă Mircea Sandu și Mircea Lucescu o refuză amândoi; un vot pentru o selecție mai strictă o susține și pe cea mai largă, iar câștigă selecția susținută de cei mai mulți). Rămâi în limitele tale de cotă și probabilitate, dar nu vota împotriva propriei analize doar pentru consens. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
   }
   try {
     const res = round === 0
@@ -317,18 +317,32 @@ const summarize = (p: { decision: string; market_key: string | null; estimated_p
   `${p.decision === 'BET_CANDIDATE' ? `PARIU ${p.market_key} (p≈${p.estimated_probability ?? '?'})` : 'NO BET'} — ${(p.payload.rationale ?? '').slice(0, 220)}${p.payload.failureReasons?.[0] ? ` | Risc: ${p.payload.failureReasons[0].slice(0, 120)}` : ''}`;
 
 function jobPolicy(job: JobRow): LegPolicy {
-  return policyFor(job.slot, Number(job.target_odds));
+  return job.config.custom ? customPolicy(job.config.custom) : policyFor(job.slot, Number(job.target_odds));
+}
+
+/** Agents voting on this job: all 11, or the subset the user chose for a custom ticket. */
+export function jobAgents(job: Pick<JobRow, 'config'>): AgentDefinition[] {
+  const chosen = job.config.custom?.agents;
+  if (!chosen?.length) return VOTING_AGENTS;
+  const list = VOTING_AGENTS.filter((a) => chosen.includes(a.id));
+  return list.length ? list : VOTING_AGENTS;
+}
+
+/** Votes needed for a selection: the global threshold for the full team, ~30% of a smaller custom team (min 1). */
+export function jobThreshold(job: Pick<JobRow, 'config'>): number {
+  const n = jobAgents(job).length;
+  return n >= VOTING_AGENTS.length ? config.limits.consensusThreshold : Math.max(1, Math.round(n * 0.3));
 }
 
 /** Price per leg that reaches the target with a comfortable number of legs (daily: minLegs+1, weekly: exactly 12). */
 function idealPerLeg(job: JobRow) {
   const p = jobPolicy(job);
-  const legs = p.pick === 'highest' ? p.minLegs : p.minLegs + 1;
+  const legs = job.config.custom ? job.config.custom.legs : p.pick === 'highest' ? p.minLegs : p.minLegs + 1;
   return Math.min(p.maxOdds, Math.max(p.minOdds, Math.pow(Number(job.target_odds), 1 / legs)));
 }
 
 function ticketBrief(job: JobRow, p: LegPolicy) {
-  const base = `țintă cotă ${Number(job.target_odds)}, construit din minimum ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
+  const base = `${job.config.custom ? `bilet CUSTOM cerut de utilizator: exact ${job.config.custom.legs} meciuri, ` : ''}țintă cotă ${Number(job.target_odds)}, construit din ${job.config.custom ? 'exact' : 'minimum'} ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
   if (p.pick === 'highest') {
     const avg = Math.pow(Number(job.target_odds), 1 / p.minLegs);
     return `${base} Biletul are nevoie de o cotă medie de aproximativ ${avg.toFixed(2)} pe meci, deci aici NU alegi automat varianta cea mai mică: alege selecția solidă cu cotă între ${p.minOdds.toFixed(2)} și ${p.maxOdds.toFixed(2)}. La acest bilet limita ta de cotă este mărită cu +${(p.agentCapBonus ?? 0).toFixed(2)}.`;
@@ -378,7 +392,7 @@ async function stepAgents(job: JobRow, ids: string[], round: number, deadline: n
   } else if (round === 0 && !cp.agentsDone.length) await setStage(job, 'ANALYSIS', cp);
   // All pending agents work at the same time (independent analyses); each one is checkpointed as it finishes.
   if (Date.now() > deadline) return false;
-  const pending = VOTING_AGENTS.filter((a) => !cp.agentsDone.includes(a.id));
+  const pending = jobAgents(job).filter((a) => !cp.agentsDone.includes(a.id));
   const results = await Promise.allSettled(pending.map(async (agent) => {
     await runAgent(job, agent, targetIds, round);
     cp.agentsDone.push(agent.id);
@@ -397,7 +411,7 @@ async function chooseDebate(job: JobRow, ids: string[], round: number) {
     const snap = snaps.find((s) => s.fixture.id === id);
     if (!snap) continue;
     const { counted: pos, keys } = guardPositions(job, snap, await latestPositions(job.id, id));
-    if (round === 1 ? contested(pos, keys, config.limits.consensusThreshold, VOTING_AGENTS.length) : (() => { const c = consensus(pos, config.limits.consensusThreshold, VOTING_AGENTS.length, keys, jobPolicy(job).pick); return c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1; })()) out.push(id);
+    if (round === 1 ? contested(pos, keys, jobThreshold(job), jobAgents(job).length) : (() => { const c = consensus(pos, jobThreshold(job), jobAgents(job).length, keys, jobPolicy(job).pick); return c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1; })()) out.push(id);
   }
   return out;
 }
@@ -413,12 +427,12 @@ async function stepBrain(job: JobRow, ids: string[]) {
   const pending = ids.filter((id) => !(id in cp.brain!));
   if (!pending.length) return;
   await setStage(job, 'VOTING', cp);
-  const threshold = config.limits.consensusThreshold;
+  const threshold = jobThreshold(job);
   const items: Array<Record<string, unknown>> = [];
   for (const s of await batchSnapshots(job, pending)) {
     const raw = await latestPositions(job.id, s.fixture.id);
     const { counted, keys } = guardPositions(job, s, raw);
-    const c = consensus(counted, threshold, VOTING_AGENTS.length, keys, jobPolicy(job).pick);
+    const c = consensus(counted, threshold, jobAgents(job).length, keys, jobPolicy(job).pick);
     if (!c.shortlist.length) continue;
     const reasons = (key: string) => counted.filter((p) => p.marketKey === key && p.rationale).slice(0, 3).map((p) => `${agentById(p.agentId)?.name}: ${p.rationale.slice(0, 220)}`);
     items.push({
@@ -461,8 +475,8 @@ async function stepBrain(job: JobRow, ids: string[]) {
 
 async function stepVote(job: JobRow, ids: string[]) {
   await setStage(job, 'VOTING', job.checkpoint);
-  const threshold = config.limits.consensusThreshold;
-  const N = VOTING_AGENTS.length;
+  const threshold = jobThreshold(job);
+  const N = jobAgents(job).length;
   for (const s of await batchSnapshots(job, ids)) {
     const exists = await one('SELECT 1 FROM final_decisions WHERE job_id=$1 AND fixture_id=$2', [job.id, s.fixture.id]);
     if (exists) continue;
@@ -470,7 +484,7 @@ async function stepVote(job: JobRow, ids: string[]) {
     for (const p of raw) await recordEvent(job.id, { type: 'VOTE_SUBMITTED', stage: 'VOTING', agentId: p.agentId, fixtureId: s.fixture.id, payload: { decision: p.decision, marketKey: p.marketKey, round: p.round, model: `${p.provider}/${p.model}` } });
     const { counted: positions, setAside, keys } = guardPositions(job, s, raw);
     for (const v of setAside) await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage: 'VOTING', agentId: v.agentId, fixtureId: s.fixture.id, payload: { marketKey: v.marketKey, marketLabel: s.model.markets.find((m) => m.key === v.marketKey)?.label ?? null, reason: v.reason, note: 'Vot în afara caracterului agentului sau a regulilor de prudență — nenumărat.' } });
-    const c = consensus(positions, threshold, VOTING_AGENTS.length, keys, jobPolicy(job).pick);
+    const c = consensus(positions, threshold, jobAgents(job).length, keys, jobPolicy(job).pick);
     const brain = job.checkpoint.brain?.[s.fixture.id];
     let brainNote = '';
     if (brain && c.shortlist.length) {
@@ -539,7 +553,7 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
     if (!s) return [];
     const est = s.model.markets.find((m) => m.key === r.market_key)!;
     const risk = riskClass(est.estimatedProbability, s.model.uncertainty);
-    const quality = (r.votes_for / VOTING_AGENTS.length) * (s.model.uncertainty === 'scăzută' ? 1 : s.model.uncertainty === 'medie' ? 0.85 : 0.65) * (est.estimatedProbability ?? 0.3);
+    const quality = (r.votes_for / jobAgents(job).length) * (s.model.uncertainty === 'scăzută' ? 1 : s.model.uncertainty === 'medie' ? 0.85 : 0.65) * (est.estimatedProbability ?? 0.3);
     return [{ fixtureId: r.fixture_id, teams: [s.fixture.home, s.fixture.away], odds: r.validation.currentOdds, bookmaker: r.validation.bookmaker, quality, risk, family: r.market_key.split(':')[0], marketKey: r.market_key, label: est.label, observedAt: r.validation.observedAt, probability: est.estimatedProbability, riskLabel: risk, snapshot: s }];
   });
 }
@@ -548,7 +562,7 @@ async function tryOptimize(job: JobRow) {
   const slot = slotById(job.slot);
   const policy = jobPolicy(job);
   const cands = await qualifiedCandidates(job);
-  return { cands, result: optimizeTicket({ candidates: cands, target: Number(job.target_odds), requiredLegs: slot ? slot.requiredLegs : Number(job.target_odds) >= 50 ? 12 : null, tolerance: config.limits.targetTolerance, avoidFixtures: new Set(job.config.avoidFixtures ?? []), minLegs: policy.minLegs, maxLegs: policy.maxLegs, maxLegOdds: policy.maxOdds }) };
+  return { cands, result: optimizeTicket({ candidates: cands, target: Number(job.target_odds), requiredLegs: job.config.custom ? job.config.custom.legs : slot ? slot.requiredLegs : Number(job.target_odds) >= 50 ? 12 : null, tolerance: config.limits.targetTolerance, avoidFixtures: new Set(job.config.avoidFixtures ?? []), minLegs: policy.minLegs, maxLegs: policy.maxLegs, maxLegOdds: policy.maxOdds }) };
 }
 
 async function build(job: JobRow) {
@@ -564,7 +578,7 @@ async function build(job: JobRow) {
   const chosen = result.status === 'COMPLETED' ? result.legs : [];
   const byId = new Map(cands.map((c) => [c.fixtureId, c]));
   const summary = {
-    analyzed, qualified: cands.length, eligible: job.eligible_count, agents: VOTING_AGENTS.length, threshold: config.limits.consensusThreshold, reason: generation === 'NO_BET' ? `Niciun meci analizat nu a primit consens validat (${analyzed} meciuri analizate).` : result.reason,
+    analyzed, qualified: cands.length, eligible: job.eligible_count, agents: jobAgents(job).length, agentIds: jobAgents(job).map((a) => a.id), threshold: jobThreshold(job), reason: generation === 'NO_BET' ? `Niciun meci analizat nu a primit consens validat (${analyzed} meciuri analizate).` : result.reason,
     closest: result.closest ? { totalOdds: result.closest.totalOdds, legs: result.closest.legs.map((l) => ({ fixtureId: l.fixtureId, match: byId.get(l.fixtureId)?.teams.join(' – '), label: byId.get(l.fixtureId)?.label, odds: l.odds })) } : null,
     mixedBookmakers: result.mixedBookmakers,
   };
