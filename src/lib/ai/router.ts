@@ -78,7 +78,12 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
   if (ref.provider === 'groq' && ref.model.startsWith('openai/gpt-oss')) { body.reasoning_effort = 'low'; body.include_reasoning = false; }
   if (ref.provider === 'groq' && ref.model.startsWith('qwen/')) { body.reasoning_effort = 'none'; }
   // Reasoning models would spend the whole output budget thinking; agents need the JSON, not the chain of thought.
-  if (ref.provider === 'openrouter') { body.reasoning = { effort: 'low', exclude: true }; }
+  if (ref.provider === 'openrouter') {
+    // Thinking models otherwise spend the whole budget on hidden reasoning and return no JSON. Billing is per token
+    // actually produced, so a generous ceiling costs nothing extra and prevents truncated answers.
+    body.reasoning = { enabled: false };
+    body.max_completion_tokens = Math.min(8000, Math.max(Number(body.max_completion_tokens) || 0, 4000));
+  }
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
