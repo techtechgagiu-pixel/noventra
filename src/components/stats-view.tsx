@@ -5,14 +5,23 @@ const money = (x: number) => (x < 0.01 && x > 0 ? '< 0,01 $' : `${x.toFixed(2).r
 const num = (x: number) => new Intl.NumberFormat('ro-RO').format(Math.round(x));
 const OUT: Record<string, { t: string; c: string }> = { WON: { t: 'verde', c: 'bg-emerald' }, LOST: { t: 'roșu', c: 'bg-rose' }, VOID: { t: 'anulat', c: 'bg-muted' } };
 
-export function StatsView({ agents, totals }: { agents: AgentStat[]; totals: { today: number; week: number; total: number; calls: number; cap: number } }) {
+const MONTHS = ['ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie', 'iulie', 'august', 'septembrie', 'octombrie', 'noiembrie', 'decembrie'];
+const monthName = (m: string) => (m === 'all' ? 'de la început' : `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`);
+const shift = (m: string, k: number) => { const d = new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)) - 1 + k, 1)); return d.toISOString().slice(0, 7); };
+
+export function StatsView({ agents, totals, month }: { agents: AgentStat[]; totals: { today: number; week: number; total: number; calls: number; cap: number }; month: string }) {
+  const now = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7);
+  const choices = [now, shift(now, -1), shift(now, -2), 'all'];
   const sorted = [...agents].sort((a, b) => (b.won + b.lost ? 1 : 0) - (a.won + a.lost ? 1 : 0) || (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.bets - a.bets);
   const used = Math.min(1, totals.cap ? totals.today / totals.cap : 0);
   return (
     <div className="space-y-8">
       <div>
         <h1 className="font-display text-[1.9rem] font-bold leading-tight tracking-tight">Statistici</h1>
-        <p className="mt-1 max-w-xl text-sm text-muted">Pronosticul final al fiecărui agent pe fiecare meci, verificat după fluier, și cât a consumat fiecare.</p>
+        <p className="mt-1 max-w-xl text-sm text-muted">Pronosticul final al fiecărui agent pe fiecare meci, verificat după fluier, și cât a consumat fiecare. Fiecare agent lucrează mereu pe același model, ca la sfârșitul lunii să vezi cine a avut cele mai bune rezultate.</p>
+        <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Luna">
+          {choices.map((c) => <a key={c} href={`/?tab=statistici&luna=${c}`} aria-current={c === month ? 'page' : undefined} className={`chip ${c === month ? 'text-cyan' : 'text-muted'}`}>{c === 'all' ? 'De la început' : monthName(c)}</a>)}
+        </nav>
       </div>
 
       <section aria-label="Consum OpenRouter" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -27,8 +36,9 @@ export function StatsView({ agents, totals }: { agents: AgentStat[]; totals: { t
       </section>
       <p className="-mt-5 text-[11px] text-muted">Costul e calculat din tokenii consumați și prețul listat pe OpenRouter pentru fiecare model; factura exactă o vezi în contul OpenRouter.</p>
 
-      <section aria-label="Agenții" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {sorted.map((a) => {
+      <h2 className="font-display text-xl font-bold">Clasamentul {month === 'all' ? 'de la început' : `lunii ${monthName(month)}`}</h2>
+      <section aria-label="Agenții" className="-mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {sorted.map((a, rank) => {
           const m = AGENT_META[a.id];
           const decided = a.won + a.lost;
           return (
@@ -36,8 +46,8 @@ export function StatsView({ agents, totals }: { agents: AgentStat[]; totals: { t
               <header className="flex items-center gap-3">
                 {m?.img ? <img src={m.img} alt="" className="h-12 w-12 rounded-full border-2 object-cover" style={{ borderColor: m.accent }} /> : <span className="h-12 w-12 rounded-full bg-panel-2" />}
                 <div className="min-w-0 flex-1">
-                  <h2 className="truncate font-display text-lg font-bold leading-tight" style={{ color: m?.accent }}>{a.name}</h2>
-                  <p className="truncate text-[11px] text-muted">{a.model ?? 'încă nefolosit'}</p>
+                  <h2 className="truncate font-display text-lg font-bold leading-tight" style={{ color: m?.accent }}><span className="mr-1.5 text-sm text-muted tabular">{decided ? `${rank + 1}.` : ''}</span>{a.name}</h2>
+                  <p className="truncate text-[11px] text-muted">{a.ownModel ?? a.model ?? 'încă nefolosit'}{a.ownModelShare !== null && a.ownModelShare < 0.995 ? `, ${Math.round(a.ownModelShare * 100)}% din pronosticuri pe el` : ''}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-display text-2xl font-bold tabular">{a.hitRate === null ? '—' : `${Math.round(a.hitRate * 100)}%`}</p>
@@ -56,7 +66,7 @@ export function StatsView({ agents, totals }: { agents: AgentStat[]; totals: { t
                 <div><dt className="text-muted">Estimare medie</dt><dd className="font-bold tabular">{a.avgEstimated ? `${Math.round(a.avgEstimated * 100)}%` : '—'}</dd></div>
               </dl>
               <div className="mt-3 rounded-xl border border-line bg-ink/40 px-3 py-2 text-xs text-muted">
-                <p><span className="text-text tabular">{money(a.usage.costToday)}</span> azi, <span className="text-text tabular">{money(a.usage.cost7d)}</span> în 7 zile, <span className="text-text tabular">{money(a.usage.costTotal)}</span> total</p>
+                <p><span className="text-text tabular">{money(a.usage.costToday)}</span> azi, <span className="text-text tabular">{money(a.usage.cost7d)}</span> în 7 zile, <span className="text-text tabular">{money(a.usage.costMonth)}</span> luna aceasta, <span className="text-text tabular">{money(a.usage.costTotal)}</span> total</p>
                 <p className="mt-0.5">{num(a.usage.calls)} apeluri, {num(a.usage.inTokens + a.usage.outTokens)} tokeni{a.usage.avgLatencyMs ? `, ${(a.usage.avgLatencyMs / 1000).toFixed(1)} s pe răspuns` : ''}{a.usage.calls ? `, ${Math.round((a.usage.fallback / a.usage.calls) * 100)}% pe rezervă` : ''}{a.usage.failed ? `, ${a.usage.failed} eșuate` : ''}</p>
               </div>
               {a.recent.length > 0 && (

@@ -17,6 +17,16 @@ export const AGENT_META: Record<string, { name: string; short?: string; title: s
   elena: { name: 'Dumitru Dragomir', short: 'Dragomir', title: '„Mitică Dragomir”', accent: '#facc15', img: '/agents/elena.webp' },
   hantu: { name: 'Hanțu', short: 'Hanțu', title: 'Omul de știri · doar presa sportivă', accent: '#84cc16', img: '/agents/hantu.webp' },
   becali: { name: 'Gigi Becali', short: 'Becali', title: 'Expert în blaturi și relații internaționale', accent: '#c084fc', img: '/agents/becali.webp' },
+  ilie: { name: 'Ilie Dumitrescu', short: 'Dumitrescu', title: 'Profesorul de tactică', accent: '#38bdf8', img: '/agents/ilie.webp' },
+  sumudica: { name: 'Marius Șumudică', short: 'Șumudică', title: 'Nebunul de serviciu', accent: '#d946ef', img: '/agents/sumudica.webp' },
+  petrescu: { name: 'Dan Petrescu', short: 'Petrescu', title: 'Generalul defensiv', accent: '#eab308', img: '/agents/petrescu.webp' },
+  stoica: { name: 'Mihai Stoica', short: 'Stoica', title: 'Avocatul diavolului', accent: '#f43f5e', img: '/agents/stoica.webp' },
+  prunea: { name: 'Florin Prunea', short: 'Prunea', title: 'Gardianul porții', accent: '#14b8a6', img: '/agents/prunea.webp' },
+  porumboiu: { name: 'Adrian Porumboiu', short: 'Porumboiu', title: 'Judecătorul VAR', accent: '#cbd5e1', img: '/agents/porumboiu.webp' },
+  ianis: { name: 'Ianis Hagi', short: 'I. Hagi', title: 'Creatorul de ocazii', accent: '#facc15', img: '/agents/ianis.webp' },
+  dragusin: { name: 'Radu Drăgușin', short: 'Drăgușin', title: 'Zidul de fier', accent: '#6366f1', img: '/agents/dragusin.webp' },
+  man: { name: 'Dennis Man', short: 'Man', title: 'Vânătorul de spații', accent: '#fb7185', img: '/agents/man.webp' },
+  tamas: { name: 'Gabriel Tamaș', short: 'Tamaș', title: 'Detectorul de haos', accent: '#22c55e', img: '/agents/tamas.webp' },
   cosmin: { name: 'Anghel Iordănescu', short: 'Iordănescu', title: 'Fost selecționer', accent: '#fb923c', img: '/agents/cosmin.webp' },
 };
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {

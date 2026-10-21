@@ -38,10 +38,8 @@ test('daily COTĂ 5 ticket: create → live NEXUS → auto-open result → locke
   const generateCalls: string[] = [];
   page.on('request', (r) => { if (/generate|resume/.test(r.url())) generateCalls.push(r.url()); });
   await page.goto(`/?tab=analiza&replay=${ticketId}`);
-  await expect(page.getByText('REPLAY — ANALIZĂ SALVATĂ')).toBeVisible();
-  await page.getByRole('button', { name: '4×' }).click();
-  await page.getByRole('button', { name: 'Final' }).click();
-  await expect(page.getByText(/Bilet finalizat: cota/)).toBeVisible();
+  await expect(page.getByRole('img', { name: /Harta live a agenților/ })).toBeVisible();
+  await expect(page.getByRole('log')).toContainText(/Bilet gata: cota/, { timeout: 90_000 });
   const after = await (await page.request.get('/api/test/stats')).json();
   expect(after.aiCalls).toBe(before.aiCalls);
   expect(after.jobs).toBe(before.jobs);
@@ -122,7 +120,7 @@ test('statistics tab: per-agent record and consumption', async ({ page }) => {
   await page.goto('/auth/test-login?email=e2e@test.local');
   await page.goto('/?tab=statistici');
   await expect(page.getByRole('heading', { name: 'Statistici' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Agenții' }).locator('article')).toHaveCount(13);
+  await expect(page.getByRole('region', { name: 'Agenții' }).locator('article')).toHaveCount(23);
   await expect(page.getByText('Consum azi')).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/stats.png`, fullPage: true });
 });

@@ -21,6 +21,8 @@ export function ReviewBuilder() {
   const [fixtures, setFixtures] = useState<Fx[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [league, setLeague] = useState<string | null>(null);
+  const [when, setWhen] = useState<'all' | 'today' | 'tomorrow'>('all');
   const [open, setOpen] = useState<string | null>(null);
   const [extra, setExtra] = useState<Record<string, Market[] | 'loading' | 'error'>>({});
   const [slip, setSlip] = useState<Leg[]>([]);
@@ -61,14 +63,33 @@ export function ReviewBuilder() {
   }
 
   const total = slip.reduce((p, l) => p * l.odds, 1);
+  const dayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Europe/Bucharest' });
+  const today = dayKey(new Date().toISOString());
+  const tomorrow = dayKey(new Date(Date.now() + 86_400_000).toISOString());
+  const leagueOf = (f: Fx) => `${f.country} · ${f.league}`;
+  // Leagues with their number of matches (after the day filter), most matches first.
+  const leagues = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const f of fixtures ?? []) { const d = dayKey(f.kickoff); if (when === 'today' && d !== today) continue; if (when === 'tomorrow' && d !== tomorrow) continue; m.set(leagueOf(f), (m.get(leagueOf(f)) ?? 0) + 1); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [fixtures, when, today, tomorrow]);
   const shown = useMemo(() => {
     if (!fixtures) return [];
     const s = q.trim().toLowerCase();
-    return fixtures.filter((f) => !s || `${f.home} ${f.away} ${f.league} ${f.country}`.toLowerCase().includes(s)).slice(0, 120);
-  }, [fixtures, q]);
+    return fixtures.filter((f) => {
+      const d = dayKey(f.kickoff);
+      if (when === 'today' && d !== today) return false;
+      if (when === 'tomorrow' && d !== tomorrow) return false;
+      if (league && leagueOf(f) !== league) return false;
+      return !s || `${f.home} ${f.away} ${f.league} ${f.country}`.toLowerCase().includes(s);
+    }).slice(0, 150);
+  }, [fixtures, q, league, when, today, tomorrow]);
+  // Grouped by league (leagues in order of their first kick-off).
   const days = useMemo(() => {
     const out: Array<{ day: string; items: Fx[] }> = [];
-    for (const f of shown) { const d = new Date(f.kickoff).toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Bucharest' }); const last = out.at(-1); if (last?.day === d) last.items.push(f); else out.push({ day: d, items: [f] }); }
+    const by = new Map<string, Fx[]>();
+    for (const f of shown) { const k = leagueOf(f); (by.get(k) ?? by.set(k, []).get(k)!).push(f); }
+    for (const [k, items] of by) out.push({ day: `${k} (${items.length})`, items });
     return out;
   }, [shown]);
 
@@ -101,7 +122,7 @@ export function ReviewBuilder() {
       <button onClick={send} disabled={busy || !slip.length} className="btn btn-primary w-full px-6 py-3 disabled:opacity-50">{busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} aria-hidden />} {busy ? 'Verific cotele…' : 'TRIMITE LA ANALIZĂ'}</button>
       <div className="flex items-center gap-2 text-[11px] text-muted">
         <div className="flex -space-x-2">{['victor', 'andrei', 'alex', 'robert', 'becali'].map((a) => <img key={a} src={AGENT_META[a]?.img} alt="" className="h-6 w-6 rounded-full border-2 border-ink object-cover" />)}</div>
-        <span>Cei 12 agenți îl analizează meci cu meci; Mircea Lucescu îți dă verdictul și sfaturile.</span>
+        <span>Cei 22 de agenți îl analizează meci cu meci; Mircea Lucescu îți dă verdictul și sfaturile.</span>
       </div>
     </div>
   );
@@ -113,12 +134,21 @@ export function ReviewBuilder() {
           <Search size={16} className="text-muted" aria-hidden />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Caută echipă sau campionat…" aria-label="Caută meci" className="w-full bg-transparent text-sm outline-none placeholder:text-muted/70" />
         </label>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Ziua">
+          {([['all', 'Toate zilele'], ['today', 'Azi'], ['tomorrow', 'Mâine']] as const).map(([k, l]) => <button key={k} onClick={() => { setWhen(k); setLeague(null); }} aria-pressed={when === k} className={`chip ${when === k ? 'text-cyan' : 'text-muted'}`}>{l}</button>)}
+        </div>
+        {leagues.length > 0 && (
+          <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto pr-1" role="group" aria-label="Campionatul">
+            <button onClick={() => setLeague(null)} aria-pressed={!league} className={`chip ${!league ? 'text-cyan' : 'text-muted'}`}>Toate campionatele</button>
+            {leagues.map(([k, n]) => <button key={k} onClick={() => setLeague(league === k ? null : k)} aria-pressed={league === k} className={`chip ${league === k ? 'text-cyan' : 'text-muted'}`}>{k} <span className="opacity-60">{n}</span></button>)}
+          </div>
+        )}
         {!fixtures && !loadError && <p className="card flex items-center gap-2 p-6 text-sm text-muted"><Loader2 size={16} className="animate-spin" aria-hidden /> Încarc meciurile cu cote reale…</p>}
         {loadError && <p className="card p-6 text-sm text-rose">{loadError}</p>}
         {fixtures && !shown.length && <p className="card p-6 text-sm text-muted">Niciun meci găsit.</p>}
         {days.map((d) => (
           <div key={d.day} className="space-y-2">
-            <h4 className="sticky top-[60px] z-10 -mx-1 bg-ink/90 px-1 py-1 text-xs font-semibold uppercase tracking-wider text-muted backdrop-blur">{d.day}</h4>
+            <h4 className="sticky top-[60px] z-10 -mx-1 bg-ink/90 px-1 py-1.5 text-sm font-semibold text-text backdrop-blur">{d.day}</h4>
             {d.items.map((f) => {
               const picked = slip.find((x) => x.fixtureId === f.id);
               const base = (f.odds?.markets ?? []).filter((m) => !BANNED.test(m.key));
@@ -130,7 +160,7 @@ export function ReviewBuilder() {
                 <article key={f.id} className={`card p-3 ${picked ? 'border-cyan/60' : ''}`}>
                   <div className="flex items-center gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] text-muted">{new Date(f.kickoff).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' })} · {f.country} · {f.league}</p>
+                      <p className="text-[11px] text-muted">{fmtDateTime(f.kickoff)}</p>
                       <p className="truncate font-semibold">{f.home} <span className="text-muted">–</span> {f.away}</p>
                     </div>
                     <button onClick={() => { setOpen(isOpen ? null : f.id); if (!isOpen) void more(f.id); }} aria-expanded={isOpen} className="btn btn-ghost shrink-0 px-2.5 py-1.5 text-xs">Toate piețele <ChevronDown size={14} className={`transition ${isOpen ? 'rotate-180' : ''}`} aria-hidden /></button>

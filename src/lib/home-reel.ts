@@ -1,3 +1,4 @@
+import { cleanPayload } from './agent-names';
 import { many, one } from './db';
 import { slotInfo } from './slots';
 import type { NexusEvent } from './nexus-state';
@@ -17,7 +18,7 @@ export async function homeReel(userId: string) {
   if (!job) return null;
   const rows = await many<{ seq: number; type: string; stage: string; fixture_id: string | null; agent_id: string | null; payload: Record<string, unknown>; created_at: Date }>(
     'SELECT seq, type, stage, fixture_id, agent_id, payload, created_at FROM analysis_events WHERE job_id=$1 ORDER BY seq LIMIT 4000', [job.id]);
-  const events: NexusEvent[] = rows.map((r) => ({ seq: r.seq, type: r.type, stage: r.stage, fixtureId: r.fixture_id, agentId: r.agent_id, payload: r.payload as Record<string, any>, createdAt: r.created_at.toISOString() }));
+  const events: NexusEvent[] = rows.map((r) => ({ seq: r.seq, type: r.type, stage: r.stage, fixtureId: r.fixture_id, agentId: r.agent_id, payload: cleanPayload(r.payload) as Record<string, any>, createdAt: r.created_at.toISOString() }));
   const batchStarts = events.filter((e) => e.type === 'BATCH_STARTED');
   const debate = events.find((e) => e.type === 'DEBATE_STARTED');
   const chosen = [...batchStarts].reverse().find((b) => !debate || b.seq < debate.seq) ?? batchStarts[0];
@@ -53,6 +54,7 @@ export async function homeThreads(userId: string): Promise<{ threads: Thread[]; 
      WHERE j.user_id=$1 AND j.created_at > now() - interval '7 days' AND e.fixture_id IS NOT NULL
        AND e.type IN ('PREDICTION_SAVED','OBJECTION_RECORDED','POSITION_REVISED','BRAIN_DECISION','SELECTION_ACCEPTED','SELECTION_REJECTED','LEG_REVIEWED','NEWS_COLLECTED')
      ORDER BY e.created_at DESC LIMIT 6000`, [userId]);
+  for (const r of rows) r.payload = cleanPayload(r.payload);
   const groups = new Map<string, typeof rows>();
   for (const r of rows) { const k = `${r.job_id}|${r.fixture_id}`; (groups.get(k) ?? groups.set(k, []).get(k)!).push(r); }
   const threads: Thread[] = [];

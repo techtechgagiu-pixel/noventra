@@ -1,3 +1,4 @@
+import { cleanPayload } from './agent-names';
 import { many, one } from './db';
 import { eventsAfter } from './jobs/events';
 import { slotInfo } from './slots';
@@ -57,8 +58,8 @@ export async function ticketDetail(userId: string, ticketId: string) {
   return {
     id: t.id as string, jobId: t.job_id as string, slot: slot.id, title: slot.title, subtitle: slot.subtitle, target: t.target as number, actualOdds: t.actual as number | null,
     legCount: t.leg_count as number, generationStatus: t.generation_status as string, outcomeStatus: t.outcome_status as string, mixedBookmakers: t.mixed_bookmakers as boolean,
-    createdAt: new Date(t.created_at as string).toISOString(), periodKey: t.period as string, summary: t.summary as Record<string, unknown>, eligibleCount: t.eligible_count as number | null,
-    selections, decisions, predictions, dossiers,
+    createdAt: new Date(t.created_at as string).toISOString(), periodKey: t.period as string, summary: cleanPayload(t.summary) as Record<string, unknown>, eligibleCount: t.eligible_count as number | null,
+    selections, decisions: cleanPayload(decisions), predictions: cleanPayload(predictions), dossiers,
     fixtures: snapshots.map((s) => ({ fixtureId: s.fixture_id, fixture: s.payload.fixture, model: s.payload.model, odds: s.payload.odds, dataQuality: s.payload.dataQuality })),
   };
 }

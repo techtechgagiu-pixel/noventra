@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Activity, BarChart3, ClipboardCheck, History, SlidersHorizontal, Ticket } from 'lucide-react';
+import { Activity, BarChart3, CalendarDays, ClipboardCheck, History, SlidersHorizontal, Ticket } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { many } from '@/lib/db';
 import { slotStates } from '@/lib/jobs/service';
@@ -22,23 +22,23 @@ import { HomeStage } from '@/components/home/home-stage';
 import { homeReel, homeStats, homeThreads } from '@/lib/home-reel';
 import { HomeThreads } from '@/components/home/home-threads';
 import { StatsView } from '@/components/stats-view';
-import { agentStats } from '@/lib/agent-stats';
+import { agentStats, currentMonth } from '@/lib/agent-stats';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'acasa' | 'bilete' | 'custom' | 'verifica' | 'analiza' | 'istoric' | 'statistici';
+type Tab = 'acasa' | 'bilete' | 'custom' | 'verifica' | 'analiza' | 'azi' | 'istoric' | 'statistici';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
 /** PRIMUL 11 — the whole app on one page, organised in three tabs. */
-export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string; luna?: string }> }) {
   const user = await currentUser();
   if (!user) redirect('/login');
   const sp = await searchParams;
-  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' || sp.tab === 'statistici' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
+  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' || sp.tab === 'statistici' || sp.tab === 'azi' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
@@ -47,6 +47,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     { id: 'custom', label: 'Custom', icon: SlidersHorizontal, badge: running.some((j) => j.slot.startsWith('CUSTOM_')) },
     { id: 'verifica', label: 'Biletul tău', icon: ClipboardCheck, badge: running.some((j) => j.slot.startsWith('REVIEW_')) },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
+    { id: 'azi', label: 'Azi', icon: CalendarDays },
     { id: 'istoric', label: 'Istoric', icon: History },
     { id: 'statistici', label: 'Statistici', icon: BarChart3 },
   ];
@@ -80,7 +81,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
         {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
-        {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} />}
+        {tab === 'azi' && <AziTab userId={user.id} ticket={sp.ticket} />}
+        {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} />}
       </main>
       <footer className="mx-auto max-w-6xl px-4 pb-8 text-xs text-muted">18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</footer>
@@ -136,7 +138,7 @@ async function BileteTab({ userId, ticket, fresh, running }: { userId: string; t
   return (
     <div className="space-y-5">
       <div>
-        <p className="max-w-2xl text-sm text-muted">Apasă <strong className="text-text">CREEAZĂ BILETUL</strong>: cei 12 agenți analizează meciurile de azi și mâine, votează și construiesc biletul din cote mici. Urmărești totul în fila <Link href="/?tab=analiza" className="text-cyan">Analiză</Link>.</p>
+        <p className="max-w-2xl text-sm text-muted">Apasă <strong className="text-text">CREEAZĂ BILETUL</strong>: cei 22 de agenți analizează meciurile de azi și mâine, votează și construiesc biletul din cote mici. Urmărești totul în fila <Link href="/?tab=analiza" className="text-cyan">Analiză</Link>.</p>
         {running > 0 && <p className="chip mt-3 text-emerald"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald" /> {running === 1 ? 'O analiză rulează acum' : `${running} analize rulează acum`} — <Link href="/?tab=analiza" className="underline">vezi live</Link></p>}
       </div>
       <SlotCards initial={plain(slots)} />
@@ -148,8 +150,9 @@ async function AnalizaTab({ userId, job, replay, running }: { userId: string; jo
   if (replay && UUID.test(replay)) {
     const t = await ticketDetail(userId, replay);
     if (t) {
+      const meta = await jobMeta(userId, t.jobId);
       const events = (await jobEvents(userId, t.jobId, 0)) ?? [];
-      return <ReplayPlayer events={plain(events)} title={t.title} target={t.target} ticketId={t.id} partial={!events.some((e) => e.type === 'TICKET_FINALIZED')} />;
+      if (meta) return <CustomLive key={`r-${t.jobId}`} jobId={t.jobId} initialMeta={plain(meta)} initialEvents={plain(events)} info={await agentInfo()} back={{ href: `/?tab=bilete&ticket=${t.id}`, label: '← Înapoi la bilet' }} replayOnOpen />;
     }
   }
   // Explicit job, else the newest running one, else the newest job of today.
@@ -177,9 +180,14 @@ async function AnalizaTab({ userId, job, replay, running }: { userId: string; jo
           ))}
         </div>
       )}
-      <NexusLive key={jobId} jobId={jobId} initialMeta={plain(meta)} initialEvents={plain(events)} />
+      <CustomLive key={jobId} jobId={jobId} initialMeta={plain(meta)} initialEvents={plain(events)} info={await agentInfo()} back={null} openTicketWhenDone />
     </div>
   );
+}
+
+async function agentInfo() {
+  const cards = await agentCards();
+  return Object.fromEntries(cards.map((c) => [c.id, { title: c.title, specialty: c.specialty, maxOdds: c.maxOdds, minProbability: c.minProbability, model: c.model }]));
 }
 
 async function agentCards(): Promise<AgentCard[]> {
@@ -251,7 +259,7 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
     <div className="space-y-6 pb-16 lg:pb-0">
       <div>
         <h1 className="font-display text-2xl font-bold">Vino cu biletul tău la analiză</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Îți faci biletul din meciurile cu cote reale, le lași tacticienilor sfaturile tale și îl trimiți la analiză. Cei 12 agenți îl dezbat live pe hartă, îți spun ce meci e solid, riscant sau slab, ce să înlocuiești, iar Mircea Lucescu îți dă verdictul final. Biletul rămâne salvat și îl urmărim verde/roșu până la final.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Îți faci biletul din meciurile cu cote reale, le lași tacticienilor sfaturile tale și îl trimiți la analiză. Cei 22 de agenți îl dezbat live pe hartă, îți spun ce meci e solid, riscant sau slab, ce să înlocuiești, iar Mircea Lucescu îți dă verdictul final. Biletul rămâne salvat și îl urmărim verde/roșu până la final.</p>
       </div>
       <ReviewBuilder />
       {recent.length > 0 && (
@@ -278,9 +286,16 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
   );
 }
 
-async function StatisticiTab({ userId, admin }: { userId: string; admin: boolean }) {
-  const { agents, totals } = await agentStats(userId, admin);
-  return <StatsView agents={plain(agents)} totals={totals} />;
+async function AziTab({ userId, ticket }: { userId: string; ticket?: string }) {
+  if (ticket) return <TicketPanel userId={userId} id={ticket} fresh={false} back="/?tab=azi" />;
+  const tickets = await listTickets(userId);
+  return <TicketArchive tickets={JSON.parse(JSON.stringify(tickets))} initialFilter="today" title="Bilete create azi" />;
+}
+
+async function StatisticiTab({ userId, admin, month }: { userId: string; admin: boolean; month?: string }) {
+  const m = month === 'all' || /^\d{4}-\d{2}$/.test(month ?? '') ? month! : currentMonth();
+  const { agents, totals } = await agentStats(userId, admin, m);
+  return <StatsView agents={plain(agents)} totals={totals} month={m} />;
 }
 
 async function IstoricTab({ userId, ticket }: { userId: string; ticket?: string }) {

@@ -50,10 +50,10 @@ export function slotById(id: string): SlotDefinition | undefined {
 }
 
 /** Custom ticket chosen by the user: exact number of legs, a target price, a subset of agents and a time window. */
-export type CustomConfig = { target: number; legs: number; agents: string[]; window: '48h' | '7d' };
+export type CustomConfig = { target: number; legs: number; agents: string[]; window: '24h' | '48h' | '7d' };
 export const CUSTOM_LIMIT_PER_DAY = 10;
-/** Votes a selection needs in a custom team of n agents: 1 (≤3), 2 (4–6), at least 3 from 7 agents up. */
-export const customThreshold = (n: number) => (n <= 3 ? 1 : n <= 6 ? 2 : Math.max(3, Math.round(n * 0.3)));
+/** Votes a selection needs from a team of n agents: 1 (≤3), 2 (4–6), then ~27% (3 of 12, 6 of 22). */
+export const customThreshold = (n: number) => (n <= 3 ? 1 : n <= 6 ? 2 : Math.max(3, Math.round(n * 0.27)));
 export const isCustomSlot = (id: string) => /^CUSTOM_\d+$/.test(id);
 
 /** A ticket the user built himself and brought to the agents for review. */
@@ -75,7 +75,7 @@ export function customPolicy(c: CustomConfig): LegPolicy {
   return {
     minOdds, maxOdds, minProbability, minLegs: c.legs, maxLegs: c.legs,
     agentCapBonus: Math.max(0, Math.round((perLeg - 1.4) * 100) / 100), pick: perLeg >= 1.45 ? 'highest' : 'safest',
-    ...(c.window === '48h' ? { minLeadHours: 2, maxAheadHours: 48 } : {}),
+    minLeadHours: 2, maxAheadHours: c.window === '24h' ? 24 : c.window === '48h' ? 48 : 168,
   };
 }
 

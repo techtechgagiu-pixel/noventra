@@ -9,7 +9,7 @@ describe('custom policy', () => {
     expect(p.minOdds).toBeLessThan(perLeg); expect(p.maxOdds).toBeGreaterThan(perLeg);
     expect(p.minLeadHours).toBe(2); expect(p.maxAheadHours).toBe(48);
     const big = customPolicy({ target: 100, legs: 6, agents: ['alex'], window: '7d' });
-    expect(big.pick).toBe('highest'); expect(big.minLeadHours).toBeUndefined();
+    expect(big.pick).toBe('highest'); expect(big.maxAheadHours).toBe(168);
     expect(big.minProbability).toBeLessThan(p.minProbability);
   });
   it('names custom and retired slots', () => {

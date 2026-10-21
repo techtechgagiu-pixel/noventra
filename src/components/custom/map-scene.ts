@@ -26,12 +26,18 @@ type Layout = {
   tray: { x: number; y: number; w: number; h: number };
 };
 
+/** Two teams on one pitch: PRIMUL 11 (left, attacking right) and the second team (right, attacking left). */
 export const FORMATION: Array<{ id: string; u: number; v: number; line: string }> = [
-  { id: 'robert', u: 0.07, v: 0.5, line: 'Portar · creierul' },
-  { id: 'victor', u: 0.28, v: 0.13, line: 'Apărare' }, { id: 'mihai', u: 0.28, v: 0.38, line: 'Apărare' },
-  { id: 'radu', u: 0.28, v: 0.62, line: 'Apărare' }, { id: 'elena', u: 0.28, v: 0.87, line: 'Apărare' },
-  { id: 'diana', u: 0.54, v: 0.13, line: 'Mijloc' }, { id: 'hantu', u: 0.5, v: 0.38, line: 'Mijloc' }, { id: 'becali', u: 0.5, v: 0.62, line: 'Mijloc · patronul' }, { id: 'ioana', u: 0.54, v: 0.87, line: 'Mijloc' },
-  { id: 'cosmin', u: 0.8, v: 0.17, line: 'Atac' }, { id: 'alex', u: 0.84, v: 0.5, line: 'Atac' }, { id: 'andrei', u: 0.8, v: 0.83, line: 'Atac' },
+  { id: 'robert', u: 0.04, v: 0.5, line: 'Portar · creierul' },
+  { id: 'victor', u: 0.14, v: 0.12, line: 'Apărare' }, { id: 'mihai', u: 0.14, v: 0.37, line: 'Apărare' },
+  { id: 'radu', u: 0.14, v: 0.63, line: 'Apărare' }, { id: 'elena', u: 0.14, v: 0.88, line: 'Apărare' },
+  { id: 'diana', u: 0.27, v: 0.12, line: 'Mijloc' }, { id: 'hantu', u: 0.25, v: 0.37, line: 'Mijloc' }, { id: 'becali', u: 0.25, v: 0.63, line: 'Mijloc · patronul' }, { id: 'ioana', u: 0.27, v: 0.88, line: 'Mijloc' },
+  { id: 'cosmin', u: 0.39, v: 0.2, line: 'Atac' }, { id: 'alex', u: 0.42, v: 0.5, line: 'Atac' }, { id: 'andrei', u: 0.39, v: 0.8, line: 'Atac' },
+  { id: 'porumboiu', u: 0.5, v: 0.04, line: 'VAR · pe margine' },
+  { id: 'prunea', u: 0.96, v: 0.5, line: 'Echipa a doua · portar' },
+  { id: 'dragusin', u: 0.86, v: 0.22, line: 'Echipa a doua · apărare' }, { id: 'petrescu', u: 0.87, v: 0.5, line: 'Echipa a doua · apărare' }, { id: 'tamas', u: 0.86, v: 0.78, line: 'Echipa a doua · apărare' },
+  { id: 'ilie', u: 0.74, v: 0.16, line: 'Echipa a doua · mijloc' }, { id: 'stoica', u: 0.73, v: 0.5, line: 'Echipa a doua · mijloc' }, { id: 'ianis', u: 0.74, v: 0.84, line: 'Echipa a doua · mijloc' },
+  { id: 'sumudica', u: 0.6, v: 0.3, line: 'Echipa a doua · atac' }, { id: 'man', u: 0.6, v: 0.7, line: 'Echipa a doua · atac' },
 ];
 const BRAIN = 'robert';
 const C = { cyan: '#5ee7f7', emerald: '#34d399', gold: '#e8c26a', rose: '#fb7185', violet: '#a78bfa', muted: '#94a3c4', text: '#eef2fb', lime: '#84cc16', line: '#22325a' };
@@ -445,7 +451,7 @@ export class MapScene {
     ctx.lineWidth = 1;
     for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
       const a = L.agents[ids[i]], b = L.agents[ids[j]]; const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (d > Math.max(L.pitch.w, L.pitch.h) * 0.34) continue;
+      if (d > Math.max(L.pitch.w, L.pitch.h) * 0.2) continue;
       const act = Math.max(this.agents.get(ids[i])!.activity, this.agents.get(ids[j])!.activity);
       ctx.strokeStyle = `rgba(94,231,247,${0.05 + act * 0.12})`;
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -643,7 +649,7 @@ function layout(w: number, h: number): Layout {
     const queue = { x: ax, y: 12, w: arenaW, h: clamp(h * 0.24, 122, 136) };
     const tray = { x: ax, y: h - 12 - clamp(h * 0.34, 120, 230), w: arenaW, h: clamp(h * 0.34, 120, 230) };
     const active = { x: ax, y: queue.y + queue.h + 10, w: arenaW, h: tray.y - (queue.y + queue.h + 10) - 10 };
-    const r = clamp(Math.min(pitch.w / 18, pitch.h / 11), 17, 32);
+    const r = clamp(Math.min(pitch.w / 30, pitch.h / 13), 13, 24);
     const agents: Record<string, Vec> = {};
     for (const f of FORMATION) agents[f.id] = { x: pitch.x + 30 + f.u * (pitch.w - 60), y: pitch.y + 34 + f.v * (pitch.h - 78) };
     return { mode: 'wide', w, h, r, pitch, agents, src: { x: pitch.x + pitch.w - 120, y: pitch.y + 18 }, news: { x: pitch.x + 22, y: pitch.y + 18 }, discard: { x: ax + arenaW + 40, y: active.y + active.h / 2 }, queue, active, tray };
@@ -653,7 +659,7 @@ function layout(w: number, h: number): Layout {
   const trayH = clamp(h * 0.16, 96, 132);
   const tray = { x: 10, y: h - 10 - trayH, w: w - 20, h: trayH };
   const pitch = { x: 10, y: active.y + active.h + 10, w: w - 20, h: tray.y - (active.y + active.h + 10) - 10 };
-  const r = clamp(Math.min(pitch.w / 11, pitch.h / 17), 15, 26);
+  const r = clamp(Math.min(pitch.w / 13, pitch.h / 30), 12, 20);
   const agents: Record<string, Vec> = {};
   for (const f of FORMATION) agents[f.id] = { x: pitch.x + 26 + f.v * (pitch.w - 52), y: pitch.y + pitch.h - 30 - f.u * (pitch.h - 76) };
   return { mode: 'tall', w, h, r, pitch, agents, src: { x: pitch.x + 14, y: pitch.y + 14 }, news: { x: pitch.x + pitch.w - 54, y: pitch.y + 14 }, discard: { x: w / 2, y: -40 }, queue, active, tray };

@@ -82,13 +82,13 @@ export function HomeStage({ events, title, finishedAt, target }: { events: Nexus
     <section aria-label="Reluare dintr-o analiză reală" className="grid items-center gap-6 lg:grid-cols-[minmax(320px,0.8fr)_1.7fr] lg:gap-10">
       <div className="min-w-0 space-y-5">
         {words}
-        <p className="max-w-md text-[15px] leading-relaxed text-muted">Doisprezece agenți citesc cotele reale, istoricul și știrile, se contrazic în dezbatere, iar Mircea Lucescu alege pronosticul care intră pe bilet.</p>
+        <p className="max-w-md text-[15px] leading-relaxed text-muted">Douăzeci și doi de agenți citesc cotele reale, istoricul și știrile, se contrazic în dezbatere, iar Mircea Lucescu alege pronosticul care intră pe bilet.</p>
         <div className="hidden lg:block">{lower}</div>
       </div>
       <div className="min-w-0">
         <div className="overflow-hidden rounded-[1.6rem] border border-line shadow-[0_30px_80px_-30px_rgba(94,231,247,.25)]">
           <AgentMap events={events} target={target} onProgress={onProgress} autoplay={{ speed: 1.7, pauseMs: 5000 }}
-            height={(w) => (w < 640 ? Math.max(560, w * 1.55) : Math.min(600, Math.max(420, w * 0.56)))} className="relative bg-ink" />
+            height={(w) => (w < 640 ? Math.max(680, w * 2.0) : Math.min(600, Math.max(420, w * 0.56)))} className="relative bg-ink" />
         </div>
         <p className="mt-2 text-[11px] text-muted">Reluare din analiza reală „{title}”{finishedAt ? `, încheiată ${fmtDateTime(finishedAt)}` : ''}.</p>
         <div className="mt-3 lg:hidden">{lower}</div>

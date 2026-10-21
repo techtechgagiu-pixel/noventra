@@ -17,7 +17,7 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
   const router = useRouter();
   const [target, setTarget] = useState(5);
   const [legs, setLegs] = useState(4);
-  const [win, setWin] = useState<'48h' | '7d'>('48h');
+  const [win, setWin] = useState<'24h' | '48h' | '7d'>('48h');
   const [chosen, setChosen] = useState<string[]>(['victor', 'andrei', 'alex', 'robert', 'ioana']);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,8 +59,9 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
           <p className="text-xs font-semibold uppercase tracking-wider text-muted">Cotă necesară pe meci</p>
           <p className={`mt-2 font-display text-3xl font-bold tabular ${tooLow || tooHigh ? 'text-rose' : risk.c}`}>≈ {Number.isFinite(perLeg) ? perLeg.toFixed(2) : '—'}</p>
           <p className="mt-1 text-xs text-muted">{tooLow ? 'Prea mică — pune mai puține meciuri.' : tooHigh ? 'Prea mare — pune mai multe meciuri.' : <>Profil <strong className={risk.c}>{risk.t}</strong> · cote acceptate {policy.minOdds.toFixed(2)}–{policy.maxOdds.toFixed(2)}, prob. ≥ {Math.round(policy.minProbability * 100)}%</>}</p>
-          <div className="mt-3 flex gap-1.5" role="group" aria-label="Fereastra meciurilor">
-            {(['48h', '7d'] as const).map((w) => <button key={w} onClick={() => setWin(w)} aria-pressed={win === w} className={`chip ${win === w ? 'text-cyan' : 'text-muted'}`}>{w === '48h' ? 'Meciuri în 2–48 h' : 'Următoarele 7 zile'}</button>)}
+          <p className="mt-3 text-xs text-muted">Meciuri care încep peste 2 h și cel mult:</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Fereastra meciurilor">
+            {(['24h', '48h', '7d'] as const).map((w) => <button key={w} onClick={() => setWin(w)} aria-pressed={win === w} className={`chip ${win === w ? 'text-cyan' : 'text-muted'}`}>{w === '24h' ? 'Maxim 24 h' : w === '48h' ? 'Maxim 48 h' : 'Maxim o săptămână'}</button>)}
           </div>
         </div>
       </div>
@@ -99,7 +100,7 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
 
       <div className="card sticky bottom-3 z-10 flex flex-col gap-3 p-4 shadow-2xl backdrop-blur md:flex-row md:items-center" style={{ background: 'rgba(10,18,40,0.97)' }}>
         <p className="text-sm text-muted md:flex-1">
-          Cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · intră pe bilet o selecție susținută de minimum <strong className="text-text">{chosen.length >= agents.length ? 3 : customThreshold(chosen.length)}</strong> dintre ei. Fără „sub”. Creierul (M. Lucescu) alege pronosticul final.
+          Cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · intră pe bilet o selecție susținută de minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> dintre ei. Fără „sub”. Creierul (M. Lucescu) alege pronosticul final.
         </p>
         {error && <p className="text-sm text-rose" role="alert">{error}</p>}
         <button onClick={create} disabled={busy || !chosen.length || tooLow || tooHigh || target < 1.2} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : 'CREEAZĂ BILETUL CUSTOM'}</button>

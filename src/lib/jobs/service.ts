@@ -109,7 +109,7 @@ export function parseCustom(input: unknown): CustomConfig {
   const legs = Math.round(Number(o.legs));
   const ids = new Set<string>(VOTING_AGENTS.map((a) => a.id));
   const agents = [...new Set(Array.isArray(o.agents) ? o.agents.map(String) : [])].filter((a) => ids.has(a));
-  const window = o.window === '7d' ? '7d' : '48h';
+  const window = o.window === '7d' ? '7d' : o.window === '24h' ? '24h' : '48h';
   if (!Number.isFinite(target) || target < 1.2 || target > 1000) throw new SlotError('Cota țintă trebuie să fie între 1.20 și 1000.');
   if (!Number.isInteger(legs) || legs < 1 || legs > 15) throw new SlotError('Numărul de meciuri trebuie să fie între 1 și 15.');
   if (!agents.length) throw new SlotError('Alege cel puțin un agent.');
@@ -128,7 +128,7 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
   const key = localDate(at);
   const policy = customPolicy(custom);
   const weekly = custom.window === '7d';
-  const days = weekly ? 7 : 3;
+  const days = custom.window === '7d' ? 8 : custom.window === '24h' ? 2 : 3;
   const maxFixtures = Math.min(weekly ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, Math.max(12, custom.legs * 4));
   const cfg = { windowStart: key, windowDays: days, top10Only: false, maxFixtures, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], custom };
   const seed = randomBytes(16).toString('hex');

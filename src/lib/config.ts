@@ -21,8 +21,8 @@ export const config = {
   openRouterDailyUsd: Number(process.env.OPENROUTER_DAILY_USD || '5'),
   oddsApiKey: process.env.ODDS_API_KEY || '',
   limits: {
-    aiDailyCalls: num('AI_DAILY_CALL_LIMIT', 3000),
-    aiDailyTokens: num('AI_DAILY_TOKEN_LIMIT', 6_000_000),
+    aiDailyCalls: num('AI_DAILY_CALL_LIMIT', 8000),
+    aiDailyTokens: num('AI_DAILY_TOKEN_LIMIT', 16_000_000),
     sportsDailyRequests: num('SPORTS_API_DAILY_LIMIT', 6000),
     maxConcurrentJobs: num('MAX_CONCURRENT_ANALYSES', 2),
     maxFixturesDaily: num('MAX_FIXTURES_PER_JOB', 30),

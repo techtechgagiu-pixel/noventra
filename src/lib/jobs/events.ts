@@ -1,3 +1,4 @@
+import { cleanPayload } from '../agent-names';
 import { one, type Db, pool } from '../db';
 
 export type EventType =
@@ -27,5 +28,5 @@ export async function eventsAfter(jobId: string, afterSeq: number, limit = 500, 
     `SELECT seq, type, stage, fixture_id, agent_id, payload, created_at FROM analysis_events WHERE job_id=$1 AND seq>$2 ORDER BY seq LIMIT $3`,
     [jobId, afterSeq, limit],
   );
-  return res.rows.map((r) => ({ seq: r.seq, type: r.type, stage: r.stage, fixtureId: r.fixture_id, agentId: r.agent_id, payload: r.payload, createdAt: new Date(r.created_at).toISOString() }));
+  return res.rows.map((r) => ({ seq: r.seq, type: r.type, stage: r.stage, fixtureId: r.fixture_id, agentId: r.agent_id, payload: cleanPayload(r.payload), createdAt: new Date(r.created_at).toISOString() }));
 }

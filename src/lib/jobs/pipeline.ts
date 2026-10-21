@@ -380,7 +380,7 @@ export function jobAgents(job: Pick<JobRow, 'config'>): AgentDefinition[] {
 /** Votes needed for a selection: the global threshold for the full team, ~30% of a smaller custom team (min 1). */
 export function jobThreshold(job: Pick<JobRow, 'config'>): number {
   const n = jobAgents(job).length;
-  return n >= VOTING_AGENTS.length ? config.limits.consensusThreshold : customThreshold(n);
+  return customThreshold(n);
 }
 
 /** Price per leg that reaches the target with a comfortable number of legs (daily: minLegs+1, weekly: exactly 12). */

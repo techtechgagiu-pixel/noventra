@@ -86,7 +86,7 @@ export function consensus(positions: FinalPosition[], threshold: number, totalAg
   for (const b of bets) for (const pk of picksOf(b)) tally[pk] = (tally[pk] ?? 0) + 1;
   const refusedBy = new Set(positions.filter((p) => p.decision === 'NO_BET').map((p) => p.agentId));
   const cautiousVeto = CAUTIOUS_AGENTS.every((a) => refusedBy.has(a));
-  const required = cautiousVeto ? Math.max(threshold, CAUTIOUS_VETO_VOTES) : threshold;
+  const required = cautiousVeto ? Math.max(threshold + 2, CAUTIOUS_VETO_VOTES) : threshold;
   const keys = availableKeys ?? [...new Set(bets.flatMap(picksOf))].map((key) => ({ key, odds: 0 }));
   const support = keys.map((k) => {
     const supporters = bets.filter((b) => picksOf(b).some((pk) => selectionImplies(pk, k.key))).map((b) => b.agentId);

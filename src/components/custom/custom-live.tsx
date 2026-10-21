@@ -1,5 +1,6 @@
 'use client';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Pause, Play, WifiOff } from 'lucide-react';
 import { api } from '@/lib/format';
@@ -11,7 +12,7 @@ import { DebateChat } from './debate-chat';
 type Info = Record<string, { title: string; specialty: string; maxOdds: number; minProbability: number; model?: string | null }>;
 const STATUS: Record<string, string> = { QUEUED: 'în coadă', RUNNING: 'live', WAITING: 'așteaptă limita furnizorului', PAUSED: 'în pauză', COMPLETED: 'bilet gata', INCOMPLETE: 'incomplet', NO_BET: 'NO BET', FAILED: 'eșuat' };
 
-export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { href: '/?tab=custom', label: '← Bilet custom nou' } }: { jobId: string; initialMeta: JobMeta; initialEvents: NexusEvent[]; info: Info; back?: { href: string; label: string } }) {
+export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { href: '/?tab=custom', label: '← Bilet custom nou' }, openTicketWhenDone = false, replayOnOpen = false }: { jobId: string; initialMeta: JobMeta; initialEvents: NexusEvent[]; info: Info; back?: { href: string; label: string } | null; openTicketWhenDone?: boolean; replayOnOpen?: boolean }) {
   const { events, meta, setMeta, connected } = useJobEvents(jobId, initialEvents, initialMeta);
   const [upTo, setUpTo] = useState(0);
   const map = useRef<AgentMapHandle>(null);
@@ -20,12 +21,20 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
   const done = TERMINAL.includes(meta.status);
   const behind = events.length && upTo < (events.at(-1)?.seq ?? 0);
 
+  const router = useRouter();
+  // Opens the finished ticket only when the analysis ends while it is being watched.
+  const wasRunning = useRef(!TERMINAL.includes(initialMeta.status));
+  useEffect(() => {
+    if (openTicketWhenDone && wasRunning.current && done && meta.ticketId) { const t = setTimeout(() => router.push(`/?tab=bilete&ticket=${meta.ticketId}&fresh=1`), 2500); return () => clearTimeout(t); }
+  }, [openTicketWhenDone, done, meta.ticketId, router]);
+  useEffect(() => { if (replayOnOpen) { const t = setTimeout(() => map.current?.replay(2.5), 400); return () => clearTimeout(t); } }, [replayOnOpen]);
+
   async function resume() { await api(`/api/jobs/${jobId}/resume`, { method: 'POST' }).catch(() => {}); setMeta({ ...meta, status: 'QUEUED' }); }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={back.href} className="text-sm text-muted hover:text-text">{back.label}</Link>
+        {back && <Link href={back.href} className="text-sm text-muted hover:text-text">{back.label}</Link>}
         <h2 className="font-display text-lg font-bold md:ml-2">{meta.title}</h2>
         {meta.subtitle && <span className="text-sm text-muted">{meta.subtitle}</span>}
         <span className={`chip ml-auto ${live ? 'text-emerald' : done && meta.status === 'COMPLETED' ? 'text-emerald' : 'text-muted'}`}>

@@ -8,8 +8,8 @@ type T = { id: string; slot: string; period_key: string; target_odds: number; ac
 const FILTERS = [['all', 'Toate'], ['today', 'Azi'], ['yesterday', 'Ieri'], ['week', 'Săptămâna asta'], ['weekly', 'Biletul săptămânii'], ['COMPLETED', 'Complete'], ['INCOMPLETE', 'Incomplete'], ['NO_BET', 'NO BET'], ['PENDING', 'În așteptare'], ['settled', 'Câștigate / pierdute']] as const;
 const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
 
-export function TicketArchive({ tickets }: { tickets: T[] }) {
-  const [f, setF] = useState<string>('all');
+export function TicketArchive({ tickets, initialFilter = 'all', title = 'Biletele mele' }: { tickets: T[]; initialFilter?: string; title?: string }) {
+  const [f, setF] = useState<string>(initialFilter);
   const today = dayKey(new Date()); const yesterday = dayKey(new Date(Date.now() - 86400_000));
   const monday = (() => { const d = new Date(`${today}T12:00:00Z`); const w = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() - w + 1); return d.toISOString().slice(0, 10); })();
   const list = useMemo(() => tickets.filter((t) => {
@@ -19,7 +19,7 @@ export function TicketArchive({ tickets }: { tickets: T[] }) {
   }), [tickets, f, today, yesterday, monday]);
   return (
     <div className="space-y-4">
-      <h1 className="font-display text-2xl font-bold">Biletele mele</h1>
+      <h1 className="font-display text-2xl font-bold">{title}</h1>
       <div className="flex flex-wrap gap-2">{FILTERS.map(([k, l]) => <button key={k} onClick={() => setF(k)} className={`chip ${f === k ? 'border-cyan text-cyan' : 'text-muted'}`} aria-pressed={f === k}>{l}</button>)}</div>
       {list.length === 0 ? <div className="card p-8 text-center text-muted">Niciun bilet în această categorie.</div> : (
         <ul className="grid gap-3 md:grid-cols-2">
@@ -27,7 +27,7 @@ export function TicketArchive({ tickets }: { tickets: T[] }) {
             <li key={t.id}>
               <Link href={`/?tab=istoric&ticket=${t.id}`} className={`card block p-4 transition hover:border-cyan/50 ${t.outcome_status === 'WON' || t.outcome_status === 'PARTIAL_VOID' ? 'border-emerald bg-emerald/10' : t.outcome_status === 'LOST' ? 'border-rose bg-rose/10' : ''}`}>
                 <div className="flex items-start justify-between gap-3">
-                  <div><p className="font-semibold">{SLOTS_UI[t.slot] ?? (t.slot.startsWith('CUSTOM_') ? `CUSTOM — COTĂ ${t.target_odds}` : t.slot)}</p><p className="text-xs text-muted">{fmtDateTime(t.created_at)}</p></div>
+                  <div><p className="font-semibold">{SLOTS_UI[t.slot] ?? (t.slot.startsWith('CUSTOM_') ? `CUSTOM — COTĂ ${t.target_odds}` : t.slot.startsWith('REVIEW_') ? `BILETUL TĂU — COTĂ ${t.target_odds}` : t.slot)}</p><p className="text-xs text-muted">{fmtDateTime(t.created_at)}</p></div>
                   <div className="text-right"><p className="font-display text-2xl font-bold tabular">{t.generation_status === 'COMPLETED' ? odds(t.actual_odds) : '—'}</p><p className="text-xs text-muted">țintă {t.target_odds}</p></div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs">

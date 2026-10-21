@@ -28,7 +28,7 @@ export const AgentMap = forwardRef<AgentMapHandle, Props>(function AgentMap({ ev
     s.reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     s.setTarget(target);
     scene.current = s;
-    const size = () => { const width = w.clientWidth; const h = height ? height(width) : width < 640 ? Math.min(860, Math.max(620, width * 1.8)) : Math.min(600, Math.max(380, width * 0.52)); s.resize(width, h); };
+    const size = () => { const width = w.clientWidth; const h = height ? height(width) : width < 640 ? Math.min(1100, Math.max(760, width * 2.5)) : Math.min(600, Math.max(380, width * 0.52)); s.resize(width, h); };
     size();
     const ro = new ResizeObserver(size); ro.observe(w);
     // Draw only while visible: the browser already pauses rAF in background tabs.
