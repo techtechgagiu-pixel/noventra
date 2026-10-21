@@ -1,4 +1,5 @@
 'use client';
+import { CreatorBadge } from '@/components/ticket-archive';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -36,6 +37,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
       <div className="flex flex-wrap items-center gap-2">
         {back && <Link href={back.href} className="text-sm text-muted hover:text-text">{back.label}</Link>}
         <h2 className="font-display text-lg font-bold md:ml-2">{meta.title}</h2>
+        {meta.creator && <CreatorBadge c={meta.creator} />}
         {meta.subtitle && <span className="text-sm text-muted">{meta.subtitle}</span>}
         <span className={`chip ml-auto ${live ? 'text-emerald' : done && meta.status === 'COMPLETED' ? 'text-emerald' : 'text-muted'}`}>
           <span className={`h-2 w-2 rounded-full ${live ? 'animate-pulse bg-emerald' : 'bg-muted'}`} />{STATUS[meta.status] ?? meta.status}
@@ -46,7 +48,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
       {meta.status === 'PAUSED' && (
         <div className="card flex flex-col gap-3 border-gold/50 p-4 md:flex-row md:items-center md:justify-between">
           <p className="flex items-center gap-2 text-sm text-gold"><Pause size={16} aria-hidden /> {meta.lastError ?? 'Analiza a fost pusă în pauză.'}</p>
-          <button onClick={resume} className="btn btn-primary px-5 py-3">CONTINUĂ ANALIZA</button>
+          {meta.mine === false ? <span className="text-xs text-muted">Doar cel care a creat analiza o poate relua.</span> : <button onClick={resume} className="btn btn-primary px-5 py-3">CONTINUĂ ANALIZA</button>}
         </div>
       )}
       <AgentMap ref={map} events={events} target={meta.target} info={info} onProgress={onProgress} />

@@ -46,7 +46,7 @@ test('daily COTĂ 5 ticket: create → live NEXUS → auto-open result → locke
   expect(generateCalls).toHaveLength(0);
 });
 
-test('another user cannot open the ticket', async ({ page, browser }) => {
+test('another account sees shared tickets but not missing ones', async ({ page, browser }) => {
   await page.goto('/auth/test-login?email=owner@test.local');
   const list = await (await page.request.get('/api/tickets')).json();
   const other = await browser.newContext();
@@ -129,6 +129,9 @@ test('statistics tab: per-agent record and consumption', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'Agenții' }).locator('article')).toHaveCount(23);
   await expect(page.getByText('Consum azi')).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/stats.png`, fullPage: true });
+  await page.goto('/?tab=istoric');
+  await expect(page.getByRole('heading', { name: 'Bilete create' })).toBeVisible();
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/created.png` });
 });
 
 test('matches tab: every available fixture with odds and analysis status', async ({ page }) => {

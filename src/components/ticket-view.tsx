@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { AlertTriangle, Check, ClipboardCopy, Download, History, ListChecks, PlayCircle, Sparkles } from 'lucide-react';
 import { AGENT_META, OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
 import { superbetPick } from '@/lib/superbet-format';
+import { CreatorBadge } from '@/components/ticket-archive';
+import type { Creator } from '@/lib/views';
 
 type Sel = { position: number; fixture_id: string; market_key: string; market_label: string; odds: number; bookmaker: string; quote_observed_at: string; votes_for: number; model_probability: number | null; risk: string; snapshot: { match: string; home: string; away: string; league: string; kickoff: string; source: string }; outcome: string; home_score: number | null; away_score: number | null };
 export type TicketData = {
-  id: string; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string;
+  id: string; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string; creator?: Creator; mine?: boolean;
   summary: { review?: { legs: Array<{ fixtureId: string; match: string; label: string; odds: number; verdict: 'SOLID' | 'RISCANT' | 'SLAB' | 'NEANALIZAT'; supporters: string[]; responded: number; engineProbability: number | null; suggestion: { label: string; odds: number; supporters: number } | null; note: string }>; overall: string; advice: string[]; chance: number | null; model: string | null; userAdvice: string | null; solid: number; risky: number; weak: number }; digest?: { lines: string[]; source: 'ai' | 'data'; model: string | null; createdAt: string }; agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
   selections: Sel[];
   decisions: Array<{ fixture_id: string; outcome: string; market_key: string | null; votes_for: number; votes: Array<{ agentId: string; decision: string; marketKey: string | null; model: string; provider: string }>; reason: string }>;
@@ -69,6 +71,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
             <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan">{t.subtitle}</p>
             <h1 className="font-display text-3xl font-bold">{t.title}</h1>
             <p className="text-sm text-muted">Creat {fmtDateTime(t.createdAt)} · {t.summary.analyzed ?? 0} meciuri analizate</p>
+            <div className="mt-1"><CreatorBadge c={t.creator} /></div>
           </div>
           <div className="flex gap-6 text-right">
             {!t.summary.review && <div><p className="text-xs text-muted">Țintă</p><p className="font-display text-2xl font-bold tabular">{t.target}</p></div>}
@@ -129,7 +132,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
           ) : (
             <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
               <span>Biletul a fost creat înainte de rezumate.</span>
-              <button onClick={makeDigest} disabled={digestBusy} className="btn btn-ghost px-4 py-2">{digestBusy ? 'Se scrie…' : 'GENEREAZĂ REZUMATUL'}</button>
+              <button onClick={makeDigest} disabled={digestBusy || t.mine === false} title={t.mine === false ? 'Doar cel care a creat biletul poate genera rezumatul' : undefined} className="btn btn-ghost px-4 py-2">{digestBusy ? 'Se scrie…' : 'GENEREAZĂ REZUMATUL'}</button>
               {digestError && <span className="text-rose">{digestError}</span>}
             </div>
           )}

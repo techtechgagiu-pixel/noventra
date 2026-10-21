@@ -107,3 +107,27 @@ describe('production invitation access', () => {
     expect(res.headers.get('set-cookie')).toBeNull();
   });
 });
+
+describe('Google accounts and shared tickets', () => {
+  it('a Google session is never admin, and a blocked account is signed out at once', async () => {
+    const id = await makeUser('fan@gmail.com');
+    const s = await createSession(id, 'ua', { google: true });
+    expect(await userFromToken(s.token)).toMatchObject({ id, role: 'user' });
+    await query("UPDATE users SET role='admin' WHERE id=$1", [id]);
+    expect(await userFromToken(s.token)).toMatchObject({ role: 'user' });
+    await query('UPDATE users SET blocked_at=now() WHERE id=$1', [id]);
+    expect(await userFromToken(s.token)).toBeNull();
+  });
+  it('every account sees every ticket with its creator; the e-mail is masked for others', async () => {
+    const { listTickets, ticketDetail } = await import('@/lib/views');
+    const a = await makeUser('ana.pop@gmail.com'), b = await makeUser('bogdan@gmail.com');
+    await query("UPDATE users SET name='Ana Pop' WHERE id=$1", [a]);
+    const job = await one<{ id: string }>(`INSERT INTO ticket_generation_jobs (user_id, slot, period_key, target_odds, seed, status, stage, config, checkpoint)
+      VALUES ($1,'CUSTOM_1',current_date,2,'s','COMPLETED','DONE','{}','{}') RETURNING id`, [a]);
+    const t = await one<{ id: string }>(`INSERT INTO tickets (job_id, user_id, slot, period_key, target_odds, generation_status, summary) VALUES ($1,$2,'CUSTOM_1',current_date,2,'NO_BET','{}') RETURNING id`, [job!.id, a]);
+    const seen = (await listTickets(b)) as unknown as Array<{ id: string; creator: { name: string; detail: string | null; mine: boolean } }>;
+    expect(seen.find((x) => x.id === t!.id)?.creator).toMatchObject({ name: 'Ana Pop', detail: 'an•••@gmail.com', mine: false });
+    expect((await ticketDetail(b, t!.id))?.mine).toBe(false);
+    expect((await ticketDetail(a, t!.id))?.creator.mine).toBe(true);
+  });
+});

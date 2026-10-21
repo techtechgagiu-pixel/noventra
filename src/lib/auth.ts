@@ -1,9 +1,10 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { config, isProduction } from './config';
 import { one, query, tx } from './db';
 
 export const SESSION_COOKIE = 'bm_sid';
+export const OAUTH_COOKIE = 'bm_oauth';
 export const VISITOR_DAYS = 7;
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 export type User = { id: string; email: string; name: string | null; picture: string | null; role: 'user' | 'admin'; soundEnabled: boolean; soundVolume: number };
@@ -11,15 +12,15 @@ export const hashAccessCode = (code: string) => sha256(code.trim().toUpperCase()
 export const newAccessCode = () => `P11-${randomBytes(16).toString('hex').toUpperCase().match(/.{8}/g)!.join('-')}`;
 export const cookieBase = { httpOnly: true, sameSite: 'lax' as const, secure: isProduction || config.appBaseUrl.startsWith('https://'), path: '/' };
 export const authConfigured = () => /^[a-f0-9]{64}$/i.test(config.ownerAccessCodeHash);
-type Access = { invitationId?: string; ownerCodeHash?: string; expiresAt?: Date };
+type Access = { invitationId?: string; ownerCodeHash?: string; expiresAt?: Date; google?: boolean };
 
-/** Old Google sessions and callers without a verified code cannot create production sessions. */
+/** A production session needs a verified code or a verified Google sign-in. */
 export async function createSession(userId: string, userAgent?: string, access: Access = {}) {
-  if (!config.allowDemoProviders && !access.invitationId && !access.ownerCodeHash) throw new Error('Codul de acces este necesar.');
+  if (!config.allowDemoProviders && !access.invitationId && !access.ownerCodeHash && !access.google) throw new Error('Codul de acces este necesar.');
   const raw = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Math.min(Date.now() + 14 * 86400_000, access.expiresAt?.getTime() ?? Infinity));
-  await query(`INSERT INTO sessions (id,user_id,expires_at,user_agent,invitation_id,owner_code_hash) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [sha256(raw), userId, expiresAt, userAgent?.slice(0, 200) ?? null, access.invitationId ?? null, access.ownerCodeHash ?? null]);
+  await query(`INSERT INTO sessions (id,user_id,expires_at,user_agent,invitation_id,owner_code_hash,google_login) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [sha256(raw), userId, expiresAt, userAgent?.slice(0, 200) ?? null, access.invitationId ?? null, access.ownerCodeHash ?? null, !!access.google]);
   return { token: raw, maxAge: Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000)) };
 }
 
@@ -34,6 +35,7 @@ export async function userFromToken(raw: string | undefined): Promise<User | nul
      WHERE s.id=$1 AND s.expires_at>now() AND (
        (s.owner_code_hash=$2 AND $2<>'') OR
        (i.id IS NOT NULL AND i.user_id=s.user_id AND i.revoked_at IS NULL AND i.expires_at>now()) OR
+       (s.google_login AND u.blocked_at IS NULL) OR
        ($3 AND s.invitation_id IS NULL AND s.owner_code_hash IS NULL))`,
     [sha256(raw), config.ownerAccessCodeHash, config.allowDemoProviders]);
   return r ? { id: r.id, email: r.email, name: r.name, picture: r.picture, role: r.role, soundEnabled: r.sound_enabled, soundVolume: r.sound_volume } : null;
@@ -74,6 +76,61 @@ export async function issueInvitation(adminId: string, label: string) {
     return { id: invite!.id, code, label, expiresAt: invite!.expires_at.toISOString() };
   });
 }
+// ── Google sign-in (OpenID Connect, code flow with PKCE). Always an ordinary account: administration needs the code. ──
+const b64url = (b: Buffer) => b.toString('base64url');
+function sign(payload: object) {
+  const body = b64url(Buffer.from(JSON.stringify(payload)));
+  return `${body}.${b64url(createHmac('sha256', config.authSecret).update(body).digest())}`;
+}
+function verifySigned<T>(token: string | undefined): T | null {
+  if (!token || !config.authSecret) return null;
+  const [body, mac] = token.split('.');
+  if (!body || !mac) return null;
+  const expected = createHmac('sha256', config.authSecret).update(body).digest();
+  const given = Buffer.from(mac, 'base64url');
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  try { const d = JSON.parse(Buffer.from(body, 'base64url').toString()) as T & { exp?: number }; return d.exp && d.exp > Date.now() ? d : null; } catch { return null; }
+}
+export const googleConfigured = () => !!(config.googleClientId && config.googleClientSecret && config.authSecret);
+const redirectUri = () => `${config.appBaseUrl}/auth/callback`;
+
+export function googleAuthUrl() {
+  const verifier = b64url(randomBytes(32));
+  const nonce = b64url(randomBytes(16));
+  const state = b64url(randomBytes(16));
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  url.search = new URLSearchParams({
+    client_id: config.googleClientId, redirect_uri: redirectUri(), response_type: 'code', scope: 'openid email profile', state, nonce,
+    code_challenge: b64url(createHash('sha256').update(verifier).digest()), code_challenge_method: 'S256', prompt: 'select_account',
+  }).toString();
+  return { url: url.toString(), cookie: sign({ verifier, state, nonce, exp: Date.now() + 10 * 60_000 }) };
+}
+
+type IdClaims = { sub?: string; email?: string; email_verified?: boolean; name?: string; picture?: string; nonce?: string; aud?: string; iss?: string; exp?: number };
+/** Exchanges the code; the ID token comes straight from Google's token endpoint over TLS, then its claims are checked. */
+export async function completeGoogleLogin(code: string, state: string, oauthCookie: string | undefined, userAgent?: string) {
+  const saved = verifySigned<{ verifier: string; state: string; nonce: string }>(oauthCookie);
+  if (!saved || saved.state !== state) throw new Error('Starea autentificării nu este validă.');
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ code, client_id: config.googleClientId, client_secret: config.googleClientSecret, redirect_uri: redirectUri(), grant_type: 'authorization_code', code_verifier: saved.verifier }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const token = (await res.json().catch(() => ({}))) as { id_token?: string; error?: string };
+  if (!res.ok || !token.id_token) throw new Error(`Google a refuzat autentificarea (${token.error ?? res.status}).`);
+  const claims = JSON.parse(Buffer.from(token.id_token.split('.')[1] ?? '', 'base64url').toString() || '{}') as IdClaims;
+  if (!['accounts.google.com', 'https://accounts.google.com'].includes(claims.iss ?? '') || claims.aud !== config.googleClientId || (claims.exp ?? 0) * 1000 < Date.now() || claims.nonce !== saved.nonce) throw new Error('Tokenul Google nu este valid.');
+  if (!claims.sub || !claims.email || claims.email_verified !== true) throw new Error('Contul Google nu are un e-mail verificat.');
+  const user = await one<{ id: string; blocked_at: Date | null }>(
+    `INSERT INTO users (google_sub, email, name, picture, role, last_login_at) VALUES ($1,$2,$3,$4,'user',now())
+     ON CONFLICT (google_sub) DO UPDATE SET email=EXCLUDED.email, name=EXCLUDED.name, picture=EXCLUDED.picture, last_login_at=now()
+     RETURNING id, blocked_at`,
+    [claims.sub, claims.email.toLowerCase(), claims.name?.slice(0, 120) ?? null, claims.picture?.slice(0, 500) ?? null],
+  );
+  if (user!.blocked_at) throw new Error('blocked');
+  return createSession(user!.id, userAgent, { google: true });
+}
+
 export async function currentUser(): Promise<User | null> {
   return userFromToken((await cookies()).get(SESSION_COOKIE)?.value);
 }

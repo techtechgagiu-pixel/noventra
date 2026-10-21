@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return new NextResponse('Origine respinsă.', { status: 403 });
   const address = req.headers.get('cf-connecting-ip') || req.headers.get('x-forwarded-for') || 'unknown';
   const key = createHash('sha256').update(address).digest('hex');
-  const back = (error: string) => NextResponse.redirect(`${config.appBaseUrl}/login?error=${error}`, 303);
+  const back = (error: string) => NextResponse.redirect(`${config.appBaseUrl}/login?error=${error}&cod=1`, 303);
   if (rateLimited('code-login:all', 100, 60_000) || rateLimited(`code-login:${key}`, 10, 60_000)) return back('rate');
   if (Number(req.headers.get('content-length')) > 1024) return back('invalid');
   const form = await req.formData().catch(() => null);

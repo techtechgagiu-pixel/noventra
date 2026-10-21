@@ -53,7 +53,7 @@ export function NexusLive({ jobId, initialMeta, initialEvents }: { jobId: string
       {meta.status === 'PAUSED' && (
         <div className="card flex flex-col gap-3 border-gold/50 p-4 md:flex-row md:items-center md:justify-between">
           <p className="flex items-center gap-2 text-sm text-gold"><Pause size={16} aria-hidden /> {meta.lastError ?? 'Analiza a fost pusă în pauză.'} Reluarea continuă aceeași analiză, cu aceleași meciuri.</p>
-          <button onClick={resume} className="btn btn-primary px-5 py-3">CONTINUĂ ANALIZA</button>
+          {meta.mine === false ? <span className="text-xs text-muted">Doar cel care a creat analiza o poate relua.</span> : <button onClick={resume} className="btn btn-primary px-5 py-3">CONTINUĂ ANALIZA</button>}
         </div>
       )}
       {TERMINAL.includes(meta.status) && meta.ticketId && !wasRunningAtOpen.current && (

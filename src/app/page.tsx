@@ -50,7 +50,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
     { id: 'azi', label: 'Azi', icon: CalendarDays },
     { id: 'meciuri', label: 'Meciuri', icon: ListOrdered },
-    { id: 'istoric', label: 'Istoric', icon: History },
+    { id: 'istoric', label: 'Bilete create', icon: History },
     { id: 'statistici', label: 'Statistici', icon: BarChart3 },
   ];
 
@@ -66,13 +66,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
           <nav className="order-last flex w-full justify-center gap-1 rounded-xl border border-line bg-panel p-1 sm:order-none sm:ml-auto sm:w-auto" aria-label="Secțiuni">
             {tabs.map(({ id, label, icon: Icon, badge }) => (
               <Link key={id} href={`/?tab=${id}`} title={label} aria-label={label} aria-current={tab === id ? 'page' : undefined}
-                className={`relative flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition md:px-4 ${tab === id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:text-text'}`}>
+                className={`relative flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition md:px-3 xl:px-2.5 ${tab === id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:text-text'}`}>
                 <Icon size={16} aria-hidden /> <span className="hidden xl:inline">{label}</span>
                 {badge && <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-emerald" aria-label="analiză în curs" />}
               </Link>
             ))}
           </nav>
-          {user.role === 'admin' && <Link href="/admin/invitations" className="text-xs text-cyan" title="Coduri de invitație">Invitații</Link>}
+          {user.role === 'admin' && <Link href="/admin/invitations" className="text-xs text-cyan" title="Conturi și coduri de acces">Conturi</Link>}
           <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
         </div>
       </header>

@@ -78,8 +78,9 @@ describe('daily ticket end-to-end (DEMO data, fake AI transport)', () => {
     for (const t of ['JOB_CREATED', 'SEED_GENERATED', 'POOL_BUILT', 'CANDIDATE_SELECTED', 'SCOUT_STARTED', 'SCOUT_COMPLETED', 'STATS_COMPLETED', 'AGENT_STARTED', 'PREDICTION_SAVED', 'VOTE_SUBMITTED', 'CONSENSUS_CALCULATED', 'ODDS_VALIDATED', 'SELECTION_ACCEPTED', 'OPTIMIZATION_COMPLETED', 'TICKET_FINALIZED']) expect(events.some((e) => e.type === t), t).toBe(true);
     // Cross-user isolation.
     const other = await makeUser('x@t');
-    expect(await ticketDetail(other, ticket!.id)).toBeNull();
-    expect(await jobEvents(other, jobId, 0)).toBeNull();
+    // Shared "Bilete create": another account can read the ticket and its debate, marked as not theirs.
+    expect((await ticketDetail(other, ticket!.id))?.mine).toBe(false);
+    expect((await jobEvents(other, jobId, 0))?.length).toBeGreaterThan(0);
   });
 
   it('NO BET is a terminal, saved outcome that consumes the slot', async () => {
