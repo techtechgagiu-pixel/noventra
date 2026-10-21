@@ -13,7 +13,7 @@ import { NexusLive } from '@/components/nexus-live';
 import { ReplayPlayer } from '@/components/replay-player';
 import { PerformancePanel } from '@/components/performance-panel';
 import { STATUS_RO, fmtDateTime } from '@/lib/format';
-import { slotById } from '@/lib/slots';
+import { CUSTOM_LIMIT_PER_DAY, slotById } from '@/lib/slots';
 import { VOTING_AGENTS } from '@/lib/ai/agents';
 import { activeAssignments } from '@/lib/ai/assignments';
 import { allTrackRecords } from '@/lib/track-record';
@@ -99,7 +99,7 @@ async function AcasaTab({ userId }: { userId: string }) {
   const decided = stats.legsWon + stats.legsLost;
   const tiles: Array<{ href: string; title: string; text: string; foot: string; accent: string; icon: typeof Ticket; wide?: boolean }> = [
     { href: '/?tab=bilete', title: 'Biletele zilei', text: 'COTĂ 5 și COTĂ 2, câte două pe zi, plus biletul săptămânii, construite din cote mici.', foot: ready ? `${ready} din ${slots.length} gata azi` : 'Niciunul creat încă azi', accent: '#5ee7f7', icon: Ticket, wide: true },
-    { href: '/?tab=custom', title: 'Creează bilet', text: 'Alegi cota, câte meciuri și cine intră în teren, apoi urmărești dezbaterea pe hartă.', foot: 'Până la 10 bilete custom pe zi', accent: '#34d399', icon: SlidersHorizontal, wide: true },
+    { href: '/?tab=custom', title: 'Creează bilet', text: 'Alegi cota, câte meciuri și cine intră în teren, apoi urmărești dezbaterea pe hartă.', foot: `Până la ${CUSTOM_LIMIT_PER_DAY} bilete custom pe zi`, accent: '#34d399', icon: SlidersHorizontal, wide: true },
     { href: '/?tab=verifica', title: 'Vino cu biletul tău la analiză', text: 'Îți faci biletul din cote reale; echipa îți spune ce e solid, ce e slab și ce să schimbi.', foot: 'Verdict pe fiecare meci', accent: '#e8c26a', icon: ClipboardCheck },
     { href: '/?tab=istoric', title: 'Bilete create', text: 'Toate biletele, cu meciurile ieșite verzi sau roșii și cum a fost luată fiecare decizie.', foot: stats.tickets ? `${stats.tickets} ${stats.tickets === 1 ? 'bilet' : 'bilete'}${decided ? `, ${stats.legsWon} din ${decided} meciuri verzi` : ''}` : 'Încă niciun bilet', accent: '#a78bfa', icon: History },
   ];
@@ -219,7 +219,7 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-bold">Bilet custom</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Tu alegi cota, numărul de meciuri și cine intră în teren. Agenții aleși analizează și dezbat live pe hartă, iar jurnalul de sub hartă arată tot ce și-au spus. Maximum 10 bilete custom pe zi.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Tu alegi cota, numărul de meciuri și cine intră în teren. Agenții aleși analizează și dezbat live pe hartă, iar jurnalul de sub hartă arată tot ce și-au spus. Maximum {CUSTOM_LIMIT_PER_DAY} bilete custom pe zi.</p>
       </div>
       <CustomForm agents={cards} />
       {recent.length > 0 && (

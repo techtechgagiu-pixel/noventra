@@ -125,7 +125,7 @@ export function parseCustom(input: unknown): CustomConfig {
   return { target, legs, agents, window, fromHours, toHours, ...(leagues.length ? { leagues } : {}) };
 }
 
-/** Creates a custom ticket job (CUSTOM_1…CUSTOM_10 per day): the user's target, exact legs and chosen agents. */
+/** Creates a custom ticket job (CUSTOM_1…CUSTOM_12 per day): the user's target, exact legs and chosen agents. */
 export async function createCustomJob(userId: string, input: unknown, at = new Date()) {
   const custom = parseCustom(input);
   if (custom.leagues) {
