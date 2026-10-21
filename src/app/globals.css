@@ -52,3 +52,5 @@ body {
 .reduce-motion .working, .reduce-motion .flow, .reduce-motion .indeterminate { animation: none !important; }
 
 @keyframes fadein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes lowerthird { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { [class*='lowerthird'] { animation: none !important; } }

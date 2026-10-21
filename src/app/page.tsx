@@ -17,13 +17,15 @@ import { activeAssignments } from '@/lib/ai/assignments';
 import { allTrackRecords } from '@/lib/track-record';
 import { customJobs, jobQueue, reviewJobs } from '@/lib/jobs/service';
 import { ReviewBuilder } from '@/components/review/review-builder';
+import { HomeStage } from '@/components/home/home-stage';
+import { homeReel, homeStats } from '@/lib/home-reel';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'bilete' | 'custom' | 'verifica' | 'analiza' | 'istoric';
+type Tab = 'acasa' | 'bilete' | 'custom' | 'verifica' | 'analiza' | 'istoric';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -31,7 +33,7 @@ const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string }> }) {
   const user = (await currentUser())!;
   const sp = await searchParams;
-  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' ? sp.tab : 'bilete';
+  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
@@ -47,8 +49,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     <>
       <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <Link href="/" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
-            <img src="/favicon.svg" alt="" className="h-8 w-8" />
+          <Link href="/" aria-label="Acasă" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
+            <img src="/logo.svg" alt="" className="h-9 w-9" />
             <span className="hidden sm:inline">PRIMUL <span className="text-cyan">11</span></span>
             <span className="rounded-md border border-gold/60 bg-gold/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold">Beta</span>
           </Link>
@@ -65,6 +67,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-6">
+        {tab === 'acasa' && <AcasaTab userId={user.id} />}
         {tab === 'bilete' && <BileteTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} running={running.length} />}
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
         {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
@@ -73,6 +76,36 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       </main>
       <footer className="mx-auto max-w-6xl px-4 pb-8 text-xs text-muted">18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</footer>
     </>
+  );
+}
+
+async function AcasaTab({ userId }: { userId: string }) {
+  const [reel, stats, slots, queue] = await Promise.all([homeReel(userId), homeStats(userId), slotStates(userId), jobQueue(userId)]);
+  const ready = slots.filter((x) => x.ticket).length;
+  const decided = stats.legsWon + stats.legsLost;
+  const tiles: Array<{ href: string; title: string; text: string; foot: string; accent: string; icon: typeof Ticket; wide?: boolean }> = [
+    { href: '/?tab=bilete', title: 'Biletele zilei', text: 'COTĂ 5 și COTĂ 2, câte două pe zi, plus biletul săptămânii, construite din cote mici.', foot: ready ? `${ready} din ${slots.length} gata azi` : 'Niciunul creat încă azi', accent: '#5ee7f7', icon: Ticket, wide: true },
+    { href: '/?tab=custom', title: 'Creează bilet', text: 'Alegi cota, câte meciuri și cine intră în teren, apoi urmărești dezbaterea pe hartă.', foot: 'Până la 10 bilete custom pe zi', accent: '#34d399', icon: SlidersHorizontal, wide: true },
+    { href: '/?tab=verifica', title: 'Vino cu biletul tău la analiză', text: 'Îți faci biletul din cote reale; echipa îți spune ce e solid, ce e slab și ce să schimbi.', foot: 'Verdict pe fiecare meci', accent: '#e8c26a', icon: ClipboardCheck },
+    { href: '/?tab=istoric', title: 'Bilete create', text: 'Toate biletele, cu meciurile ieșite verzi sau roșii și cum a fost luată fiecare decizie.', foot: stats.tickets ? `${stats.tickets} ${stats.tickets === 1 ? 'bilet' : 'bilete'}${decided ? `, ${stats.legsWon} din ${decided} meciuri verzi` : ''}` : 'Încă niciun bilet', accent: '#a78bfa', icon: History },
+  ];
+  return (
+    <div className="space-y-10">
+      {reel && reel.events.length > 10 ? <HomeStage events={plain(reel.events)} title={reel.title} finishedAt={reel.finishedAt} target={Number(reel.events.find((e) => e.type === 'TARGET_SELECTED')?.payload.target ?? 0)} />
+        : <div className="py-10"><h1 className="font-display text-5xl font-bold leading-none tracking-tight">Analizează.<br />Dezbate.<br />Decide.</h1><p className="mt-4 max-w-md text-muted">Prima analiză apare aici ca reluare imediat ce se încheie.</p></div>}
+      <nav aria-label="Ce vrei să faci" className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1.2fr_1fr_1fr]">
+        {tiles.map(({ href, title, text, foot, accent, icon: Icon }) => (
+          <Link key={href} href={href} className="group relative flex min-h-[188px] flex-col overflow-hidden rounded-[1.4rem] border border-line bg-panel/70 p-5 transition-colors hover:border-[color:var(--a)] focus-visible:border-[color:var(--a)]" style={{ ['--a' as string]: accent }}>
+            <span className="absolute inset-x-0 top-0 h-1 origin-left scale-x-[.18] transition-transform duration-300 group-hover:scale-x-100" style={{ background: accent }} aria-hidden />
+            <Icon size={22} style={{ color: accent }} aria-hidden />
+            <h2 className="mt-4 font-display text-[1.45rem] font-bold leading-tight tracking-tight">{title}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted">{text}</p>
+            <p className="mt-auto pt-4 text-xs font-semibold" style={{ color: accent }}>{foot}</p>
+          </Link>
+        ))}
+      </nav>
+      {queue.length > 0 && <JobQueue initial={plain(queue)} />}
+    </div>
   );
 }
 
@@ -96,7 +129,6 @@ async function BileteTab({ userId, ticket, fresh, running }: { userId: string; t
         <p className="max-w-2xl text-sm text-muted">Apasă <strong className="text-text">CREEAZĂ BILETUL</strong>: cei 12 agenți analizează meciurile de azi și mâine, votează și construiesc biletul din cote mici. Urmărești totul în fila <Link href="/?tab=analiza" className="text-cyan">Analiză</Link>.</p>
         {running > 0 && <p className="chip mt-3 text-emerald"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald" /> {running === 1 ? 'O analiză rulează acum' : `${running} analize rulează acum`} — <Link href="/?tab=analiza" className="underline">vezi live</Link></p>}
       </div>
-      <JobQueue initial={plain(await jobQueue(userId))} />
       <SlotCards initial={plain(slots)} />
     </div>
   );
@@ -168,7 +200,6 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
         <h1 className="font-display text-2xl font-bold">Bilet custom</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">Tu alegi cota, numărul de meciuri și cine intră în teren. Agenții aleși analizează și dezbat live pe hartă, iar jurnalul de sub hartă arată tot ce și-au spus. Maximum 10 bilete custom pe zi.</p>
       </div>
-      <JobQueue initial={plain(await jobQueue(userId))} />
       <CustomForm agents={cards} />
       {recent.length > 0 && (
         <section>
@@ -212,7 +243,6 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
         <h1 className="font-display text-2xl font-bold">Vino cu biletul tău la analiză</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">Îți faci biletul din meciurile cu cote reale, le lași tacticienilor sfaturile tale și îl trimiți la analiză. Cei 12 agenți îl dezbat live pe hartă, îți spun ce meci e solid, riscant sau slab, ce să înlocuiești, iar Mircea Lucescu îți dă verdictul final. Biletul rămâne salvat și îl urmărim verde/roșu până la final.</p>
       </div>
-      <JobQueue initial={plain(await jobQueue(userId))} />
       <ReviewBuilder />
       {recent.length > 0 && (
         <section>

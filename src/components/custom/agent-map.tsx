@@ -11,7 +11,10 @@ type Info = Record<string, { title: string; specialty: string; maxOdds: number; 
  * Canvas map of the team (60 fps). History present at mount is applied instantly; anything newer flows in animated.
  * onProgress reports the last event the map has shown, so the chat below stays in sync with the animation.
  */
-export const AgentMap = forwardRef<AgentMapHandle, { events: NexusEvent[]; target: number; info?: Info; onProgress: (seq: number) => void }>(function AgentMap({ events, target, info, onProgress }, ref) {
+type Props = { events: NexusEvent[]; target: number; info?: Info; onProgress: (seq: number) => void;
+  /** Showcase mode: replays `events` from the start at `speed`, then loops after a pause. */
+  autoplay?: { speed: number; pauseMs: number }; height?: (width: number) => number; className?: string };
+export const AgentMap = forwardRef<AgentMapHandle, Props>(function AgentMap({ events, target, info, onProgress, autoplay, height, className }, ref) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useRef<MapScene | null>(null);
@@ -25,7 +28,7 @@ export const AgentMap = forwardRef<AgentMapHandle, { events: NexusEvent[]; targe
     s.reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     s.setTarget(target);
     scene.current = s;
-    const size = () => { const width = w.clientWidth; const height = width < 640 ? Math.min(860, Math.max(620, width * 1.8)) : Math.min(600, Math.max(380, width * 0.52)); s.resize(width, height); };
+    const size = () => { const width = w.clientWidth; const h = height ? height(width) : width < 640 ? Math.min(860, Math.max(620, width * 1.8)) : Math.min(600, Math.max(380, width * 0.52)); s.resize(width, h); };
     size();
     const ro = new ResizeObserver(size); ro.observe(w);
     // Draw only while visible: the browser already pauses rAF in background tabs.
@@ -33,12 +36,20 @@ export const AgentMap = forwardRef<AgentMapHandle, { events: NexusEvent[]; targe
     // Sync the chat with what the map has played, ~10 times per second (no per-frame React work).
     let shown = 0;
     const tick = setInterval(() => { if (progress.current !== shown) { shown = progress.current; onProgress(shown); } }, 100);
-    return () => { ro.disconnect(); io.disconnect(); clearInterval(tick); s.destroy(); scene.current = null; fed.current = 0; };
+    // Showcase loop: when everything has played, wait, then start again from the beginning.
+    let idleSince = 0;
+    const loop = autoplay ? setInterval(() => {
+      if (!events.length || s.pending() > 0) { idleSince = 0; return; }
+      idleSince ||= Date.now();
+      if (Date.now() - idleSince > autoplay.pauseMs) { idleSince = 0; s.reset(); s.speed = autoplay.speed; progress.current = 0; onProgress(0); s.push(events, true); }
+    }, 500) : null;
+    if (autoplay) { s.speed = autoplay.speed; s.push(events, true); fed.current = events.at(-1)?.seq ?? 0; }
+    return () => { ro.disconnect(); io.disconnect(); clearInterval(tick); if (loop) clearInterval(loop); s.destroy(); scene.current = null; fed.current = 0; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    const s = scene.current; if (!s) return;
+    const s = scene.current; if (!s || autoplay) return;
     const fresh = events.filter((e) => e.seq > fed.current);
     if (!fresh.length) return;
     if (fed.current === 0) {
@@ -63,7 +74,7 @@ export const AgentMap = forwardRef<AgentMapHandle, { events: NexusEvent[]; targe
   const h = hover ? AGENT_META[hover] : null;
   const hi = hover ? info?.[hover] : null;
   return (
-    <div ref={wrap} className="relative overflow-hidden rounded-[1.25rem] border border-line bg-ink">
+    <div ref={wrap} className={className ?? "relative overflow-hidden rounded-[1.25rem] border border-line bg-ink"}>
       <canvas ref={canvas} role="img" aria-label="Harta live a agenților: cine analizează, cine dezbate și ce meciuri ajung pe bilet" />
       {h && (
         <div className="pointer-events-none absolute bottom-3 left-3 max-w-[min(320px,80%)] rounded-xl border border-line bg-ink/95 p-3 text-xs shadow-xl">
