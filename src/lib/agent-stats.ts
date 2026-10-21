@@ -17,7 +17,7 @@ const usd = (model: string, provider: string, i: number, o: number) => {
 };
 
 /** Per-agent record (each agent's final pick per match, settled after the match) and real model consumption. */
-export async function agentStats(userId: string) {
+export async function agentStats(userId: string, admin = false) {
   const picks = await many<{ agent_id: string; decision: string; outcome: string | null; odds: string | null; estimated_probability: string | null; label: string | null; market_key: string | null; home: string | null; away: string | null; created_at: Date }>(
     `SELECT DISTINCT ON (p.job_id, p.fixture_id, p.agent_id) p.agent_id, p.decision, p.outcome, p.odds, p.estimated_probability, p.payload->>'marketLabel' AS label, p.market_key,
             f.home_team AS home, f.away_team AS away, p.created_at
@@ -30,7 +30,8 @@ export async function agentStats(userId: string) {
             sum(output_tokens) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS today_o,
             sum(input_tokens) FILTER (WHERE created_at > now() - interval '7 days') AS week_i,
             sum(output_tokens) FILTER (WHERE created_at > now() - interval '7 days') AS week_o
-     FROM model_usage_logs GROUP BY 1,2,3,4`);
+     FROM model_usage_logs WHERE $2 OR job_id IN (SELECT id FROM ticket_generation_jobs WHERE user_id=$1)
+     GROUP BY 1,2,3,4`, [userId, admin]);
   const stats: AgentStat[] = AGENTS.map((a) => {
     const mine = picks.filter((p) => p.agent_id === a.id);
     const bets = mine.filter((p) => p.decision === 'BET_CANDIDATE');

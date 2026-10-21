@@ -1,13 +1,16 @@
 # PRIMUL 11 (formerly BETMIND SIX · NEXUS 5.0)
 
-> Since 2026-10-20: **single-owner app, no login.** Every request acts as the owner account (`OWNER_EMAIL`, default the first
-> `ADMIN_EMAILS` entry); tickets from former Google accounts were merged into it. The UI is one page (`/`) with three tabs —
+> Access updated 2026-10-21: **invitation codes, no accounts or Google login.** The permanent admin code reuses the owner
+> identity (`OWNER_EMAIL`, default the first `ADMIN_EMAILS` entry) and preserves its archive. Visitors receive individual
+> codes valid for exactly 168 hours from issue, with their own tickets and analyses. `/admin/invitations` issues/revokes codes.
+> Production requires `OWNER_ACCESS_CODE_HASH` (SHA-256 of the uppercase code without spaces or hyphens). Plaintext codes
+> are never committed or stored in the database. See `docs/ACCESS-CODES-HANDOFF.md`. The UI is one page (`/`) with tabs —
 > `?tab=bilete` (slots, `&ticket=<id>`), `?tab=analiza` (live NEXUS `&job=<id>`, replay `&replay=<ticketId>`), `?tab=istoric`.
 > Old routes (/dashboard, /tickets/…, /nexus, …) redirect there. Agents run in parallel within a batch (batch size 4).
 >
 > Rules added 2026-10-21: no „Under” selections at all (`isBannedMarket`); a ticket with 3+ legs may not have more than half
 > of its legs on one market type. With `OPENROUTER_API_KEY` set, each voting agent runs on its own vendor's model
-> (`src/lib/ai/openrouter-models.ts`, free Gemini/Groq model as fallback) under a daily cap `OPENROUTER_DAILY_USD` (default 1.5).
+> (`src/lib/ai/openrouter-models.ts`, free Gemini/Groq model as fallback) under an estimated daily cap `OPENROUTER_DAILY_USD` (default 5).
 >
 > Flow since 2026-10-21 (v4): a fixture enters only with ≥ `MIN_MARKETS_PER_FIXTURE` (30) real, allowed selections — DraftKings
 > props now add BTTS, clean sheet, win by 2+, win both halves, half-time / second-half result, first-half goals and corners

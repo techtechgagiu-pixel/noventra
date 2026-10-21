@@ -10,10 +10,16 @@ browser ──HTTPS──> Next.js (Render)
                     │     runs ≤50 s slices of checkpointed units, then re-queues
                     └─ settlement timer (15 min, deterministic, no AI)
                   Neon Postgres: users/sessions, jobs, events, predictions, decisions, tickets, caches, usage
-external: ESPN (public), lpf.ro, Groq, Gemini, Google OAuth
+external: ESPN (public), lpf.ro, Groq, Gemini, OpenRouter
 ```
 
 ## Job state machine
+
+Access: `/login` accepts only invitation codes. A permanent admin-code hash lives in Render's
+`OWNER_ACCESS_CODE_HASH`; rotating it invalidates admin sessions. Visitor codes are hashed in `invitation_codes`,
+expire 168 hours after issue, and are checked for expiry/revocation on every request (including each SSE poll).
+Each code has an internal user identity; no account registration or email is required. Legacy Google routes
+redirect to `/login` and cannot create sessions. Existing owner tickets are preserved.
 
 `QUEUED → RUNNING ⇄ WAITING (provider rate-limit, auto) → … → COMPLETED | INCOMPLETE | NO_BET`
 `RUNNING → PAUSED` (daily quota / repeated errors) → user presses **CONTINUĂ ANALIZA** → `QUEUED` (same job, same seed, same order).

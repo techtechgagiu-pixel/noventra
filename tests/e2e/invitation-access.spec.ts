@@ -1,0 +1,38 @@
+import { expect, test } from '@playwright/test';
+const adminCode = 'P11-ADMIN-01234567-89ABCDEF-01234567-89ABCDEF';
+
+test('invite access: anonymous gate, permanent administrator, visitor isolation and revocation', async ({ page, browser }) => {
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByLabel('Cod de invitație')).toBeVisible();
+  expect((await page.request.get('/api/admin/models')).status()).toBe(401);
+  await page.getByLabel('Cod de invitație').fill(adminCode);
+  await page.getByRole('button', { name: 'INTRĂ ÎN PRIMUL 11' }).click();
+  await expect(page.getByRole('link', { name: 'Invitații', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Invitații', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Coduri de invitație' })).toBeVisible();
+  await page.getByLabel('Număr de coduri').fill('1');
+  await page.getByRole('button', { name: 'GENEREAZĂ CODURI' }).click();
+  const issued = page.getByRole('region', { name: 'Coduri noi' });
+  await expect(issued).toBeVisible();
+  const code = await issued.locator('code').innerText();
+  const list = await (await page.request.get('/api/admin/invitations')).json();
+  const id = list.invitations[0].id;
+  const ctx = await browser.newContext();
+  const guest = await ctx.newPage();
+  await guest.goto('/login');
+  await guest.getByLabel('Cod de invitație').fill(code);
+  await guest.getByRole('button', { name: 'INTRĂ ÎN PRIMUL 11' }).click();
+  await expect(guest).toHaveURL('http://localhost:3200/');
+  await expect(guest.getByRole('link', { name: 'Invitații', exact: true })).toHaveCount(0);
+  expect((await guest.request.get('/api/admin/models')).status()).toBe(403);
+  expect((await guest.request.get('/api/tickets')).status()).toBe(200);
+  expect((await (await guest.request.get('/api/tickets')).json()).tickets).toHaveLength(0);
+  const revoked = await page.request.post(`/api/admin/invitations/${id}/revoke`, { headers: { origin: 'http://localhost:3200' } });
+  expect(revoked.status()).toBe(200);
+  expect((await guest.request.get('/api/tickets')).status()).toBe(401);
+  await guest.reload();
+  await expect(guest).toHaveURL(/\/login$/);
+  expect((await page.request.get('/api/admin/models')).status()).toBe(200);
+  await ctx.close();
+});
