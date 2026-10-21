@@ -92,7 +92,7 @@ function verifySigned<T>(token: string | undefined): T | null {
   try { const d = JSON.parse(Buffer.from(body, 'base64url').toString()) as T & { exp?: number }; return d.exp && d.exp > Date.now() ? d : null; } catch { return null; }
 }
 export const googleConfigured = () => !!(config.googleClientId && config.googleClientSecret && config.authSecret);
-const redirectUri = () => `${config.appBaseUrl}/auth/callback`;
+const redirectUri = () => config.googleRedirectUri || `${config.appBaseUrl}/auth/callback`;
 
 export function googleAuthUrl() {
   const verifier = b64url(randomBytes(32));
