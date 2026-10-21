@@ -185,6 +185,18 @@ describe('custom ticket', () => {
     const detail = await ticketDetail(u, t!.id);
     expect(detail!.title).toBe('CUSTOM — COTĂ 2');
   });
+  it('analyses only fixtures from the leagues the user ticked', async () => {
+    const ai: FakeAi = { calls: [], pick: () => '1X2:HOME' };
+    installFakes(demoFixtures(8, () => ({ home: 1.4, draw: 4.2, away: 6.5, dc: 1.1 })), ai);
+    const u = await makeUser();
+    await expect(createCustomJob(u, { target: 2, legs: 2, agents: ['alex'], leagues: ['NOPE1'] })).rejects.toThrow(/Ligile/);
+    const { jobId } = await createCustomJob(u, { target: 2, legs: 2, agents: ['andrei', 'alex', 'ioana'], leagues: ['ESP1', 'GER1'] });
+    await drain(jobId);
+    const order = await one<{ candidate_order: Array<{ fixtureId: string }> }>('SELECT candidate_order FROM ticket_generation_jobs WHERE id=$1', [jobId]);
+    const ids = order!.candidate_order.map((c) => Number(c.fixtureId.split(':')[1]));
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids.every((i) => i % 4 === 1 || i % 4 === 3)).toBe(true);
+  });
   it('validates input and numbers custom slots per day', async () => {
     installFakes(demoFixtures(4), { calls: [], pick: () => null });
     const u = await makeUser();

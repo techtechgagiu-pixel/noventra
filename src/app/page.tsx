@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Activity, BarChart3, CalendarDays, ClipboardCheck, History, SlidersHorizontal, Ticket } from 'lucide-react';
+import { Activity, BarChart3, CalendarDays, ClipboardCheck, History, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
+import { MatchesView } from '@/components/matches/matches-view';
 import { currentUser } from '@/lib/auth';
 import { many } from '@/lib/db';
 import { slotStates } from '@/lib/jobs/service';
@@ -29,7 +30,7 @@ import { CustomLive } from '@/components/custom/custom-live';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'acasa' | 'bilete' | 'custom' | 'verifica' | 'analiza' | 'azi' | 'istoric' | 'statistici';
+type Tab = 'acasa' | 'bilete' | 'custom' | 'verifica' | 'analiza' | 'azi' | 'istoric' | 'statistici' | 'meciuri';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -38,7 +39,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
   const user = await currentUser();
   if (!user) redirect('/login');
   const sp = await searchParams;
-  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' || sp.tab === 'statistici' || sp.tab === 'azi' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
+  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' || sp.tab === 'statistici' || sp.tab === 'azi' || sp.tab === 'meciuri' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
@@ -48,6 +49,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     { id: 'verifica', label: 'Biletul tău', icon: ClipboardCheck, badge: running.some((j) => j.slot.startsWith('REVIEW_')) },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
     { id: 'azi', label: 'Azi', icon: CalendarDays },
+    { id: 'meciuri', label: 'Meciuri', icon: ListOrdered },
     { id: 'istoric', label: 'Istoric', icon: History },
     { id: 'statistici', label: 'Statistici', icon: BarChart3 },
   ];
@@ -81,6 +83,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
         {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
+        {tab === 'meciuri' && <MatchesView />}
         {tab === 'azi' && <AziTab userId={user.id} ticket={sp.ticket} />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} />}

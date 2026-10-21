@@ -1,16 +1,31 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Minus, Plus, Sparkles } from 'lucide-react';
 import { AGENT_META, api } from '@/lib/format';
 import { customPolicy, customThreshold } from '@/lib/slots';
+import { LeaguePicker, type LeagueOption } from '@/components/matches/league-picker';
+import type { MatchRow } from '@/lib/catalog';
 
 export type AgentCard = { id: string; name: string; title: string; specialty: string; risk: number; maxOdds: number; minProbability: number; model: string | null; record: string | null };
 const TARGETS = [2, 3, 5, 10, 20, 50, 100];
-const GROUPS: Array<{ label: string; ids: (a: AgentCard[]) => string[] }> = [
-  { label: 'Toți', ids: (a) => a.map((x) => x.id) },
-  { label: 'Prudenții', ids: (a) => a.filter((x) => x.maxOdds <= 1.75).map((x) => x.id) },
-  { label: 'Vânătorii de cote', ids: (a) => a.filter((x) => x.maxOdds >= 1.85).map((x) => x.id) },
+const pick = (...ids: string[]) => (a: AgentCard[]) => a.filter((x) => ids.includes(x.id)).map((x) => x.id);
+/** Ready-made teams: by risk profile, by story (generations, roles) and by method. The user can still tick freely. */
+const GROUPS: Array<{ label: string; hint: string; ids: (a: AgentCard[]) => string[] }> = [
+  { label: 'Toți', hint: 'Toată echipa, toate opiniile', ids: (a) => a.map((x) => x.id) },
+  { label: 'Prudenții', hint: 'Cote mici, probabilitate mare', ids: (a) => a.filter((x) => x.maxOdds <= 1.7).map((x) => x.id) },
+  { label: 'Echilibrații', hint: 'Cote medii, risc moderat', ids: (a) => a.filter((x) => x.maxOdds > 1.7 && x.maxOdds < 2).map((x) => x.id) },
+  { label: 'Vânătorii de cote', hint: 'Acceptă cote mari', ids: (a) => a.filter((x) => x.maxOdds >= 2).map((x) => x.id) },
+  { label: 'Generația de Aur ’94', hint: 'Hagi, Popescu, Dumitrescu, Prunea, Petrescu, Iordănescu', ids: pick('andrei', 'mihai', 'ilie', 'prunea', 'petrescu', 'cosmin') },
+  { label: 'Banca tehnică', hint: 'Antrenorii', ids: pick('robert', 'radu', 'cosmin', 'ioana', 'petrescu', 'sumudica', 'alex') },
+  { label: 'Patronii și oficialii', hint: 'Sandu, Dragomir, Becali, Stoica, Porumboiu', ids: pick('victor', 'elena', 'becali', 'stoica', 'porumboiu') },
+  { label: 'Generația nouă', hint: 'Ianis, Drăgușin, Man, Raț, Tamaș', ids: pick('ianis', 'dragusin', 'man', 'diana', 'tamas') },
+  { label: 'Apărarea', hint: 'Gândesc din spate: goluri primite, portari, dueluri', ids: pick('dragusin', 'prunea', 'petrescu', 'tamas', 'diana', 'mihai') },
+  { label: 'Atacul', hint: 'Goluri, ocazii, flancuri', ids: pick('alex', 'man', 'ianis', 'andrei', 'ioana', 'sumudica') },
+  { label: 'Oamenii cifrelor', hint: 'Statistică, piață, risc, verificare', ids: pick('andrei', 'elena', 'cosmin', 'robert', 'porumboiu', 'stoica') },
+  { label: 'Contrarianii', hint: 'Caută ce scapă majorității', ids: pick('stoica', 'sumudica', 'tamas', 'becali', 'hantu') },
+  { label: 'Echipă mică (5)', hint: 'Rapid și ieftin: un profil din fiecare zonă', ids: pick('robert', 'andrei', 'ioana', 'cosmin', 'radu') },
+  { label: 'Surpriză (7)', hint: '7 agenți la întâmplare', ids: (a) => [...a].sort(() => Math.random() - 0.5).slice(0, 7).map((x) => x.id) },
 ];
 
 /** Selectable offsets, from 30 minutes to one week. */
@@ -28,6 +43,9 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
   const fromHours = STOPS[fromI], toHours = STOPS[toI];
   const win = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
   const [chosen, setChosen] = useState<string[]>(['victor', 'andrei', 'alex', 'robert', 'ioana']);
+  const [leagues, setLeagues] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<{ rows: MatchRow[]; leagues: LeagueOption[] } | null>(null);
+  useEffect(() => { api<{ rows: MatchRow[]; leagues: LeagueOption[] }>('/api/matches').then(setCatalog).catch(() => setCatalog(null)); }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,13 +53,20 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
   const policy = useMemo(() => customPolicy({ target, legs, agents: chosen, window: win, fromHours, toHours }), [target, legs, chosen, win, fromHours, toHours]);
   const tooLow = perLeg < 1.1; const tooHigh = perLeg > 3.2;
   const risk = perLeg <= 1.3 ? { t: 'prudent', c: 'text-emerald' } : perLeg <= 1.6 ? { t: 'echilibrat', c: 'text-cyan' } : perLeg <= 2.1 ? { t: 'curajos', c: 'text-gold' } : { t: 'riscant', c: 'text-rose' };
+  // Fixtures with odds that start inside the chosen interval, per league (what the analysis can actually use).
+  const inWindow = useMemo(() => {
+    const now = Date.now();
+    return (catalog?.rows ?? []).filter((m) => m.odds && m.status === 'pre' && Date.parse(m.kickoff) >= now + fromHours * 3600_000 && Date.parse(m.kickoff) <= now + toHours * 3600_000);
+  }, [catalog, fromHours, toHours]);
+  const leagueOptions = useMemo(() => (catalog?.leagues ?? []).map((l) => ({ ...l, count: inWindow.filter((m) => m.leagueId === l.id).length })), [catalog, inWindow]);
+  const available = leagues.length ? inWindow.filter((m) => leagues.includes(m.leagueId)).length : inWindow.length;
   const fits = (a: AgentCard) => Math.min(a.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds) >= perLeg * 0.92;
   const toggle = (id: string) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
 
   async function create() {
     setBusy(true); setError(null);
     try {
-      const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ target, legs, agents: chosen, fromHours, toHours }) });
+      const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues }) });
       router.push(`/?tab=custom&job=${r.jobId}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -81,11 +106,38 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
         </div>
       </div>
 
+      <section className="card p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-display text-lg font-bold">Din ce ligi</h3>
+          <p className="text-xs text-muted">Bifează ligile din care să-ți facă biletul. Nimic bifat = toate ligile.</p>
+        </div>
+        <div className="mt-3">
+          {catalog ? <LeaguePicker leagues={leagueOptions} value={leagues} onChange={setLeagues} allLabel="Toate ligile" />
+            : <p className="rounded-xl border border-line bg-ink px-3 py-2.5 text-sm text-muted">Încarc ligile disponibile…</p>}
+        </div>
+        {catalog && <p className={`mt-2 text-xs ${available < legs * 2 ? 'text-gold' : 'text-muted'}`}>
+          {available} {available === 1 ? 'meci cu cote' : 'meciuri cu cote'} în intervalul ales{leagues.length ? ` din ${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : ''}.
+          {available < legs * 2 && ' Puține pentru un bilet de ' + legs + ' meciuri: echipa poate refuza multe — adaugă ligi sau lărgește intervalul.'}
+        </p>}
+      </section>
+
       <section>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h3 className="font-display text-lg font-bold">Alege agenții din teren</h3>
           <span className="text-sm text-muted">{chosen.length} {chosen.length === 1 ? 'ales' : 'aleși'}</span>
-          <div className="ml-auto flex flex-wrap gap-1.5">{GROUPS.map((g) => <button key={g.label} onClick={() => setChosen(g.ids(agents))} className="chip text-muted hover:text-text">{g.label}</button>)}</div>
+          <button onClick={() => setChosen([])} className="ml-auto chip text-muted hover:text-text">Golește</button>
+        </div>
+        <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible" role="group" aria-label="Echipe gata făcute">
+          {GROUPS.map((g) => {
+            const ids = g.label.startsWith('Surpriză') ? null : g.ids(agents);
+            const active = !!ids && ids.length === chosen.length && ids.every((id) => chosen.includes(id));
+            return (
+              <button key={g.label} title={g.hint} aria-pressed={active} onClick={() => setChosen(ids ?? g.ids(agents))}
+                className={`chip shrink-0 ${active ? 'border-cyan text-cyan' : 'text-muted hover:text-text'}`}>
+                {g.label}{ids && <span aria-hidden className="ml-1 tabular opacity-60">{ids.length}</span>}
+              </button>
+            );
+          })}
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {agents.map((a) => {
@@ -115,10 +167,10 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
 
       <div className="card sticky bottom-3 z-10 flex flex-col gap-3 p-4 shadow-2xl backdrop-blur md:flex-row md:items-center" style={{ background: 'rgba(10,18,40,0.97)' }}>
         <p className="text-sm text-muted md:flex-1">
-          Cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · intră pe bilet o selecție susținută de minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> dintre ei. Fără „sub”. Creierul (M. Lucescu) alege pronosticul final.
+          Cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · intră pe bilet o selecție susținută de minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> dintre ei. Fără „sub”. Creierul (M. Lucescu) alege pronosticul final.
         </p>
         {error && <p className="text-sm text-rose" role="alert">{error}</p>}
-        <button onClick={create} disabled={busy || !chosen.length || tooLow || tooHigh || target < 1.2} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : 'CREEAZĂ BILETUL CUSTOM'}</button>
+        <button onClick={create} disabled={busy || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && leagues.length > 0 && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : 'CREEAZĂ BILETUL CUSTOM'}</button>
       </div>
     </div>
   );

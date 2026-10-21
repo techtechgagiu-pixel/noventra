@@ -48,8 +48,14 @@ export function teamTokens(team: string) {
 }
 const mentions = (title: string, tokens: string[]) => { const t = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); return tokens.some((k) => t.includes(k)); };
 
+/** Headlines that preview one specific fixture (predictions, odds, live score pages). */
+const OTHER_FIXTURE = /predict|betting|tips|\bodds\b|preview|live score|h2h|head to head|pronostic|ponturi|\bcote\b/i;
+
+/** False for a preview of another fixture (it names no opponent of ours); team news without a fixture stays. */
+export const aboutThisFixture = (title: string, opponent: string) => !OTHER_FIXTURE.test(title) || mentions(title, teamTokens(opponent));
+
 /** Up to `limit` distinct headlines from the 10 days before kickoff (never after it). */
-export async function teamNews(team: string, kickoff: string, limit = 8): Promise<{ items: NewsItem[]; errors: string[] }> {
+export async function teamNews(team: string, kickoff: string, limit = 8, opponent?: string): Promise<{ items: NewsItem[]; errors: string[] }> {
   const errors: string[] = [];
   const all: NewsItem[] = [];
   for (const lang of ['en', 'ro'] as const) {
@@ -66,6 +72,8 @@ export async function teamNews(team: string, kickoff: string, limit = 8): Promis
   const tokens = teamTokens(team);
   const items = all
     .filter((n) => { const t = Date.parse(n.publishedAt); return t <= end && t >= start && mentions(n.title, tokens); })
+    // A preview/prediction of a different fixture ("Kaiserslautern vs Bochum Prediction") says nothing about this match.
+    .filter((n) => !opponent || aboutThisFixture(n.title, opponent))
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
     .filter((n) => { const k = n.title.toLowerCase().replace(/\W+/g, ' ').slice(0, 80); if (seen.has(k)) return false; seen.add(k); return true; })
     .slice(0, limit);

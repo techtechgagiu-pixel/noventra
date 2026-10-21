@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { many, query } from '../db';
 import { dateRange, localDate, yyyymmdd } from '../time';
-import { espnLeagueDay } from './espn';
+import { espnLeagueDay, espnMatchDays } from './espn';
 import { lpfFixtures } from './lpf';
 import type { Fixture, League } from './types';
 
@@ -16,22 +16,38 @@ export async function getLeagues(opts: { top10Only?: boolean } = {}): Promise<Le
   return rows.map((r) => ({ id: r.id, country: r.country, name: r.name, provider: r.provider, providerKey: r.provider_key, priority: r.priority, top10: r.top10 }));
 }
 
-/** Real provider: ESPN per league/day; Romania from the official LPF page. */
+/**
+ * Real provider: ESPN per league and match day (the league calendar skips idle days); Romania from the official LPF page.
+ * The day before the window is read too: ESPN files late-evening games under the US day, i.e. our previous date.
+ */
 export const liveProvider: FixtureProvider = async (leagues, days) => {
   const errors: string[] = [];
-  const tasks = leagues.flatMap((league) =>
-    league.provider === 'lpf'
-      ? [lpfFixtures(league, days).catch((e: Error) => { errors.push(`${league.name}: ${e.message}`); return [] as Fixture[]; })]
-      : days.map((d) => espnLeagueDay(league, yyyymmdd(d)).catch((e: Error) => { errors.push(`${league.name} ${d}: ${e.message}`); return [] as Fixture[]; })),
-  );
+  const espnDays = [shiftDay(days[0], -1), ...days];
+  const nowDay = localDate();
+  const ttlFor = (d: string) => (d <= shiftDay(nowDay, 1) ? 10 * 60_000 : 60 * 60_000);
+  const tasks: Array<() => Promise<Fixture[]>> = [];
+  await Promise.all(leagues.map(async (league) => {
+    if (league.provider === 'lpf') { tasks.push(() => lpfFixtures(league, days).catch((e: Error) => { errors.push(`${league.name}: ${e.message}`); return [] as Fixture[]; })); return; }
+    const calendar = await espnMatchDays(league).catch(() => null);
+    for (const d of espnDays) {
+      if (calendar && !calendar.has(yyyymmdd(d))) continue;
+      tasks.push(() => espnLeagueDay(league, yyyymmdd(d), ttlFor(d)).catch((e: Error) => { errors.push(`${league.name} ${d}: ${e.message}`); return [] as Fixture[]; }));
+    }
+  }));
+  // The HTTP layer paces ESPN globally; a small pool keeps requests flowing without bursts.
   const results: Fixture[][] = [];
-  // Bounded concurrency to stay polite with the public source.
-  for (let i = 0; i < tasks.length; i += 4) results.push(...(await Promise.all(tasks.slice(i, i + 4))));
+  let next = 0;
+  await Promise.all(Array.from({ length: 6 }, async () => { while (next < tasks.length) { const t = tasks[next++]; results.push(await t()); } }));
   const daySet = new Set(days);
   const unique = new Map<string, Fixture>();
   for (const f of results.flat()) if (daySet.has(localDate(new Date(f.kickoff)))) unique.set(f.id, f);
   return { fixtures: [...unique.values()].sort((a, b) => a.kickoff.localeCompare(b.kickoff)), errors };
 };
+
+function shiftDay(day: string, delta: number) {
+  const d = new Date(`${day}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
 
 // Stored on globalThis so every Next.js server bundle sees the same override (tests only).
 const g = globalThis as unknown as { __bmFixtureOverride?: FixtureProvider | null };

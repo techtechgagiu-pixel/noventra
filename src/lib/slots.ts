@@ -52,7 +52,9 @@ export function slotById(id: string): SlotDefinition | undefined {
 /** Custom ticket chosen by the user: exact number of legs, a target price, a subset of agents and a time window. */
 export type CustomConfig = { target: number; legs: number; agents: string[]; window: '24h' | '48h' | '7d';
   /** Exact interval chosen by the user: matches starting between fromHours and toHours from the moment of creation. */
-  fromHours?: number; toHours?: number };
+  fromHours?: number; toHours?: number;
+  /** League ids the user ticked; absent = every league. */
+  leagues?: string[] };
 export const CUSTOM_LIMIT_PER_DAY = 10;
 /** Votes a selection needs from a team of n agents: 1 (≤3), 2 (4–6), then ~27% (3 of 12, 6 of 22). */
 export const customThreshold = (n: number) => (n <= 3 ? 1 : n <= 6 ? 2 : Math.max(3, Math.round(n * 0.27)));

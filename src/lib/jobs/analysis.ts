@@ -24,7 +24,7 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
     standings: { home: s.standings.home, away: s.standings.away },
     scout: { home: team(d.home), away: team(d.away) },
     model: { lambdaHome: s.model.lambdaHome, lambdaAway: s.model.lambdaAway, uncertainty: s.model.uncertainty, margin1x2: s.model.bookmakerMargin1x2 },
-    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: m.fairMarketProbability, model: m.modelProbability, est: m.estimatedProbability, ev: m.expectedValue })),
+    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, label: m.label, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: m.fairMarketProbability, model: m.modelProbability, est: m.estimatedProbability, ev: m.expectedValue })),
     missing: d.missing.filter((x) => !/xG|Accident/.test(x)).slice(0, 2),
   };
 }
@@ -41,7 +41,7 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
     kickoffUtc: s.fixture.kickoff,
     standings: { home: s.standings.home, away: s.standings.away },
     news: { [s.fixture.home]: n.home.map(fmt), [s.fixture.away]: n.away.map(fmt), note: n.home.length + n.away.length === 0 ? 'Nicio știre relevantă găsită în ultimele zile.' : undefined },
-    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, odds: m.odds, fair: m.fairMarketProbability })),
+    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, label: m.label, odds: m.odds, fair: m.fairMarketProbability })),
   };
 }
 

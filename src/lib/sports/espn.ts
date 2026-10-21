@@ -95,13 +95,25 @@ export function parseScoreboardEvent(raw: unknown, league: League, observedAt: s
   };
 }
 
-export async function espnLeagueDay(league: League, yyyymmdd: string): Promise<Fixture[]> {
-  const data = obj(await sportsGet(`${BASE}/${league.providerKey}/scoreboard?dates=${yyyymmdd}`, { provider: 'espn', ttlMs: 10 * 60_000 }));
+export async function espnLeagueDay(league: League, yyyymmdd: string, ttlMs = 10 * 60_000): Promise<Fixture[]> {
+  const data = obj(await sportsGet(`${BASE}/${league.providerKey}/scoreboard?dates=${yyyymmdd}`, { provider: 'espn', ttlMs }));
   const observedAt = new Date().toISOString();
   return arr(data.events).flatMap((e) => {
     const f = parseScoreboardEvent(e, league, observedAt);
     return f ? [f] : [];
   });
+}
+
+/**
+ * The league's match days (ESPN days, yyyymmdd) from its season calendar, so idle days are never requested.
+ * null = the league publishes no day calendar (cups list rounds instead): every day must be checked.
+ */
+export async function espnMatchDays(league: League): Promise<Set<string> | null> {
+  const data = obj(await sportsGet(`${BASE}/${league.providerKey}/scoreboard`, { provider: 'espn', ttlMs: 6 * 3600_000 }));
+  const meta = obj(arr(data.leagues)[0]);
+  if (str(meta.calendarType) !== 'day') return null;
+  const days = arr(meta.calendar).filter((d): d is string => typeof d === 'string');
+  return days.length ? new Set(days.map((d) => d.slice(0, 10).replace(/-/g, ''))) : null;
 }
 
 export async function espnSummary(leagueKey: string, eventId: string, ttlMs = 10 * 60_000): Promise<Obj> {

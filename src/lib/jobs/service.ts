@@ -9,7 +9,7 @@ import { localDate } from '../time';
 import { recordEvent } from './events';
 import type { Checkpoint } from './types';
 import { kickWorker } from './worker';
-import { loadFixtures } from '../sports/fixtures';
+import { getLeagues, loadFixtures } from '../sports/fixtures';
 import { withExtraMarkets } from './pipeline';
 import { isBannedMarket } from './analysis';
 
@@ -120,12 +120,19 @@ export function parseCustom(input: unknown): CustomConfig {
   const perLeg = Math.pow(target, 1 / legs);
   if (perLeg < 1.1) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea mică pentru cotele reale. Pune mai puține meciuri sau o cotă mai mare.`);
   if (perLeg > 3.2) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea riscant. Pune mai multe meciuri sau o cotă mai mică.`);
-  return { target, legs, agents, window, fromHours, toHours };
+  // Leagues the user ticked (ids are validated against the league table when the job is created). Empty = all.
+  const leagues = [...new Set(Array.isArray(o.leagues) ? o.leagues.map(String).filter((x) => /^[A-Z0-9]{2,12}$/.test(x)) : [])].slice(0, 120);
+  return { target, legs, agents, window, fromHours, toHours, ...(leagues.length ? { leagues } : {}) };
 }
 
 /** Creates a custom ticket job (CUSTOM_1…CUSTOM_10 per day): the user's target, exact legs and chosen agents. */
 export async function createCustomJob(userId: string, input: unknown, at = new Date()) {
   const custom = parseCustom(input);
+  if (custom.leagues) {
+    const known = new Set((await getLeagues({ top10Only: false })).map((l) => l.id));
+    custom.leagues = custom.leagues.filter((id) => known.has(id));
+    if (!custom.leagues.length) throw new SlotError('Ligile alese nu mai sunt disponibile.');
+  }
   if (!providerConfigured('groq') && !providerConfigured('gemini') && !providerConfigured('openrouter') && !config.allowDemoProviders) throw new SlotError('Niciun furnizor AI nu este configurat pe server.', 503);
   const usage = await aiUsageToday();
   if (usage.requests + 20 > config.limits.aiDailyCalls) throw new SlotError(`Cota AI zilnică este aproape epuizată (${usage.requests}/${config.limits.aiDailyCalls} apeluri).`, 503);

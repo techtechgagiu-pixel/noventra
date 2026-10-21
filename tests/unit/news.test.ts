@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRss, teamTokens } from '@/lib/news/google-news';
+import { aboutThisFixture, parseRss, teamTokens } from '@/lib/news/google-news';
 
 describe('news headlines for Hanțu', () => {
   it('parses Google News RSS items, separating outlet from title', () => {
@@ -12,5 +12,11 @@ describe('news headlines for Hanțu', () => {
     expect(teamTokens('Wolverhampton Wanderers')).toContain('wolverhampton');
     expect(teamTokens('Wolverhampton Wanderers')).not.toContain('wanderers');
     expect(teamTokens('Manchester City')).toContain('manchester');
+  });
+  it('drops previews of a different fixture but keeps team news', () => {
+    expect(aboutThisFixture('Predicted Lineups and Player News for Kaiserslautern vs VfL Bochum', 'VfL Wolfsburg')).toBe(false);
+    expect(aboutThisFixture('PEC Zwolle vs Go Ahead Eagles Prediction, Betting Tips, Lineups & Odds', 'Telstar')).toBe(false);
+    expect(aboutThisFixture('Preview: Lillestrom vs Real Sociedad - prediction, team news, lineups', 'Real Sociedad')).toBe(true);
+    expect(aboutThisFixture('Lugano vs Red Star at 6:45 pm: no Katai or Bukari', 'F.C. København')).toBe(true);
   });
 });

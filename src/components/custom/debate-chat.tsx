@@ -21,7 +21,7 @@ export function eventsToMessages(events: NexusEvent[]): { messages: Msg[]; match
     const base = { seq: e.seq, at: e.createdAt, fixture: e.fixtureId };
     const sys = (text: string, tone: 'info' | 'good' | 'bad' | 'warn' = 'info') => out.push({ kind: 'system', ...base, tone, text });
     switch (e.type) {
-      case 'JOB_CREATED': sys(p.review ? `Biletul tău a venit la analiză: ${(p.review.legs ?? []).map((l: { match: string; label: string; odds: number }) => `${l.match} — ${l.label} @ ${Number(l.odds).toFixed(2)}`).join(' · ')}` : p.custom ? `Bilet custom: cotă ${p.custom.target} din ${p.custom.legs} ${p.custom.legs === 1 ? 'meci' : 'meciuri'} · în teren: ${(p.custom.names ?? []).join(', ')}` : `Analiză pornită: ${p.title}`); break;
+      case 'JOB_CREATED': sys(p.review ? `Biletul tău a venit la analiză: ${(p.review.legs ?? []).map((l: { match: string; label: string; odds: number }) => `${l.match} — ${l.label} @ ${Number(l.odds).toFixed(2)}`).join(' · ')}` : p.custom ? `Bilet custom: cotă ${p.custom.target} din ${p.custom.legs} ${p.custom.legs === 1 ? 'meci' : 'meciuri'} ${p.custom.leagues?.length ? ` · ${p.custom.leagues.length} ${p.custom.leagues.length === 1 ? 'ligă aleasă' : 'ligi alese'}` : ''} · în teren: ${(p.custom.names ?? []).join(', ')}` : `Analiză pornită: ${p.title}`); break;
       case 'POOL_BUILT': sys(`${p.totalFixtures} meciuri găsite, ${p.eligible} eligibile.`); break;
       case 'MARKETS_CHECKED': sys(`${p.accepted} meciuri au minimum ${p.minimum} pronosticuri cu cotă reală; ${p.rejected} lăsate deoparte.`); break;
       case 'BATCH_STARTED': sys(`Lotul ${p.batch}/${p.of} intră la discuție: ${(p.fixtures ?? []).map((f: string) => matches[f] ?? f).join(' · ')}`); break;

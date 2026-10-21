@@ -88,7 +88,7 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(90_000),
+    signal: AbortSignal.timeout(ref.provider === 'openrouter' ? 120_000 : 90_000),
   });
   const text = await res.text();
   rememberLimits(ref, res);
@@ -143,7 +143,19 @@ async function rawCall(ref: ModelRef, input: CallInput): Promise<RawResult> {
     }
   }
   if (ref.provider === 'groq') return callOpenAiCompatible(ref, input, 'https://api.groq.com/openai/v1', config.groqApiKey);
-  return callOpenAiCompatible(ref, input, 'https://openrouter.ai/api/v1', config.openRouterApiKey);
+  // Slow OpenRouter routes time out or drop the connection now and then: retry a dropped connection once, then let the
+  // chain move to the fallback instead of failing the agent's whole vote.
+  for (let tryNo = 0; ; tryNo++) {
+    try { return await callOpenAiCompatible(ref, input, 'https://openrouter.ai/api/v1', config.openRouterApiKey); }
+    catch (error) {
+      const network = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError' || /fetch failed|ECONNRESET|socket|terminated/i.test(error.message));
+      if (!network) throw error;
+      // A dropped connection fails fast and is worth one retry; a 2-minute timeout goes straight to the fallback.
+      const timedOut = (error as Error).name === 'TimeoutError' || (error as Error).name === 'AbortError';
+      if (tryNo === 0 && !timedOut) { await new Promise((r) => setTimeout(r, 1500)); continue; }
+      throw new ProviderUnavailableError('openrouter', `${ref.model} nu a răspuns la timp (${(error as Error).message}).`);
+    }
+  }
 }
 
 function extractJson(text: string): unknown {

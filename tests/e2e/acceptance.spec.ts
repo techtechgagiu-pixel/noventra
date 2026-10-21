@@ -77,6 +77,12 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
   await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
   await page.getByRole('button', { name: 'Toți', exact: true }).click();
+  await page.getByRole('button', { name: /Ligi.*Toate ligile/ }).click();
+  await page.getByRole('option', { name: /Premier League/ }).first().click();
+  await page.getByRole('option', { name: /La Liga/ }).first().click();
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/custom-leagues.png` });
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /Ligi.*2 ligi/ })).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/custom-form.png`, fullPage: true });
   await page.getByRole('button', { name: /CREEAZĂ BILETUL CUSTOM/ }).click();
   await expect(page).toHaveURL(/tab=custom&job=[0-9a-f-]{36}/);
@@ -123,4 +129,16 @@ test('statistics tab: per-agent record and consumption', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'Agenții' }).locator('article')).toHaveCount(23);
   await expect(page.getByText('Consum azi')).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/stats.png`, fullPage: true });
+});
+
+test('matches tab: every available fixture with odds and analysis status', async ({ page }) => {
+  await page.goto('/auth/test-login?email=e2e@test.local');
+  await page.goto('/?tab=meciuri');
+  await expect(page.getByRole('heading', { name: 'Toate meciurile' })).toBeVisible();
+  await expect(page.locator('section li').first()).toBeVisible({ timeout: 30_000 });
+  const before = await page.locator('section li').count();
+  await page.getByRole('button', { name: 'Pe bilet' }).click();
+  expect(await page.locator('section li').count()).toBeLessThanOrEqual(before);
+  await page.getByRole('button', { name: 'Toate', exact: true }).click();
+  if (process.env.SHOTS) { await page.screenshot({ path: `${process.env.SHOTS}/matches.png`, fullPage: true }); await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: `${process.env.SHOTS}/matches-mobile.png`, fullPage: false }); }
 });

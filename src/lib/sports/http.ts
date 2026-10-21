@@ -14,7 +14,7 @@ export class QuotaExceededError extends Error {
 
 // Polite global pacing per provider, shared by every job in this process: at most N requests in flight
 // and a minimum spacing between request starts (ESPN blocks bursts with 403).
-const LIMITS: Record<string, { concurrent: number; spacingMs: number }> = { espn: { concurrent: 3, spacingMs: 150 }, gnews: { concurrent: 2, spacingMs: 400 } };
+const LIMITS: Record<string, { concurrent: number; spacingMs: number }> = { espn: { concurrent: 4, spacingMs: 120 }, gnews: { concurrent: 2, spacingMs: 400 } };
 const gate = globalCache as unknown as { __bmGate?: Map<string, { active: number; last: number; queue: Array<() => void> }> };
 const gates = (gate.__bmGate ??= new Map());
 async function acquire(provider: string) {

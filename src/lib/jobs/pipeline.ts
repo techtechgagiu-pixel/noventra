@@ -53,8 +53,12 @@ async function save(job: JobRow) {
 async function discover(job: JobRow) {
   const cp = job.checkpoint;
   await setStage(job, 'SELECTING', cp);
-  const { fixtures, errors } = await loadFixtures(job.config.windowStart, job.config.windowDays, { top10Only: job.config.top10Only });
-  if (job.config.review) return discoverReview(job, fixtures, errors);
+  const loaded = await loadFixtures(job.config.windowStart, job.config.windowDays, { top10Only: job.config.top10Only });
+  const { errors } = loaded;
+  if (job.config.review) return discoverReview(job, loaded.fixtures, errors);
+  // Custom tickets may be limited to the leagues the user ticked.
+  const only = job.config.custom?.leagues?.length ? new Set(job.config.custom.leagues) : null;
+  const fixtures = only ? loaded.fixtures.filter((f) => only.has(f.leagueId)) : loaded.fixtures;
   const now = Date.now();
   const pol = jobPolicy(job);
   // Daily tickets use a rolling window measured from the job's creation: start ≥ minLeadHours, ≤ maxAheadHours.
@@ -99,7 +103,7 @@ async function discover(job: JobRow) {
   const order = [...prioritized, ...entries.filter((e) => !e.eligible)];
   await query('UPDATE ticket_generation_jobs SET candidate_order=$2, eligible_count=$3 WHERE id=$1', [job.id, JSON.stringify(order), eligible.length]);
   job.candidate_order = order;
-  await recordEvent(job.id, { type: 'POOL_BUILT', stage: 'SELECTING', payload: { totalFixtures: fixtures.length, eligible: eligible.length, sourceErrors: errors.slice(0, 10), window: { start: job.config.windowStart, days: job.config.windowDays }, leagues: job.config.top10Only ? 'TOP 10' : 'TOP 10 + cupe europene + ligi extinse' } });
+  await recordEvent(job.id, { type: 'POOL_BUILT', stage: 'SELECTING', payload: { totalFixtures: fixtures.length, eligible: eligible.length, sourceErrors: errors.slice(0, 10), window: { start: job.config.windowStart, days: job.config.windowDays }, leagues: only ? `${only.size} ${only.size === 1 ? 'ligă aleasă' : 'ligi alese'}` : job.config.top10Only ? 'TOP 10' : 'toate ligile disponibile' } });
   const rejected = entries.filter((e) => !e.eligible);
   if (rejected.length) await recordEvent(job.id, { type: 'CANDIDATE_REJECTED', stage: 'SELECTING', payload: { count: rejected.length, items: rejected.slice(0, 60).map((r) => ({ fixtureId: r.fixtureId, match: `${r.home} – ${r.away}`, league: r.league, reason: r.reason })) } });
   await recordEvent(job.id, { type: 'CANDIDATE_SELECTED', stage: 'SELECTING', payload: { seed: job.seed.slice(0, 12), order: prioritized.map((e, i) => ({ rank: i + 1, fixtureId: e.fixtureId, match: `${e.home} – ${e.away}`, league: e.league, kickoff: e.kickoff })), batches: batches.length, batchSize: job.config.batchSize } });
@@ -213,7 +217,7 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
       const model = modelFixture({ homeHistory: home.matches, awayHistory: away.matches, markets: f.odds.markets, homePpg: ppg(standings.home), awayPpg: ppg(standings.away) });
       let news: FixtureSnapshot['news'];
       if (f.provider !== 'demo') {
-        const [nh, na] = await Promise.all([teamNews(f.home, f.kickoff), teamNews(f.away, f.kickoff)]);
+        const [nh, na] = await Promise.all([teamNews(f.home, f.kickoff, 8, f.away), teamNews(f.away, f.kickoff, 8, f.home)]);
         news = { home: nh.items, away: na.items, errors: [...nh.errors, ...na.errors] };
         await recordEvent(job.id, { type: 'NEWS_COLLECTED', stage: 'SCOUT', fixtureId: f.id, agentId: 'hantu', payload: { match: `${f.home} – ${f.away}`, home: nh.items.length, away: na.items.length, headlines: [...nh.items, ...na.items].slice(0, 6).map((x) => ({ title: x.title, source: x.source, publishedAt: x.publishedAt, link: x.link })), errors: news.errors.slice(0, 2) } });
       }
@@ -679,7 +683,7 @@ export async function runJobSlice(job: JobRow, budgetMs = 50_000) {
         if (config.limits.debateRounds >= 1) {
           cp.debateFixtures = await chooseDebate(job, ids, 1);
           if (cp.debateFixtures.length) cp.batchStep = 'DEBATE1';
-          else { await recordEvent(job.id, { type: 'DEBATE_SKIPPED', stage: 'DEBATE', payload: { round: 1, reason: 'Pozițiile sunt deja unanime sau fără candidat comun; dezbaterea nu ar schimba rezultatul.' } }); cp.batchStep = 'BRAIN'; }
+          else { await recordEvent(job.id, { type: 'DEBATE_SKIPPED', stage: 'DEBATE', payload: { round: 1, reason: 'Fiecare meci are deja o selecție peste prag sau niciuna aproape de prag; o dezbatere nu ar schimba rezultatul.' } }); cp.batchStep = 'BRAIN'; }
         } else cp.batchStep = 'BRAIN';
         await save(job);
         break;
