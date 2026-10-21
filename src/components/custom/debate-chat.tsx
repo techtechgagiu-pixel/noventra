@@ -78,14 +78,14 @@ export function DebateChat({ events, upTo, live }: { events: NexusEvent[]; upTo:
   const shown = filter ? messages.filter((m) => m.fixture === filter) : messages;
   const fixtures = useMemo(() => [...new Set(messages.map((m) => m.fixture).filter((f): f is string => !!f))], [messages]);
 
-  useLayoutEffect(() => { const el = box.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [shown.length, typing.length]);
-  useEffect(() => { const el = box.current; if (!el) return; const on = () => { stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }; el.addEventListener('scroll', on, { passive: true }); return () => el.removeEventListener('scroll', on); }, []);
+  useLayoutEffect(() => { const el = box.current; if (el && stick.current) el.scrollTop = 0; }, [shown.length, typing.length]);
+  useEffect(() => { const el = box.current; if (!el) return; const on = () => { stick.current = el.scrollTop < 80; }; el.addEventListener('scroll', on, { passive: true }); return () => el.removeEventListener('scroll', on); }, []);
 
   return (
     <section className="card overflow-hidden" aria-label="Jurnalul analizei">
       <header className="flex flex-wrap items-center gap-2 border-b border-line/70 px-4 py-3">
         <h3 className="font-display text-base font-bold">Jurnalul analizei</h3>
-        <span className="text-xs text-muted">{messages.length} mesaje</span>
+        <span className="text-xs text-muted">{messages.length} mesaje · cele noi sus</span>
         <div className="ml-auto flex max-w-full gap-1.5 overflow-x-auto pb-0.5">
           <button onClick={() => setFilter(null)} className={`chip shrink-0 ${!filter ? 'text-cyan' : 'text-muted'}`}>Toate</button>
           {fixtures.map((f) => <button key={f} onClick={() => setFilter(filter === f ? null : f)} className={`chip shrink-0 ${filter === f ? 'text-cyan' : 'text-muted'}`}>{matches[f] ?? f}</button>)}
@@ -93,7 +93,6 @@ export function DebateChat({ events, upTo, live }: { events: NexusEvent[]; upTo:
       </header>
       <div ref={box} className="max-h-[560px] min-h-[220px] space-y-3 overflow-y-auto px-3 py-4 md:px-5" role="log" aria-live="polite">
         {!shown.length && <p className="py-10 text-center text-sm text-muted">Discuția începe când agenții primesc primele meciuri.</p>}
-        {shown.map((m) => m.kind === 'system' ? <SystemLine key={m.seq} m={m} /> : <AgentBubble key={m.seq} m={m} match={m.fixture ? matches[m.fixture] : undefined} />)}
         {typing.length > 0 && (
           <div className="flex items-center gap-2 pl-1 text-xs text-muted">
             <div className="flex -space-x-2">{typing.slice(0, 5).map((a) => <img key={a} src={AGENT_META[a]?.img} alt="" className="h-6 w-6 rounded-full border-2 border-ink object-cover" />)}</div>
@@ -101,6 +100,7 @@ export function DebateChat({ events, upTo, live }: { events: NexusEvent[]; upTo:
             <span className="flex gap-0.5" aria-hidden>{[0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan" style={{ animationDelay: `${i * 0.15}s` }} />)}</span>
           </div>
         )}
+        {[...shown].reverse().map((m, i) => <div key={m.seq} className={i === 0 ? 'animate-[fadein_.4s_ease-out]' : undefined}>{m.kind === 'system' ? <SystemLine m={m} /> : <AgentBubble m={m} match={m.fixture ? matches[m.fixture] : undefined} />}</div>)}
       </div>
     </section>
   );
