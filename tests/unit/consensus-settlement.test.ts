@@ -142,3 +142,17 @@ describe('weekly COTĂ 100 picking', () => {
     expect(characterViolation(p, sandu, weekly, { odds: 1.9, estimatedProbability: 0.6 })).toMatch(/depășește limita 1.85/);
   });
 });
+
+describe('no Under selections', () => {
+  it('every Under market (match or team total) is banned and its votes are set aside', async () => {
+    const { characterViolation, isBannedMarket } = await import('@/lib/jobs/analysis');
+    expect(isBannedMarket('TOTAL:UNDER:2.5')).toBe(true);
+    expect(isBannedMarket('TT:HOME:UNDER:1.5')).toBe(true);
+    expect(isBannedMarket('TOTAL:OVER:1.5')).toBe(false);
+    expect(isBannedMarket('DC:1X')).toBe(false);
+    const agent = { name: 'Cristi Chivu', maxOdds: 1.85, minProbability: 0.58 };
+    const five = { minOdds: 1.15, maxOdds: 1.65, minProbability: 0.6 };
+    const p = { ...pos('ioana', 'TOTAL:UNDER:3.5'), estimatedProbability: 0.8 };
+    expect(characterViolation(p, agent, five, { odds: 1.3, estimatedProbability: 0.8 })).toMatch(/interzise/);
+  });
+});

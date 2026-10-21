@@ -3,6 +3,9 @@ import type { Prediction, Revision } from '../ai/agents';
 import type { FixtureSnapshot } from './types';
 
 /** Compact, identical factual snapshot for all six agents (token-efficient). */
+/** User rule (2026-10-21): no „Under” selections at all — match totals or team totals. */
+export const isBannedMarket = (key: string | null) => !!key && /:UNDER(:|$)/.test(key);
+
 export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number } = { minOdds: 1.12, maxOdds: 6 }) {
   const d = s.dossier;
   const team = (t: typeof d.home) => ({
@@ -21,7 +24,7 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
     standings: { home: s.standings.home, away: s.standings.away },
     scout: { home: team(d.home), away: team(d.away) },
     model: { lambdaHome: s.model.lambdaHome, lambdaAway: s.model.lambdaAway, uncertainty: s.model.uncertainty, margin1x2: s.model.bookmakerMargin1x2 },
-    markets: s.model.markets.filter((m) => m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: m.fairMarketProbability, model: m.modelProbability, est: m.estimatedProbability, ev: m.expectedValue })),
+    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: m.fairMarketProbability, model: m.modelProbability, est: m.estimatedProbability, ev: m.expectedValue })),
     missing: d.missing.filter((x) => !/xG|Accident/.test(x)).slice(0, 2),
   };
 }
@@ -38,7 +41,7 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
     kickoffUtc: s.fixture.kickoff,
     standings: { home: s.standings.home, away: s.standings.away },
     news: { [s.fixture.home]: n.home.map(fmt), [s.fixture.away]: n.away.map(fmt), note: n.home.length + n.away.length === 0 ? 'Nicio știre relevantă găsită în ultimele zile.' : undefined },
-    markets: s.model.markets.filter((m) => m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, odds: m.odds, fair: m.fairMarketProbability })),
+    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, odds: m.odds, fair: m.fairMarketProbability })),
   };
 }
 
@@ -104,6 +107,7 @@ export function characterViolation(
 ): string | null {
   if (p.decision !== 'BET_CANDIDATE' || !p.marketKey) return null;
   if (!market) return 'piața nu există în cotele observate';
+  if (isBannedMarket(p.marketKey)) return 'pronosticurile „sub” sunt interzise';
   const cap = Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds);
   if (market.odds > cap + 1e-9) return `cota ${market.odds.toFixed(2)} depășește limita ${cap.toFixed(2)} (${agent.name} max ${agent.maxOdds.toFixed(2)}, bilet max ${policy.maxOdds.toFixed(2)})`;
   if (market.odds < policy.minOdds - 1e-9) return `cota ${market.odds.toFixed(2)} este sub minimul biletului (${policy.minOdds.toFixed(2)})`;

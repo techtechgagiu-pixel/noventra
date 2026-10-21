@@ -13,7 +13,7 @@ import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sp
 import type { Fixture } from '../sports/types';
 import { modelFixture } from '../stats/engine';
 import { localDate, yyyymmdd } from '../time';
-import { agentFacts, characterViolation, newsFacts, consensus, contested, riskClass, toPosition, type FinalPosition } from './analysis';
+import { agentFacts, characterViolation, isBannedMarket, newsFacts, consensus, contested, riskClass, toPosition, type FinalPosition } from './analysis';
 import { agentTrackRecord, trackRecordText } from '../track-record';
 import { teamNews } from '../news/google-news';
 import { buildDigest } from '../digest';
@@ -316,7 +316,7 @@ function guardPositions(job: JobRow, s: FixtureSnapshot, positions: FinalPositio
     return { ...p, decision: 'NO_BET' as const, marketKey: null };
   });
   const keys = s.model.markets
-    .filter((m) => m.odds >= policy.minOdds && m.odds <= policy.maxOdds && (m.estimatedProbability ?? 0) >= policy.minProbability)
+    .filter((m) => !isBannedMarket(m.key) && m.odds >= policy.minOdds && m.odds <= policy.maxOdds && (m.estimatedProbability ?? 0) >= policy.minProbability)
     .map((m) => ({ key: m.key, odds: m.odds }));
   return { counted, setAside, keys };
 }
