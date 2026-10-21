@@ -4,6 +4,7 @@ import { Activity, BarChart3, CalendarDays, ClipboardCheck, History, ListOrdered
 import { MatchesView } from '@/components/matches/matches-view';
 import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
+import { ResultsRefresh } from '@/components/results-refresh';
 import { many } from '@/lib/db';
 import { slotStates } from '@/lib/jobs/service';
 import { jobEvents, jobMeta, listTickets, ticketDetail } from '@/lib/views';
@@ -60,6 +61,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
 
   return (
     <>
+      {['acasa', 'bilete', 'azi', 'istoric', 'statistici'].includes(tab) && <ResultsRefresh />}
       <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
           <Link href="/" aria-label="Acasă" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
@@ -92,7 +94,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} />}
       </main>
-      <footer className="mx-auto max-w-6xl px-4 pb-8 text-xs text-muted">18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</footer>
+      <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-8 text-xs text-muted"><p>Rezultatele se actualizează automat după confirmarea scorului final.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
     </>
   );
 }

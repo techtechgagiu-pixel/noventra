@@ -89,31 +89,46 @@ export async function settleAgentPredictions() {
   }
 }
 
-let running = false;
+// Next bundles may load this module more than once; scheduling and the guard belong to the process.
+const g = globalThis as unknown as { __bmSettlement?: { running: boolean; timer?: ReturnType<typeof setInterval> } };
+const state = (g.__bmSettlement ??= { running: false });
+export const SETTLEMENT_INTERVAL_MS = 5 * 60_000;
+
+/** Check immediately on boot/wake, then periodically while the server is running. */
+export function startSettlement() {
+  if (process.env.BETMIND_DISABLE_WORKER === '1' || state.timer) return;
+  void settlePending();
+  state.timer = setInterval(() => void settlePending(), SETTLEMENT_INTERVAL_MS);
+  state.timer.unref?.();
+}
+
 /** Deterministic, non-AI settlement of finished fixtures. Original prices and predictions are never changed. */
 export async function settlePending() {
-  if (running) return;
-  running = true;
+  if (state.running) return;
+  state.running = true;
   try {
     const due = await many<{ fixture_id: string; kickoff_utc: Date; league_id: string; status: string }>(
       `SELECT DISTINCT f.id AS fixture_id, f.kickoff_utc, f.league_id, f.status FROM fixtures f
        WHERE f.kickoff_utc < now() - interval '2 hours' AND f.provider='espn' AND f.status NOT IN ('post','cancelled') AND (
          EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING') OR
          EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.outcome IS NULL))
-       LIMIT 60`,
+       ORDER BY f.kickoff_utc, f.id LIMIT 60`,
     );
     if (due.length) {
     const leagues = await getLeagues({ top10Only: false });
-    const days = new Map<string, Set<string>>();
+    const days = new Set<string>();
     for (const d of due) {
-      const key = `${d.league_id}|${localDate(new Date(d.kickoff_utc))}`;
-      days.set(key, (days.get(key) ?? new Set()).add(d.fixture_id));
+      const date = localDate(new Date(d.kickoff_utc));
+      const previous = new Date(`${date}T12:00:00Z`); previous.setUTCDate(previous.getUTCDate() - 1);
+      // ESPN can file a late game under the preceding US date (as in the fixture loader).
+      days.add(`${d.league_id}|${date}`);
+      days.add(`${d.league_id}|${previous.toISOString().slice(0, 10)}`);
     }
-    for (const [key] of days) {
+    for (const key of days) {
       const [leagueId, date] = key.split('|');
       const league = leagues.find((l) => l.id === leagueId);
       if (!league) continue;
-      const fixtures = await espnLeagueDay(league, yyyymmdd(date)).catch(() => []);
+      const fixtures = await espnLeagueDay(league, yyyymmdd(date), SETTLEMENT_INTERVAL_MS).catch(() => []);
       await persistFixtures(fixtures.map((f) => ({ ...f, odds: null })));
     }
     }
@@ -137,6 +152,6 @@ export async function settlePending() {
   } catch (error) {
     console.warn(JSON.stringify({ event: 'settlement_failed', message: (error as Error).message }));
   } finally {
-    running = false;
+    state.running = false;
   }
 }

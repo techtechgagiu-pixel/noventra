@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { RefreshCw, Search } from 'lucide-react';
 import { api } from '@/lib/format';
+import { useVisibleRefresh } from '@/lib/use-visible-refresh';
 import type { MatchRow } from '@/lib/catalog';
 import { LeaguePicker, type LeagueOption } from './league-picker';
 
@@ -22,7 +23,10 @@ const STATUS: Array<{ id: Status; label: string }> = [
 
 function Verdict({ m }: { m: MatchRow }) {
   const a = m.analysis;
-  if (a?.onTicket) return <span className="text-emerald">✓ Pe bilet: {a.label ?? '—'}{a.odds ? ` @ ${a.odds.toFixed(2)}` : ''}</span>;
+  if (a?.onTicket) {
+    const outcome = a.selectionOutcome;
+    return <span className={outcome === 'WON' ? 'text-emerald' : outcome === 'LOST' ? 'text-rose' : 'text-muted'}>{outcome === 'WON' ? '✓ A intrat' : outcome === 'LOST' ? '✗ Nu a intrat' : outcome === 'VOID' ? 'Anulat' : 'Pe bilet · în așteptare'}: {a.label ?? '—'}{a.odds ? ` @ ${a.odds.toFixed(2)}` : ''}</span>;
+  }
   if (a?.outcome === 'QUALIFIED') return <span className="text-cyan">Selecție validată: {a.label ?? '—'} · {a.votes} voturi</span>;
   if (a?.outcome === 'NO_CONSENSUS') return <span className="text-gold">Analizat · fără consens ({a.votes} voturi)</span>;
   if (a?.outcome === 'NO_BET') return <span className="text-muted">Analizat · echipa a zis NO BET</span>;
@@ -45,6 +49,7 @@ export function MatchesView() {
     try { setData(await api<Data>('/api/matches')); setError(null); } catch (e) { setError((e as Error).message); }
   }, []);
   useEffect(() => { setToday(dayOf(new Date().toISOString())); void load(); }, [load]);
+  useVisibleRefresh(load);
   // While the source is being refreshed in the background, pick up the new snapshot.
   useEffect(() => { if (!data?.refreshing) return; const t = setTimeout(load, 15_000); return () => clearTimeout(t); }, [data, load]);
 
