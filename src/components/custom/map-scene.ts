@@ -188,7 +188,7 @@ export class MapScene {
         break;
       }
       case 'BATCH_STARTED':
-        ((p.fixtures ?? []) as string[]).forEach((id, i) => { this.setFx(id, { state: 'RESEARCH' }); if (go) this.send({ k: 'src' }, F(id), C.cyan, now, { delay: i * 90, size: 1.2 }); });
+        ((Array.isArray(p.fixtures) ? p.fixtures : []) as string[]).forEach((id, i) => { this.setFx(id, { state: 'RESEARCH' }); if (go) this.send({ k: 'src' }, F(id), C.cyan, now, { delay: i * 90, size: 1.2 }); });
         break;
       case 'SCOUT_COMPLETED': case 'STATS_COMPLETED':
         if (e.fixtureId && go) { this.send({ k: 'src' }, F(e.fixtureId), e.type === 'SCOUT_COMPLETED' ? C.cyan : C.violet, now, { size: 0.8 }); this.setFx(e.fixtureId, { flash: now, flashColor: C.cyan }); }
@@ -203,7 +203,7 @@ export class MapScene {
         const id = e.agentId!; const a = this.agents.get(id); if (!a) break;
         const debating = (p.round ?? 0) > 0;
         a.status = debating ? 'DEBATING' : 'ANALYZING'; a.pulse = now; a.activity = 1;
-        ((p.fixtures ?? []) as string[]).forEach((f, i) => { this.setFx(f, { state: debating ? 'DEBATE' : 'ANALYSIS' }); if (go) this.send(F(f), A(id), debating ? C.gold : C.cyan, now, { delay: i * 70, size: 0.7, dur: 750 }); });
+        ((Array.isArray(p.fixtures) ? p.fixtures : []) as string[]).forEach((f, i) => { this.setFx(f, { state: debating ? 'DEBATE' : 'ANALYSIS' }); if (go) this.send(F(f), A(id), debating ? C.gold : C.cyan, now, { delay: i * 70, size: 0.7, dur: 750 }); });
         break;
       }
       case 'PREDICTION_SAVED': case 'POSITION_REVISED': {
@@ -233,7 +233,7 @@ export class MapScene {
       case 'AGENT_FAILED': { const a = this.agents.get(e.agentId ?? ''); if (a) { a.status = 'FAILED'; if (go) { this.burst(A(a.id), C.rose, now, 0.8); this.say(a.id, 'indisponibil acum', C.rose, now); } } break; }
       case 'DEBATE_STARTED':
         for (const a of this.agents.values()) if (a.status !== 'FAILED') a.status = 'IDLE';
-        for (const f of (p.fixtures ?? []) as string[]) { this.setFx(f, { state: 'DEBATE' }); if (go) this.burst(F(f), C.gold, now, 1.2); }
+        for (const f of (Array.isArray(p.fixtures) ? p.fixtures : []) as string[]) { this.setFx(f, { state: 'DEBATE' }); if (go) this.burst(F(f), C.gold, now, 1.2); }
         break;
       case 'BRAIN_STARTED':
         if (go) { this.say(BRAIN, '🧠 aleg pronosticul ideal', C.gold, now); this.burst(A(BRAIN), C.gold, now, 1.6, 1200); }

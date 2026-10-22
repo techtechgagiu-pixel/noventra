@@ -71,7 +71,7 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
       s.batches = p.batches ?? 0;
       log(`Ordine aleatoare de explorare salvată: ${s.order.length} meciuri în ${s.batches} loturi.`);
       break;
-    case 'BATCH_STARTED': s.batchIndex = (p.batch ?? 1) - 1; s.batchFraction = 0; for (const id of p.fixtures ?? []) setFx(id, { state: 'RESEARCH' }); log(`Lotul ${p.batch}/${p.of} intră în analiză.`); break;
+    case 'BATCH_STARTED': s.batchIndex = (p.batch ?? 1) - 1; s.batchFraction = 0; for (const id of (Array.isArray(p.fixtures) ? p.fixtures : [])) setFx(id, { state: 'RESEARCH' }); log(`Lotul ${p.batch}/${p.of} intră în analiză.`); break;
     case 'NEWS_COMMENTARY': log(`Corina Caragea: ${short(p.commentary, 240)}`); break;
     case 'SCOUT_STARTED': s.scout = { ...s.scout, status: 'RESEARCHING', message: p.message }; log(p.message); break;
     case 'MARKETS_CHECKED': log(`Filtru: ${p.accepted} meciuri au minimum ${p.minimum} pronosticuri cu cotă reală; ${p.rejected} au avut prea puține și au fost lăsate deoparte.`); break;
@@ -83,8 +83,8 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
     case 'AGENT_STARTED': {
       const id = e.agentId!;
       if (VOTERS.includes(id) && !s.participants.includes(id)) s.participants = [...s.participants, id]; const debating = (p.round ?? 0) > 0;
-      setAgent(id, { status: debating ? 'DEBATING' : 'ANALYZING', model: `${p.provider}/${p.model}`, activeFixtures: p.fixtures ?? [], round: p.round ?? 0 });
-      for (const f of p.fixtures ?? []) setFx(f, { state: debating ? 'DEBATE' : 'ANALYSIS' });
+      setAgent(id, { status: debating ? 'DEBATING' : 'ANALYZING', model: `${p.provider}/${p.model}`, activeFixtures: Array.isArray(p.fixtures) ? p.fixtures : [], round: p.round ?? 0 });
+      for (const f of (Array.isArray(p.fixtures) ? p.fixtures : [])) setFx(f, { state: debating ? 'DEBATE' : 'ANALYSIS' });
       log(`${NAMES[id]} ${debating ? `intră în dezbatere (runda ${p.round})` : 'analizează'} — ${p.model}.`);
       break;
     }
