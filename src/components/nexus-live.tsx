@@ -37,7 +37,7 @@ export function NexusLive({ jobId, initialMeta, initialEvents }: { jobId: string
   // never when an already-finished analysis is simply opened in the Analiză tab.
   const wasRunningAtOpen = useRef(!TERMINAL.includes(initialMeta.status));
   useEffect(() => {
-    if (wasRunningAtOpen.current && TERMINAL.includes(meta.status) && meta.ticketId) { const t = setTimeout(() => router.push(`/?tab=bilete&ticket=${meta.ticketId}&fresh=1`), 1800); return () => clearTimeout(t); }
+    if (wasRunningAtOpen.current && TERMINAL.includes(meta.status) && meta.ticketId) { const t = setTimeout(() => router.push(`/?tab=istoric&ticket=${meta.ticketId}&fresh=1`), 1800); return () => clearTimeout(t); }
   }, [meta.status, meta.ticketId, router]);
 
   async function resume() { await api(`/api/jobs/${jobId}/resume`, { method: 'POST' }).catch(() => {}); setMeta({ ...meta, status: 'QUEUED' }); }
@@ -59,7 +59,7 @@ export function NexusLive({ jobId, initialMeta, initialEvents }: { jobId: string
       {TERMINAL.includes(meta.status) && meta.ticketId && !wasRunningAtOpen.current && (
         <div className="card flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
           <p className="text-sm text-muted">Analiza s-a încheiat. Mai jos vezi tot ce au făcut agenții.</p>
-          <a href={`/?tab=bilete&ticket=${meta.ticketId}`} className="btn btn-primary px-5 py-3">VEZI BILETUL</a>
+          <a href={`/?tab=istoric&ticket=${meta.ticketId}`} className="btn btn-primary px-5 py-3">VEZI BILETUL</a>
         </div>
       )}
       {['RUNNING', 'QUEUED', 'WAITING'].includes(meta.status) && <p className="text-xs text-muted">Poți închide pagina: analiza e salvată pe server și continuă cât timp serviciul e activ. Dacă serverul gratuit adoarme, reia automat din ultimul pas salvat la următoarea vizită.</p>}

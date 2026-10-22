@@ -6,9 +6,7 @@ import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
 import { ResultsRefresh } from '@/components/results-refresh';
 import { many } from '@/lib/db';
-import { slotStates } from '@/lib/jobs/service';
 import { jobEvents, jobMeta, listTickets, ticketDetail } from '@/lib/views';
-import { SlotCards } from '@/components/slot-cards';
 import { TicketView, type TicketData } from '@/components/ticket-view';
 import { TicketArchive } from '@/components/ticket-archive';
 import { NexusLive } from '@/components/nexus-live';
@@ -34,7 +32,7 @@ import { CustomLive } from '@/components/custom/custom-live';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'acasa' | 'bilete' | 'custom' | 'verifica' | 'analiza' | 'azi' | 'istoric' | 'statistici' | 'meciuri';
+type Tab = 'acasa' | 'custom' | 'verifica' | 'analiza' | 'azi' | 'istoric' | 'statistici' | 'meciuri';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -46,24 +44,24 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     if ((sp.tab && sp.tab !== 'acasa') || sp.ticket || sp.job || sp.replay) redirect('/login');
     return <PublicHome google={googleConfigured()} />;
   }
-  const tab: Tab = sp.tab === 'analiza' || sp.tab === 'istoric' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'bilete' || sp.tab === 'statistici' || sp.tab === 'azi' || sp.tab === 'meciuri' ? sp.tab : sp.ticket ? 'bilete' : 'acasa';
+  // Old daily-ticket URLs remain readable through the shared archive.
+  const tab: Tab = sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'statistici' || sp.tab === 'azi' || sp.tab === 'meciuri' ? sp.tab : 'istoric';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof Ticket; badge?: boolean }> = [
-    { id: 'bilete', label: 'Bilete', icon: Ticket },
+    { id: 'istoric', label: 'Bilete create', icon: History },
     { id: 'custom', label: 'Custom', icon: SlidersHorizontal, badge: running.some((j) => j.slot.startsWith('CUSTOM_')) },
     { id: 'verifica', label: 'Biletul tău', icon: ClipboardCheck, badge: running.some((j) => j.slot.startsWith('REVIEW_')) },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
     { id: 'azi', label: 'Azi', icon: CalendarDays },
     { id: 'meciuri', label: 'Meciuri', icon: ListOrdered },
-    { id: 'istoric', label: 'Bilete create', icon: History },
     { id: 'statistici', label: 'Statistici', icon: BarChart3 },
   ];
 
   return (
     <>
-      {['acasa', 'bilete', 'azi', 'istoric', 'statistici'].includes(tab) && <ResultsRefresh />}
+      {['acasa', 'azi', 'istoric', 'statistici'].includes(tab) && <ResultsRefresh />}
       <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
           <Link href="/" aria-label="Acasă" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
@@ -87,14 +85,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-6">
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
-        {tab === 'bilete' && <BileteTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} running={running.length} />}
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
         {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'azi' && <AziTab userId={user.id} ticket={sp.ticket} />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} />}
-        {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} />}
+        {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} />}
       </main>
       <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-8 text-xs text-muted"><p>Rezultatele se actualizează automat după confirmarea scorului final.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
     </>
@@ -102,11 +99,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
 }
 
 async function AcasaTab({ userId }: { userId: string }) {
-  const [reel, stats, slots, queue, frag] = await Promise.all([homeReel(userId), homeStats(userId), slotStates(userId), jobQueue(userId), homeThreads(userId)]);
-  const ready = slots.filter((x) => x.ticket).length;
+  const [reel, stats, queue, frag] = await Promise.all([homeReel(userId), homeStats(userId), jobQueue(userId), homeThreads(userId)]);
   const decided = stats.legsWon + stats.legsLost;
   const tiles: Array<{ href: string; title: string; text: string; foot: string; accent: string; icon: typeof Ticket; wide?: boolean }> = [
-    { href: '/?tab=bilete', title: 'Biletele zilei', text: 'COTĂ 5 și COTĂ 2, câte două pe zi, plus biletul săptămânii, construite din cote mici.', foot: ready ? `${ready} din ${slots.length} gata azi` : 'Niciunul creat încă azi', accent: '#5ee7f7', icon: Ticket, wide: true },
     { href: '/?tab=custom', title: 'Creează bilet', text: 'Alegi cota, câte meciuri și cine intră în teren, apoi urmărești dezbaterea pe hartă.', foot: `Până la ${CUSTOM_LIMIT_PER_DAY} bilete custom pe zi`, accent: '#34d399', icon: SlidersHorizontal, wide: true },
     { href: '/?tab=verifica', title: 'Vino cu biletul tău la analiză', text: 'Îți faci biletul din cote reale; echipa îți spune ce e solid, ce e slab și ce să schimbi.', foot: 'Verdict pe fiecare meci', accent: '#e8c26a', icon: ClipboardCheck },
     { href: '/?tab=istoric', title: 'Bilete create', text: 'Toate biletele, cu meciurile ieșite verzi sau roșii și cum a fost luată fiecare decizie.', foot: stats.tickets ? `${stats.tickets} ${stats.tickets === 1 ? 'bilet' : 'bilete'}${decided ? `, ${stats.legsWon} din ${decided} meciuri verzi` : ''}` : 'Încă niciun bilet', accent: '#a78bfa', icon: History },
@@ -115,7 +110,7 @@ async function AcasaTab({ userId }: { userId: string }) {
     <div className="space-y-10">
       {reel && reel.events.length > 10 ? <HomeStage events={plain(reel.events)} title={reel.title} finishedAt={reel.finishedAt} target={Number(reel.events.find((e) => e.type === 'TARGET_SELECTED')?.payload.target ?? 0)} />
         : <div className="py-10"><h1 className="font-display text-5xl font-bold leading-none tracking-tight">Analizează.<br />Dezbate.<br />Decide.</h1><p className="mt-4 max-w-md text-muted">Prima analiză apare aici ca reluare imediat ce se încheie.</p></div>}
-      <nav aria-label="Ce vrei să faci" className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1.2fr_1fr_1fr]">
+      <nav aria-label="Ce vrei să faci" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {tiles.map(({ href, title, text, foot, accent, icon: Icon }) => (
           <Link key={href} href={href} className="group relative flex min-h-[188px] flex-col overflow-hidden rounded-[1.4rem] border border-line bg-panel/70 p-5 transition-colors hover:border-[color:var(--a)] focus-visible:border-[color:var(--a)]" style={{ ['--a' as string]: accent }}>
             <span className="absolute inset-x-0 top-0 h-1 origin-left scale-x-[.18] transition-transform duration-300 group-hover:scale-x-100" style={{ background: accent }} aria-hidden />
@@ -143,27 +138,13 @@ async function TicketPanel({ userId, id, fresh, back }: { userId: string; id: st
   );
 }
 
-async function BileteTab({ userId, ticket, fresh, running }: { userId: string; ticket?: string; fresh: boolean; running: number }) {
-  if (ticket) return <TicketPanel userId={userId} id={ticket} fresh={fresh} back="/?tab=bilete" />;
-  const slots = await slotStates(userId);
-  return (
-    <div className="space-y-5">
-      <div>
-        <p className="max-w-2xl text-sm text-muted">Apasă <strong className="text-text">CREEAZĂ BILETUL</strong>: cei 22 de agenți analizează meciurile de azi și mâine, votează și construiesc biletul din cote mici. Urmărești totul în fila <Link href="/?tab=analiza" className="text-cyan">Analiză</Link>.</p>
-        {running > 0 && <p className="chip mt-3 text-emerald"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald" /> {running === 1 ? 'O analiză rulează acum' : `${running} analize rulează acum`} — <Link href="/?tab=analiza" className="underline">vezi live</Link></p>}
-      </div>
-      <SlotCards initial={plain(slots)} />
-    </div>
-  );
-}
-
 async function AnalizaTab({ userId, job, replay, running }: { userId: string; job?: string; replay?: string; running: Array<{ id: string; slot: string; status: string; created_at: Date }> }) {
   if (replay && UUID.test(replay)) {
     const t = await ticketDetail(userId, replay);
     if (t) {
       const meta = await jobMeta(userId, t.jobId);
       const events = (await jobEvents(userId, t.jobId, 0)) ?? [];
-      if (meta) return <CustomLive key={`r-${t.jobId}`} jobId={t.jobId} initialMeta={plain(meta)} initialEvents={plain(events)} info={await agentInfo()} back={{ href: `/?tab=bilete&ticket=${t.id}`, label: '← Înapoi la bilet' }} replayOnOpen />;
+      if (meta) return <CustomLive key={`r-${t.jobId}`} jobId={t.jobId} initialMeta={plain(meta)} initialEvents={plain(events)} info={await agentInfo()} back={{ href: `/?tab=istoric&ticket=${t.id}`, label: '← Înapoi la bilet' }} replayOnOpen />;
     }
   }
   // Explicit job, else the newest running one, else the newest job of today.
@@ -174,8 +155,8 @@ async function AnalizaTab({ userId, job, replay, running }: { userId: string; jo
     return (
       <div className="card p-8 text-center">
         <p className="font-display text-xl">Rețeaua este în repaus.</p>
-        <p className="mt-2 text-muted">Nicio analiză încă. Agenții pornesc când apeși CREEAZĂ BILETUL.</p>
-        <Link href="/?tab=bilete" className="btn btn-primary mt-5 px-6 py-3">Mergi la bilete</Link>
+        <p className="mt-2 text-muted">Nicio analiză disponibilă. Poți consulta biletele deja salvate.</p>
+        <Link href="/?tab=istoric" className="btn btn-primary mt-5 px-6 py-3">Mergi la bilete</Link>
       </div>
     );
   }
@@ -310,8 +291,8 @@ async function StatisticiTab({ userId, admin, month, scope }: { userId: string; 
   return <div className="space-y-6">{admin && <AutomationPanel initial={plain(await automationHealth())} />}<StatsView agents={plain(agents)} totals={totals} month={m} scope={selected} /></div>;
 }
 
-async function IstoricTab({ userId, ticket }: { userId: string; ticket?: string }) {
-  if (ticket) return <TicketPanel userId={userId} id={ticket} fresh={false} back="/?tab=istoric" />;
+async function IstoricTab({ userId, ticket, fresh }: { userId: string; ticket?: string; fresh: boolean }) {
+  if (ticket) return <TicketPanel userId={userId} id={ticket} fresh={fresh} back="/?tab=istoric" />;
   const tickets = await listTickets(userId);
   return (
     <div className="space-y-10">

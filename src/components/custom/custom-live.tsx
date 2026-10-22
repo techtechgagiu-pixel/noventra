@@ -26,7 +26,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
   // Opens the finished ticket only when the analysis ends while it is being watched.
   const wasRunning = useRef(!TERMINAL.includes(initialMeta.status));
   useEffect(() => {
-    if (openTicketWhenDone && wasRunning.current && done && meta.ticketId) { const t = setTimeout(() => router.push(`/?tab=bilete&ticket=${meta.ticketId}&fresh=1`), 2500); return () => clearTimeout(t); }
+    if (openTicketWhenDone && wasRunning.current && done && meta.ticketId) { const t = setTimeout(() => router.push(`/?tab=istoric&ticket=${meta.ticketId}&fresh=1`), 2500); return () => clearTimeout(t); }
   }, [openTicketWhenDone, done, meta.ticketId, router]);
   useEffect(() => { if (replayOnOpen) { const t = setTimeout(() => map.current?.replay(2.5), 400); return () => clearTimeout(t); } }, [replayOnOpen]);
 
@@ -59,7 +59,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
       {done && meta.ticketId && (
         <div className="card flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
           <p className="text-sm text-muted">{events.some((e) => e.type === 'REVIEW_ADVICE') ? 'Analiza biletului tău e gata — verdictul e salvat cu biletul și îl urmărim până la final.' : meta.status === 'COMPLETED' ? 'Biletul tău custom e gata.' : 'Analiza s-a încheiat — vezi ce au decis agenții.'}</p>
-          <Link href={`/?tab=bilete&ticket=${meta.ticketId}`} className="btn btn-primary px-5 py-3">VEZI BILETUL</Link>
+          <Link href={`/?tab=istoric&ticket=${meta.ticketId}`} className="btn btn-primary px-5 py-3">VEZI BILETUL</Link>
         </div>
       )}
       <ReviewVerdict events={events} upTo={upTo} />
