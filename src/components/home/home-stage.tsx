@@ -16,6 +16,7 @@ function moments(events: NexusEvent[]): Moment[] {
     const p = e.payload ?? {};
     if (e.type === 'PREDICTION_SAVED' && p.decision === 'BET_CANDIDATE' && p.rationale && picks < 4) { picks++; out.push({ seq: e.seq, agent: e.agentId, kind: 'pick', text: cut(String(p.rationale), 150), detail: `${p.marketLabel ?? p.marketKey}${p.odds ? ` @ ${Number(p.odds).toFixed(2)}` : ''} · ${p.match}` }); }
     else if (e.type === 'NEWS_COLLECTED' && p.headlines?.[0]) out.push({ seq: e.seq, agent: 'hantu', kind: 'news', text: cut(String(p.headlines[0].title), 120), detail: `${p.headlines[0].source ?? 'presă'} · ${p.match}` });
+    else if (e.type === 'NEWS_COMMENTARY' && p.commentary) out.push({ seq: e.seq, agent: 'corina', kind: 'news', text: cut(String(p.commentary), 160), detail: String(p.match ?? '') });
     else if (e.type === 'OBJECTION_RECORDED' && p.objection) out.push({ seq: e.seq, agent: e.agentId, kind: 'objection', text: cut(String(p.objection), 160), detail: 'obiecție în dezbatere' });
     else if (e.type === 'POSITION_REVISED' && p.changed && p.response) out.push({ seq: e.seq, agent: e.agentId, kind: 'revised', text: cut(String(p.response), 150), detail: 'își schimbă poziția' });
     else if (e.type === 'BRAIN_DECISION' && p.choice) out.push({ seq: e.seq, agent: 'robert', kind: 'brain', text: cut(String(p.reason ?? ''), 160), detail: `alege ${p.label}${p.odds ? ` @ ${Number(p.odds).toFixed(2)}` : ''} · ${p.match}` });

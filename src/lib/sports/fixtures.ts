@@ -9,9 +9,9 @@ export type FixtureProvider = (leagues: League[], days: string[]) => Promise<{ f
 
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex').slice(0, 32);
 
-export async function getLeagues(opts: { top10Only?: boolean } = {}): Promise<League[]> {
+export async function getLeagues(opts: { top10Only?: boolean; includeDisabled?: boolean } = {}): Promise<League[]> {
   const rows = await many<{ id: string; country: string; name: string; provider: 'espn' | 'lpf'; provider_key: string; priority: number; top10: boolean }>(
-    `SELECT id, country, name, provider, provider_key, priority, top10 FROM leagues WHERE enabled ${opts.top10Only === false ? '' : 'AND top10'} ORDER BY priority`,
+    `SELECT id, country, name, provider, provider_key, priority, top10 FROM leagues WHERE ${opts.includeDisabled ? 'true' : 'enabled'} ${opts.top10Only === false ? '' : 'AND top10'} ORDER BY priority`,
   );
   return rows.map((r) => ({ id: r.id, country: r.country, name: r.name, provider: r.provider, providerKey: r.provider_key, priority: r.priority, top10: r.top10 }));
 }
@@ -62,12 +62,14 @@ export async function persistFixtures(fixtures: Fixture[]) {
   for (const f of fixtures) {
     const contentHash = hash([f.home, f.away, f.kickoff, f.status, f.homeScore, f.awayScore]);
     await query(
-      `INSERT INTO fixtures (id, provider, provider_id, league_id, home_team, away_team, home_team_id, away_team_id, home_logo, away_logo, kickoff_utc, status, home_score, away_score, content_hash)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+      `INSERT INTO fixtures (id, provider, provider_id, league_id, home_team, away_team, home_team_id, away_team_id, home_logo, away_logo, kickoff_utc, status, home_score, away_score, content_hash, source_observed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        ON CONFLICT (id) DO UPDATE SET home_team=EXCLUDED.home_team, away_team=EXCLUDED.away_team, kickoff_utc=EXCLUDED.kickoff_utc,
-         status=EXCLUDED.status, home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, content_hash=EXCLUDED.content_hash, updated_at=now()
-       WHERE fixtures.content_hash IS DISTINCT FROM EXCLUDED.content_hash`,
-      [f.id, f.provider, f.providerId, f.leagueId, f.home, f.away, f.homeTeamId ?? null, f.awayTeamId ?? null, f.homeLogo ?? null, f.awayLogo ?? null, f.kickoff, f.status, f.homeScore ?? null, f.awayScore ?? null, contentHash],
+         status=EXCLUDED.status, home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, content_hash=EXCLUDED.content_hash, source_observed_at=EXCLUDED.source_observed_at,
+         updated_at=CASE WHEN fixtures.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN now() ELSE fixtures.updated_at END
+       WHERE (fixtures.source_observed_at IS NULL OR EXCLUDED.source_observed_at>=fixtures.source_observed_at)
+         AND NOT (fixtures.status='post' AND EXCLUDED.status IN ('pre','in'))`,
+      [f.id, f.provider, f.providerId, f.leagueId, f.home, f.away, f.homeTeamId ?? null, f.awayTeamId ?? null, f.homeLogo ?? null, f.awayLogo ?? null, f.kickoff, f.status, f.homeScore ?? null, f.awayScore ?? null, contentHash, f.fetchedAt],
     );
     if (f.odds) {
       const oddsHash = hash([f.odds.bookmaker, f.odds.markets]);

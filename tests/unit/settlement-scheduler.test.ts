@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { many } from '@/lib/db';
 import { startSettlement } from '@/lib/settlement';
 
-vi.mock('@/lib/db', () => ({ many: vi.fn(async () => []), query: vi.fn() }));
+vi.mock('@/lib/db', () => ({ many: vi.fn(async () => []), one: vi.fn(async () => ({ name: 'settlement' })), query: vi.fn(async () => ({})) }));
 afterEach(() => {
   const state = (globalThis as unknown as { __bmSettlement: { timer?: ReturnType<typeof setInterval> } }).__bmSettlement;
   clearInterval(state.timer); delete state.timer;

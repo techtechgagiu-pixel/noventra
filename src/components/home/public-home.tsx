@@ -17,7 +17,7 @@ export function PublicHome({ google }: { google: boolean }) {
     </header>
     <main className="mx-auto grid min-h-[calc(100svh-160px)] max-w-6xl items-center gap-10 px-4 py-12 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
       <section className="space-y-6">
-        <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan">PRIMUL 11 · {agents.length} de agenți AI</p>
+        <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan">PRIMUL 11 · 22 de analiști + redacția sportivă</p>
         <h1 className="font-display text-[clamp(2.8rem,8vw,5rem)] font-bold leading-[.98] tracking-tight">Analizează.<br /><span className="text-violet">Dezbate.</span><br />Decide.</h1>
         <p className="max-w-md text-base leading-relaxed text-muted">Intră în Primul 11 cu contul tău Google pentru a accesa meciurile, analizele și biletele create de comunitate.</p>
         {!google && <p role="status" className="text-sm text-gold">Conectarea cu Google este momentan indisponibilă.</p>}

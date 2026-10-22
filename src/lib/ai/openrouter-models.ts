@@ -6,6 +6,8 @@ import type { ModelRef } from './router';
  * Prices: USD per million tokens (input / output) from the OpenRouter catalogue, used for the daily spend cap.
  */
 export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; outPerM: number }> = {
+  // Corina: sourced sports reporting; catalogue checked 2026-10-22.
+  corina: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },
   victor: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },
   andrei: { model: 'deepseek/deepseek-v4.1-flash', inPerM: 0.049, outPerM: 0.375 },
   mihai: { model: 'openai/gpt-6-luna', inPerM: 0.1, outPerM: 0.5 },

@@ -6,6 +6,7 @@ export const odds = (n: number | null | undefined) => (n == null ? '—' : n.toF
 export const STATUS_RO: Record<string, string> = { QUEUED: 'În coadă', RUNNING: 'Rulează', WAITING: 'Așteaptă limita furnizorului', PAUSED: 'În pauză', COMPLETED: 'Finalizat', INCOMPLETE: 'Incomplet', NO_BET: 'NO BET', FAILED: 'Eșuat' };
 export const OUTCOME_RO: Record<string, string> = { PENDING: 'Meciuri în desfășurare', WON: 'Câștigat', LOST: 'Pierdut', VOID: 'Anulat', PARTIAL_VOID: 'Câștigat (cu anulări)', NOT_APPLICABLE: '—' };
 export const AGENT_META: Record<string, { name: string; short?: string; title: string; accent: string; img: string }> = {
+  corina: { name: 'Corina Caragea', short: 'Corina', title: 'Redacția sportivă · știri și context', accent: '#ec4899', img: '/agents/corina.png' },
   victor: { name: 'Mircea Sandu', short: 'Sandu', title: 'Fost președinte FRF', accent: '#34d399', img: '/agents/victor.webp' },
   andrei: { name: 'Gheorghe Hagi', short: 'Hagi', title: 'Regele fotbalului românesc', accent: '#60a5fa', img: '/agents/andrei.webp' },
   mihai: { name: 'Gică Popescu', short: 'Popescu', title: 'Fost căpitan al echipei naționale', accent: '#f59e0b', img: '/agents/mihai.webp' },
@@ -15,7 +16,7 @@ export const AGENT_META: Record<string, { name: string; short?: string; title: s
   ioana: { name: 'Cristi Chivu', short: 'Chivu', title: 'Fost căpitan, antrenor', accent: '#f472b6', img: '/agents/ioana.webp' },
   radu: { name: 'Răzvan Lucescu', short: 'R. Lucescu', title: 'Antrenor', accent: '#2dd4bf', img: '/agents/radu.webp' },
   elena: { name: 'Dumitru Dragomir', short: 'Dragomir', title: '„Mitică Dragomir”', accent: '#facc15', img: '/agents/elena.webp' },
-  hantu: { name: 'Hanțu', short: 'Hanțu', title: 'Omul de știri · doar presa sportivă', accent: '#84cc16', img: '/agents/hantu.webp' },
+  hantu: { name: 'Ștucan', short: 'Ștucan', title: 'Omul de știri · doar presa sportivă', accent: '#84cc16', img: '/agents/hantu.webp' },
   becali: { name: 'Gigi Becali', short: 'Becali', title: 'Expert în blaturi și relații internaționale', accent: '#c084fc', img: '/agents/becali.webp' },
   ilie: { name: 'Ilie Dumitrescu', short: 'Dumitrescu', title: 'Profesorul de tactică', accent: '#38bdf8', img: '/agents/ilie.webp' },
   sumudica: { name: 'Marius Șumudică', short: 'Șumudică', title: 'Nebunul de serviciu', accent: '#d946ef', img: '/agents/sumudica.webp' },

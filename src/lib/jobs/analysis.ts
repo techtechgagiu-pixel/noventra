@@ -29,7 +29,7 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
   };
 }
 
-/** HANȚU's facts: only real headlines (indexed), prices in his band and standings — no statistics. */
+/** ȘTUCAN's facts: only real headlines (indexed), prices in his band and standings — no statistics. */
 export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
   const n = s.news ?? { home: [], away: [], errors: [] };
   let i = 0;

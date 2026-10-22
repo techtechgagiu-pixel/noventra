@@ -33,13 +33,13 @@ async function wasInterrupted(jobId: string) {
 async function processOne(): Promise<boolean> {
   const job = await claim();
   if (!job) return false;
-  const tick = setInterval(() => { void query("UPDATE ticket_generation_jobs SET lease_expires_at=now() + interval '3 minutes' WHERE id=$1 AND lease_owner=$2", [job.id, WORKER_ID]); }, 60_000);
+  const tick = setInterval(() => { void query("UPDATE ticket_generation_jobs SET lease_expires_at=now() + interval '3 minutes' WHERE id=$1 AND lease_owner=$2", [job.id, WORKER_ID]).catch((e) => console.error(JSON.stringify({ event: 'worker_heartbeat_failed', message: (e as Error).message }))); }, 60_000);
   try {
     if (job.recovered && job.stage !== 'QUEUED' && (await wasInterrupted(job.id))) {
       await recordEvent(job.id, { type: 'JOB_RESUMED', stage: job.stage, payload: { by: 'system', note: 'Execuția a fost reluată din ultimul checkpoint salvat (serviciul a fost repornit sau a fost inactiv). Între timp nu s-a procesat nimic.' } });
     }
     const outcome = await runJobSlice(job);
-    if (outcome === 'CONTINUE') await query("UPDATE ticket_generation_jobs SET status='QUEUED', next_run_at=now(), lease_owner=NULL, lease_expires_at=NULL WHERE id=$1", [job.id]);
+    if (outcome === 'CONTINUE') await query("UPDATE ticket_generation_jobs SET status='QUEUED', next_run_at=now(), lease_owner=NULL, lease_expires_at=NULL WHERE id=$1 AND lease_owner=$2", [job.id, WORKER_ID]);
   } catch (error) {
     await handleError(job, error as Error);
   } finally {

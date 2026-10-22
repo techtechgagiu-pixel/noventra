@@ -4,6 +4,7 @@ import { config } from '@/lib/config';
 import { createSession, hashAccessCode, issueInvitation, loginWithCode, newAccessCode, userFromToken } from '@/lib/auth';
 import { one, query } from '@/lib/db';
 import { GET as adminModels } from '@/app/api/admin/models/route';
+import { GET as automation, POST as syncResults } from '@/app/api/admin/automation/route';
 import { GET as invitations, POST as issue } from '@/app/api/admin/invitations/route';
 import { POST as revoke } from '@/app/api/admin/invitations/[id]/revoke/route';
 import { POST as login } from '@/app/auth/invite/route';
@@ -29,6 +30,8 @@ describe('production invitation access', () => {
     expect((await adminModels(request('/api/admin/models'))).status).toBe(401);
     expect((await tickets(request('/api/tickets'))).status).toBe(401);
     expect(await userFromToken('guessed-session')).toBeNull();
+    expect((await automation(request('/api/admin/automation'))).status).toBe(401);
+    expect((await syncResults(request('/api/admin/automation', undefined, {}))).status).toBe(401);
   });
   it('permanent admin code reuses the existing owner identity without deleting its sessions or users', async () => {
     const ownerId = await makeUser('owner@test.local');
@@ -113,6 +116,8 @@ describe('Google accounts and shared tickets', () => {
     const id = await makeUser('fan@gmail.com');
     const s = await createSession(id, 'ua', { google: true });
     expect(await userFromToken(s.token)).toMatchObject({ id, role: 'user' });
+    expect((await automation(request('/api/admin/automation', s.token))).status).toBe(403);
+    expect((await syncResults(request('/api/admin/automation', s.token, {}))).status).toBe(403);
     await query("UPDATE users SET role='admin' WHERE id=$1", [id]);
     expect(await userFromToken(s.token)).toMatchObject({ role: 'user' });
     await query('UPDATE users SET blocked_at=now() WHERE id=$1', [id]);

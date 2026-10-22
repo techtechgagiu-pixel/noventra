@@ -1,0 +1,25 @@
+import { afterAll, beforeEach, expect, it } from 'vitest';
+import { many } from '@/lib/db';
+import { createOrGetJob } from '@/lib/jobs/service';
+import { aiCallCount, setAiTransportForTests } from '@/lib/ai/router';
+import { reportNewsBatch } from '@/lib/news-reporter';
+import { eventsAfter, recordEvent } from '@/lib/jobs/events';
+import { eventsToMessages } from '@/components/custom/debate-chat';
+import { clearFakes, closePool, makeUser, resetDb } from './helpers';
+beforeEach(async () => { await resetDb(); clearFakes(); });
+afterAll(async () => { clearFakes(); await closePool(); });
+it('persists editorial decisions, accounts for Corina separately, and replays without inference or votes', async () => {
+  const userId = await makeUser();
+  const { jobId } = await createOrGetJob(userId, 'FIVE_A');
+  setAiTransportForTests(async (ref) => ({ text: JSON.stringify({ reports: [{ fixtureId: 'DEMO:1', decision: 'CONFLICTING', priority: 'HIGH', observations: [{ text: 'DEMO: sursele nu confirmă lotul.', sources: [1, 2], certainty: 'unconfirmed' }] }] }), inputTokens: 100, outputTokens: 50, resolvedModel: ref.model }));
+  const { reports, error } = await reportNewsBatch([{ fixtureId: 'DEMO:1', match: 'DEMO A – DEMO B', kickoff: new Date().toISOString(), headlines: [{ title: 'DEMO: lot posibil', source: 'DEMO Sport', link: 'https://example.com/1' }, { title: 'DEMO: lot încă neconfirmat', source: 'DEMO News', link: 'https://example.com/2' }] }], { agentId: 'corina', primary: { provider: 'groq', model: 'DEMO-reporter' }, fallback: null, promptVersion: 'TEST' }, jobId);
+  expect(error).toBeNull();
+  await recordEvent(jobId, { type: 'NEWS_COMMENTARY', stage: 'SCOUT', agentId: 'corina', payload: reports[0] });
+  expect(await many("SELECT agent_id,stage FROM model_usage_logs WHERE job_id=$1", [jobId])).toEqual([{ agent_id: 'corina', stage: 'NEWS' }]);
+  const before = aiCallCount();
+  const messages = eventsToMessages(await eventsAfter(jobId, 0)).messages;
+  const message = messages.find((x) => x.kind === 'agent' && x.agent === 'corina');
+  expect(message).toMatchObject({ body: expect.stringContaining('Surse contradictorii · prioritate ridicată'), links: [{ title: '[1] DEMO: lot posibil', href: 'https://example.com/1', source: 'DEMO Sport' }, { title: '[2] DEMO: lot încă neconfirmat', href: 'https://example.com/2', source: 'DEMO News' }] });
+  expect(aiCallCount()).toBe(before);
+  expect(await many('SELECT id FROM agent_predictions WHERE job_id=$1', [jobId])).toHaveLength(0);
+});

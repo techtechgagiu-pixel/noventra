@@ -34,6 +34,7 @@ export const FORMATION: Array<{ id: string; u: number; v: number; line: string }
   { id: 'diana', u: 0.27, v: 0.12, line: 'Mijloc' }, { id: 'hantu', u: 0.25, v: 0.37, line: 'Mijloc' }, { id: 'becali', u: 0.25, v: 0.63, line: 'Mijloc · patronul' }, { id: 'ioana', u: 0.27, v: 0.88, line: 'Mijloc' },
   { id: 'cosmin', u: 0.39, v: 0.2, line: 'Atac' }, { id: 'alex', u: 0.42, v: 0.5, line: 'Atac' }, { id: 'andrei', u: 0.39, v: 0.8, line: 'Atac' },
   { id: 'porumboiu', u: 0.5, v: 0.04, line: 'VAR · pe margine' },
+  { id: 'corina', u: 0.5, v: 0.96, line: 'Redacția sportivă · fără voturi' },
   { id: 'prunea', u: 0.96, v: 0.5, line: 'Echipa a doua · portar' },
   { id: 'dragusin', u: 0.86, v: 0.22, line: 'Echipa a doua · apărare' }, { id: 'petrescu', u: 0.87, v: 0.5, line: 'Echipa a doua · apărare' }, { id: 'tamas', u: 0.86, v: 0.78, line: 'Echipa a doua · apărare' },
   { id: 'ilie', u: 0.74, v: 0.16, line: 'Echipa a doua · mijloc' }, { id: 'stoica', u: 0.73, v: 0.5, line: 'Echipa a doua · mijloc' }, { id: 'ianis', u: 0.74, v: 0.84, line: 'Echipa a doua · mijloc' },
@@ -156,7 +157,7 @@ export class MapScene {
   private onLeave = () => { if (this.hover) { this.hover = null; this.hooks.onAgentHover?.(null); } };
 
   // ── Event → scene ───────────────────────────────────────────────────────
-  private isActive(id: string) { return !this.activeAgents || this.activeAgents.has(id); }
+  private isActive(id: string) { return id === 'corina' || !this.activeAgents || this.activeAgents.has(id); }
   private say(id: string, text: string, color: string, now: number) { const a = this.agents.get(id); if (a) { a.bubble = { text: cut(text, 34), color, t0: now }; a.pulse = now; a.activity = 1; } }
   private send(from: Ref, to: Ref, color: string, now: number, opts: { size?: number; dur?: number; delay?: number; bend?: number; done?: () => void } = {}) {
     if (this.reducedMotion) { opts.done?.(); return; }
@@ -191,6 +192,9 @@ export class MapScene {
         break;
       case 'SCOUT_COMPLETED': case 'STATS_COMPLETED':
         if (e.fixtureId && go) { this.send({ k: 'src' }, F(e.fixtureId), e.type === 'SCOUT_COMPLETED' ? C.cyan : C.violet, now, { size: 0.8 }); this.setFx(e.fixtureId, { flash: now, flashColor: C.cyan }); }
+        break;
+      case 'NEWS_COMMENTARY':
+        if (go) this.send({ k: 'news' }, A('corina'), '#ec4899', now, { done: () => this.say('corina', cut(String(p.commentary ?? ''), 60), '#ec4899', performance.now()) });
         break;
       case 'NEWS_COLLECTED':
         if (go) { this.send({ k: 'news' }, A('hantu'), C.lime, now, { size: 1.1, done: () => this.say('hantu', `${(p.home ?? 0) + (p.away ?? 0)} știri · ${cut(String(p.match ?? ''), 18)}`, C.lime, performance.now()) }); }

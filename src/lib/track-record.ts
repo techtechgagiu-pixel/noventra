@@ -1,4 +1,5 @@
 import { many } from './db';
+import { finalAgentPicksCte } from './final-agent-picks';
 
 /**
  * "Training" without fine-tuning: every agent pick is settled after the match (WON/LOST/VOID),
@@ -16,12 +17,16 @@ export type TrackRecord = {
 
 export async function agentTrackRecord(agentId: string, limit = 80): Promise<TrackRecord | null> {
   const rows = await many<{ outcome: 'WON' | 'LOST'; odds: string | null; estimated_probability: string | null }>(
-    `SELECT outcome, odds, estimated_probability FROM (
-       SELECT DISTINCT ON (job_id, fixture_id) outcome, odds, estimated_probability, settled_at
-       FROM agent_predictions WHERE agent_id=$1 AND outcome IN ('WON','LOST') ORDER BY job_id, fixture_id, round DESC
-     ) x ORDER BY settled_at DESC LIMIT $2`,
+    `${finalAgentPicksCte()}
+     SELECT p.outcome,p.odds,p.estimated_probability FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id
+     WHERE p.agent_id=$1 AND p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST')
+     ORDER BY f.kickoff_utc DESC,p.id DESC LIMIT $2`,
     [agentId, limit],
   );
+  return recordOf(agentId, rows);
+}
+
+function recordOf(agentId: string, rows: Array<{ outcome: string; odds: string | null; estimated_probability: string | null }>): TrackRecord | null {
   if (!rows.length) return null;
   const won = rows.filter((r) => r.outcome === 'WON').length;
   const priced = rows.filter((r) => r.odds !== null);
@@ -62,5 +67,11 @@ export function trackRecordText(r: TrackRecord | null, minDecided = 5): string |
 }
 
 export async function allTrackRecords(agentIds: string[]) {
-  return Promise.all(agentIds.map(async (id) => ({ id, record: await agentTrackRecord(id, 200) })));
+  const rows = await many<{ agent_id: string; outcome: string; odds: string | null; estimated_probability: string | null }>(
+    `${finalAgentPicksCte()}, ranked AS (
+       SELECT p.*, row_number() OVER (PARTITION BY p.agent_id ORDER BY f.kickoff_utc DESC,p.id DESC) AS n
+       FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id
+       WHERE p.agent_id=ANY($1) AND p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST')
+     ) SELECT agent_id,outcome,odds,estimated_probability FROM ranked WHERE n<=200 ORDER BY agent_id,n`, [agentIds]);
+  return agentIds.map((id) => ({ id, record: recordOf(id, rows.filter((r) => r.agent_id === id)) }));
 }

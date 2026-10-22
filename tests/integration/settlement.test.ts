@@ -60,3 +60,17 @@ it('waits for missing half-time facts instead of guessing from the final score',
   await settlePending();
   expect((await ticketDetail(user, ticket))!.outcomeStatus).toBe('WON');
 });
+
+it('keeps a stale catalog response from reverting a confirmed result and applies a later official score correction', async () => {
+  const { user, ticket, f } = await savedTicket();
+  const observed = new Date().toISOString();
+  await persistFixtures([{ ...f, status: 'post', homeScore: 2, awayScore: 0, fetchedAt: observed }]);
+  await settlePending();
+  expect((await ticketDetail(user, ticket))!.outcomeStatus).toBe('WON');
+  await persistFixtures([{ ...f, status: 'in', homeScore: 1, awayScore: 0, fetchedAt: new Date(Date.now() + 1).toISOString() }]);
+  expect(await one('SELECT status,home_score FROM fixtures WHERE id=$1', [f.id])).toEqual({ status: 'post', home_score: 2 });
+  await persistFixtures([{ ...f, status: 'post', homeScore: 0, awayScore: 1, fetchedAt: new Date(Date.now() + 2).toISOString() }]);
+  await settlePending();
+  expect((await ticketDetail(user, ticket))!.outcomeStatus).toBe('LOST');
+  expect(await one('SELECT outcome FROM agent_predictions WHERE fixture_id=$1', [f.id])).toEqual({ outcome: 'LOST' });
+});
