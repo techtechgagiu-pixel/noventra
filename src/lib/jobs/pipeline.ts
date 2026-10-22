@@ -1,3 +1,4 @@
+import { reportNewsBatch } from '../news-reporter';
 import { createHash } from 'node:crypto';
 import { config } from '../config';
 import { many, one, query, tx } from '../db';
@@ -235,6 +236,15 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
   }
   if (cp.batchStep === 'SCOUT') {
     const snaps = await batchSnapshots(job, ids);
+    const commented = new Set((await many<{ fixture_id: string }>("SELECT fixture_id FROM analysis_events WHERE job_id=$1 AND type='NEWS_COMMENTARY' AND fixture_id=ANY($2)", [job.id, ids])).map((x) => x.fixture_id));
+    const newsInputs = snaps.filter((s) => s.news && !commented.has(s.fixture.id)).map((s) => ({ fixtureId: s.fixture.id, match: `${s.fixture.home} – ${s.fixture.away}`, kickoff: s.fixture.kickoff, headlines: [...s.news!.home, ...s.news!.away] }));
+    if (newsInputs.length) {
+      await recordEvent(job.id, { type: 'AGENT_STARTED', stage: 'SCOUT', agentId: 'corina', payload: { role: 'news', fixtures: newsInputs.length } });
+      const bulletin = await reportNewsBatch(newsInputs, (await activeAssignments()).get('corina'), job.id);
+      if (bulletin.error) await recordEvent(job.id, { type: 'AGENT_FAILED', stage: 'SCOUT', agentId: 'corina', payload: { error: bulletin.error, note: 'Rezumatul AI lipsește; sunt afișate numai sursele disponibile.' } });
+      if (!bulletin.error) await recordEvent(job.id, { type: 'AGENT_COMPLETED', stage: 'SCOUT', agentId: 'corina', payload: { role: 'news', aiReports: bulletin.reports.filter((r) => r.mode === 'ai').length } });
+      for (const report of bulletin.reports) await recordEvent(job.id, { type: 'NEWS_COMMENTARY', stage: 'SCOUT', fixtureId: report.fixtureId, agentId: 'corina', payload: report });
+    }
     const scout = agentById('scout')!;
     const assignment = (await activeAssignments()).get('scout');
     let narrative: { model: string; provider: string; fixtures: Array<{ fixtureId: string; summary: string; keyObservations: string[] }> } | null = null;
@@ -340,7 +350,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       if (!item) { await recordEvent(job.id, { type: 'AGENT_FAILED', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { round, error: 'Agentul nu a răspuns pentru acest meci (abținere).' } }); continue; }
       let pos = toPosition(agent.id, item, round, res.provider, res.model, validKeys.get(s.fixture.id)!);
       if (agent.id === 'hantu' && pos.decision === 'BET_CANDIDATE' && !(('evidence' in item ? item.evidence : []) as string[]).some((x) => /\[H\d+\]/.test(x))) {
-        await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { marketKey: pos.marketKey, marketLabel: s.model.markets.find((m) => m.key === pos.marketKey)?.label ?? null, reason: 'Hanțu lucrează doar din știri, dar nu a citat niciun titlu — votul devine NO BET' } });
+        await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { marketKey: pos.marketKey, marketLabel: s.model.markets.find((m) => m.key === pos.marketKey)?.label ?? null, reason: 'Ștucan lucrează doar din știri, dar nu a citat niciun titlu — votul devine NO BET' } });
         pos = { ...pos, decision: 'NO_BET', marketKey: null, alternatives: [] };
       }
       const market = s.model.markets.find((m) => m.key === pos.marketKey) ?? null;

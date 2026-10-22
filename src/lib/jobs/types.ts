@@ -44,7 +44,7 @@ export type FixtureSnapshot = {
   model: FixtureModel;
   dossier: ScoutDossier;
   dataQuality: { historyHome: number; historyAway: number; shotsAvailable: boolean; standings: boolean; oddsObservedAt: string };
-  /** Real dated headlines for HANȚU (Google News); absent for older snapshots and demo data. */
+  /** Real dated headlines for ȘTUCAN (Google News); absent for older snapshots and demo data. */
   news?: { home: NewsItem[]; away: NewsItem[]; errors: string[] };
 };
 

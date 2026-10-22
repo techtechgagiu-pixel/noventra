@@ -63,10 +63,10 @@ function News({ c }: { c: NewsCard }) {
   const { ref, n } = useReveal(c.headlines.length + (c.take ? 1 : 0));
   const h = AGENT_META.hantu;
   return (
-    <aside ref={ref} className="rounded-[1.4rem] border border-[#84cc16]/40 bg-[linear-gradient(180deg,rgba(132,204,22,.08),rgba(15,26,53,.6))] p-4 md:p-5" aria-label="Știrile lui Hanțu">
+    <aside ref={ref} className="rounded-[1.4rem] border border-[#84cc16]/40 bg-[linear-gradient(180deg,rgba(132,204,22,.08),rgba(15,26,53,.6))] p-4 md:p-5" aria-label="Știrile lui Ștucan">
       <div className="flex items-center gap-3">
         <img src={h.img} alt="" className="h-12 w-12 rounded-full border-2 object-cover" style={{ borderColor: h.accent }} />
-        <div><p className="font-display text-lg font-bold leading-tight" style={{ color: h.accent }}>Hanțu a citit presa</p><p className="text-xs text-muted">{c.match}, {fmtDateTime(c.at)}</p></div>
+        <div><p className="font-display text-lg font-bold leading-tight" style={{ color: h.accent }}>Ștucan a citit presa</p><p className="text-xs text-muted">{c.match}, {fmtDateTime(c.at)}</p></div>
       </div>
       <ul className="mt-4 space-y-2">
         {c.headlines.map((x, i) => (

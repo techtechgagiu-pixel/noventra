@@ -11,7 +11,7 @@ const RE = new RegExp(`(?<![\\p{L}])(${Object.keys(OLD).join('|')})(?![\\p{L}])(
 
 export function cleanAgentText<T>(text: T): T {
   if (typeof text !== 'string' || !text) return text;
-  return text.replace(RE, (m) => OLD[m] ?? m) as T;
+  return text.replace(RE, (m) => OLD[m] ?? m).replace(/Hanțu|Hantu|HANȚU|HANTU/g, 'Ștucan') as T;
 }
 
 /** Deep-cleans the free-text fields of a stored payload (rationale, objection, response, reasons, advice…). */

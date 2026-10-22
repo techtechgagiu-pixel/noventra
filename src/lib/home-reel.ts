@@ -69,7 +69,7 @@ export async function homeThreads(userId: string): Promise<{ threads: Thread[]; 
     const brain = list.find((r) => r.type === 'BRAIN_DECISION' && r.payload.reason);
     const result = list.find((r) => r.type === 'SELECTION_ACCEPTED' || r.type === 'SELECTION_REJECTED' || r.type === 'LEG_REVIEWED');
     const preds = list.filter((r) => r.type === 'PREDICTION_SAVED' && r.payload.rationale);
-    // Hanțu's news card: real headlines plus his own take on the same match.
+    // Ștucan's news card: real headlines plus his own take on the same match.
     const nc = list.find((r) => r.type === 'NEWS_COLLECTED' && (r.payload.headlines?.length ?? 0) >= 2);
     if (nc) {
       const h = preds.find((p) => p.agent_id === 'hantu');

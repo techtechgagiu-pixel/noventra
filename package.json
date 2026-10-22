@@ -24,7 +24,7 @@
     "zod": "4.1.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.55.0",
+    "@playwright/test": "1.55.1",
     "@tailwindcss/postcss": "4.1.13",
     "@types/node": "22.18.0",
     "@types/pg": "8.15.5",
@@ -33,7 +33,7 @@
     "tailwindcss": "4.1.13",
     "tsx": "^4.20.5",
     "typescript": "5.9.2",
-    "vitest": "3.2.4"
+    "vitest": "3.2.7"
   },
   "type": "module"
 }

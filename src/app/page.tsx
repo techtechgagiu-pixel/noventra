@@ -25,6 +25,8 @@ import { HomeStage } from '@/components/home/home-stage';
 import { homeReel, homeStats, homeThreads } from '@/lib/home-reel';
 import { HomeThreads } from '@/components/home/home-threads';
 import { StatsView } from '@/components/stats-view';
+import { AutomationPanel } from '@/components/automation-panel';
+import { automationHealth } from '@/lib/automation';
 import { agentStats, currentMonth } from '@/lib/agent-stats';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
@@ -37,7 +39,7 @@ const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
 /** PRIMUL 11 — the whole app on one page, organised in three tabs. */
-export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string; luna?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string; scope?: string; luna?: string }> }) {
   const user = await currentUser();
   const sp = await searchParams;
   if (!user) {
@@ -91,7 +93,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'azi' && <AziTab userId={user.id} ticket={sp.ticket} />}
-        {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} />}
+        {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} />}
       </main>
       <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-8 text-xs text-muted"><p>Rezultatele se actualizează automat după confirmarea scorului final.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
@@ -301,10 +303,11 @@ async function AziTab({ userId, ticket }: { userId: string; ticket?: string }) {
   return <TicketArchive tickets={JSON.parse(JSON.stringify(tickets))} initialFilter="today" title="Bilete create azi" />;
 }
 
-async function StatisticiTab({ userId, admin, month }: { userId: string; admin: boolean; month?: string }) {
+async function StatisticiTab({ userId, admin, month, scope }: { userId: string; admin: boolean; month?: string; scope?: string }) {
   const m = month === 'all' || /^\d{4}-\d{2}$/.test(month ?? '') ? month! : currentMonth();
-  const { agents, totals } = await agentStats(userId, admin, m);
-  return <StatsView agents={plain(agents)} totals={totals} month={m} />;
+  const selected = scope === 'mine' ? 'mine' : 'all';
+  const { agents, totals } = await agentStats(userId, admin, m, selected);
+  return <div className="space-y-6">{admin && <AutomationPanel initial={plain(await automationHealth())} />}<StatsView agents={plain(agents)} totals={totals} month={m} scope={selected} /></div>;
 }
 
 async function IstoricTab({ userId, ticket }: { userId: string; ticket?: string }) {

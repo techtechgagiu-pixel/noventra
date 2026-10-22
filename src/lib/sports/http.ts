@@ -1,7 +1,7 @@
 import { config } from '../config';
 import { providerUsageToday, recordProviderUsage } from '../usage';
 
-type CacheEntry = { expires: number; value: unknown };
+type CacheEntry = { at: number; expires: number; value: unknown };
 const globalCache = globalThis as unknown as { __betmindHttpCache?: Map<string, CacheEntry>; __betmindInflight?: Map<string, Promise<unknown>> };
 const cache = (globalCache.__betmindHttpCache ??= new Map());
 const inflight = (globalCache.__betmindInflight ??= new Map());
@@ -34,7 +34,7 @@ async function acquire(provider: string) {
 export async function sportsGet<T = unknown>(url: string, opts: { provider: string; ttlMs: number; as?: 'json' | 'text'; timeoutMs?: number }): Promise<T> {
   const key = `${opts.as ?? 'json'}:${url}`;
   const hit = cache.get(key);
-  if (hit && hit.expires > Date.now()) return hit.value as T;
+  if (hit && hit.expires > Date.now() && Date.now() - hit.at < opts.ttlMs) return hit.value as T;
   const running = inflight.get(key);
   if (running) return running as Promise<T>;
   const work = (async () => {
@@ -58,7 +58,7 @@ export async function sportsGet<T = unknown>(url: string, opts: { provider: stri
     if (!response.ok) throw new Error(`${opts.provider} a răspuns ${response.status}`);
     const value = opts.as === 'text' ? await response.text() : await response.json();
     if (cache.size > 2000) cache.clear();
-    cache.set(key, { expires: Date.now() + opts.ttlMs, value });
+    cache.set(key, { at: Date.now(), expires: Date.now() + opts.ttlMs, value });
     return value;
   })().finally(() => inflight.delete(key));
   inflight.set(key, work);

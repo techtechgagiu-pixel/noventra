@@ -198,7 +198,7 @@ export async function structuredCall<T>(opts: {
           input = { ...input, user: `${input.user}\n\nRăspunsul anterior nu a respectat schema (${(error as Error).message.slice(0, 300)}). Răspunde DOAR cu un obiect JSON valid conform schemei.` };
           continue;
         }
-        throw error;
+        throw schemaFailure && !(error instanceof SchemaError) ? new SchemaError((error as Error).message, raw?.text ?? '') : error;
       }
     }
     throw new SchemaError('Răspuns invalid după reparare.', '');
