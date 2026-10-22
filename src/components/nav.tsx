@@ -1,13 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, KeyRound, Network, Shield, Ticket } from 'lucide-react';
+import { BarChart3, KeyRound, Network, Shield } from 'lucide-react';
 
 // Used only around the admin pages; the app itself is the single page at "/".
 const items = [
-  { href: '/?tab=bilete', label: 'Bilete', icon: Ticket },
+  { href: '/?tab=istoric', label: 'Bilete create', icon: BarChart3 },
   { href: '/?tab=analiza', label: 'Analiză', icon: Network },
-  { href: '/?tab=istoric', label: 'Istoric', icon: BarChart3 },
 ];
 
 export function Nav({ admin, name }: { admin: boolean; name: string }) {

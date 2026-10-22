@@ -1,38 +1,37 @@
 import { expect, test } from '@playwright/test';
 
 // Scenario A + E with DEMO fixtures and a deterministic fake AI transport (labelled DEMO).
-test('daily COTĂ 5 ticket: create → live NEXUS → auto-open result → locked → replay with zero AI', async ({ page }) => {
+test('saved tickets are the default view; old daily links and ticket replay still work', async ({ page }) => {
   await page.goto('/auth/test-login?email=e2e@test.local');
-  await page.goto('/?tab=bilete');
-  await expect(page.getByText('COTĂ 5 — BILETUL A')).toBeVisible();
-  await expect(page.getByRole('button', { name: /CREEAZĂ BILETUL/ })).toHaveCount(5);
-  // No AI on dashboard load.
+  await page.goto('/');
+  const nav = page.getByRole('navigation', { name: 'Secțiuni' });
+  await expect(nav.getByRole('link', { name: 'Bilete', exact: true })).toHaveCount(0);
+  await expect(nav.getByRole('link', { name: 'Bilete create', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('heading', { name: 'Bilete create', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Toate', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: /CREEAZĂ BILETUL/ })).toHaveCount(0);
   const s0 = await (await page.request.get('/api/test/stats')).json();
-  await page.reload();
+  await page.goto('/?tab=bilete');
+  await expect(page.getByRole('heading', { name: 'Bilete create', exact: true })).toBeVisible();
   expect((await (await page.request.get('/api/test/stats')).json()).aiCalls).toBe(s0.aiCalls);
 
-  await page.getByRole('button', { name: /CREEAZĂ BILETUL/ }).first().click();
-  await expect(page).toHaveURL(/tab=analiza&job=/);
-  // The final ticket opens automatically.
-  await page.waitForURL(/tab=bilete&ticket=[0-9a-f-]{36}&fresh=1/, { timeout: 90_000 });
-  await expect(page.getByText('COPIAZĂ BILETUL')).toBeVisible();
-  const ticketId = new URL(page.url()).searchParams.get('ticket')!;
-  await page.reload();
-  await expect(page.getByText('COTĂ 5 — BILETUL A').first()).toBeVisible();
-
-  // Home: replays the finished analysis on the map and routes to the four sections.
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Analizează. Dezbate. Decide.' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Ce vrei să faci' }).getByRole('link')).toHaveCount(4);
-  await expect(page.getByRole('img', { name: /Harta live a agenților/ })).toBeVisible();
-  if (process.env.SHOTS) { await page.waitForTimeout(6000); await page.screenshot({ path: `${process.env.SHOTS}/home.png`, fullPage: true }); await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(4000); await page.screenshot({ path: `${process.env.SHOTS}/home-mobile.png`, fullPage: true }); await page.setViewportSize({ width: 1280, height: 720 }); }
-
-  // Locked for today.
-  await page.goto('/?tab=bilete');
-  await expect(page.getByRole('button', { name: 'VEZI BILETUL' })).toHaveCount(1);
+  // Seed a saved result through the existing deterministic test transport.
   const gen = await page.request.post('/api/ticket-slots/FIVE_A/generate', { headers: { origin: 'http://localhost:3200' } });
-  expect((await gen.json()).created).toBe(false);
+  const generated = await gen.json();
+  await page.goto(`/?tab=analiza&job=${generated.jobId}`);
+  await page.waitForURL(/tab=istoric&ticket=[0-9a-f-]{36}&fresh=1/, { timeout: 90_000 });
+  const ticketId = new URL(page.url()).searchParams.get('ticket')!;
+  await expect(page.getByText('COPIAZĂ BILETUL')).toBeVisible();
+  await page.goto(`/?tab=bilete&ticket=${ticketId}`);
+  await expect(page.getByText('COTĂ 5 — BILETUL A').first()).toBeVisible();
+  await page.getByRole('link', { name: '← Înapoi', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Bilete create', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Toate', exact: true })).toHaveAttribute('aria-pressed', 'true');
 
+  // The optional overview remains available without the retired daily-slot tile.
+  await page.goto('/?tab=acasa');
+  await expect(page.getByRole('navigation', { name: 'Ce vrei să faci' }).getByRole('link')).toHaveCount(3);
+  await expect(page.getByRole('img', { name: /Harta live a agenților/ })).toBeVisible();
   // Replay: no AI calls, no new jobs, no generate requests.
   const before = await (await page.request.get('/api/test/stats')).json();
   const generateCalls: string[] = [];
@@ -98,7 +97,7 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   await expect(page.getByRole('log')).toContainText(/propune|NO BET/, { timeout: 30_000 });
   if (process.env.SHOTS) { await page.waitForTimeout(3000); await page.screenshot({ path: `${process.env.SHOTS}/custom-done.png`, fullPage: true }); await page.setViewportSize({ width: 390, height: 844 }); await page.getByRole('button', { name: /Redă dezbaterea/ }).click(); await page.waitForTimeout(2500); await page.screenshot({ path: `${process.env.SHOTS}/custom-mobile.png`, fullPage: true }); }
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/');
+  await page.goto('/?tab=acasa');
   await expect(page.getByRole('region', { name: 'Coada analizelor' })).toContainText('CUSTOM — COTĂ 3');
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/queue.png` });
   expect(errors.filter((e) => !/favicon|404/.test(e))).toEqual([]);
