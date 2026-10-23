@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Activity, BarChart3, CalendarDays, ClipboardCheck, History, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
+import { Activity, BarChart3, CalendarDays, ClipboardCheck, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
 import { MatchesView } from '@/components/matches/matches-view';
 import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
@@ -19,9 +19,8 @@ import { activeAssignments } from '@/lib/ai/assignments';
 import { allTrackRecords } from '@/lib/track-record';
 import { customJobs, jobQueue, reviewJobs } from '@/lib/jobs/service';
 import { ReviewBuilder } from '@/components/review/review-builder';
-import { HomeStage } from '@/components/home/home-stage';
-import { homeReel, homeStats, homeThreads } from '@/lib/home-reel';
-import { HomeThreads } from '@/components/home/home-threads';
+import { homeThreads } from '@/lib/home-reel';
+import { HomeIntro, HowItWorks } from '@/components/home/home-intro';
 import { StatsView } from '@/components/stats-view';
 import { AutomationPanel } from '@/components/automation-panel';
 import { automationHealth } from '@/lib/automation';
@@ -36,7 +35,7 @@ type Tab = 'acasa' | 'custom' | 'verifica' | 'analiza' | 'azi' | 'istoric' | 'st
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
-/** PRIMUL 11 — the whole app on one page, organised in three tabs. */
+/** PRIMUL 11 — public introduction and authenticated application sections. */
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string; scope?: string; luna?: string }> }) {
   const user = await currentUser();
   const sp = await searchParams;
@@ -45,11 +44,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     return <PublicHome google={googleConfigured()} />;
   }
   // Old daily-ticket URLs remain readable through the shared archive.
-  const tab: Tab = sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'statistici' || sp.tab === 'azi' || sp.tab === 'meciuri' ? sp.tab : 'istoric';
+  const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'statistici' || sp.tab === 'azi' || sp.tab === 'meciuri' ? sp.tab : 'istoric';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof Ticket; badge?: boolean }> = [
+    { id: 'acasa', label: 'Acasă', icon: House },
     { id: 'istoric', label: 'Bilete create', icon: History },
     { id: 'custom', label: 'Custom', icon: SlidersHorizontal, badge: running.some((j) => j.slot.startsWith('CUSTOM_')) },
     { id: 'verifica', label: 'Biletul tău', icon: ClipboardCheck, badge: running.some((j) => j.slot.startsWith('REVIEW_')) },
@@ -99,32 +99,20 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
 }
 
 async function AcasaTab({ userId }: { userId: string }) {
-  const [reel, stats, queue, frag] = await Promise.all([homeReel(userId), homeStats(userId), jobQueue(userId), homeThreads(userId)]);
-  const decided = stats.legsWon + stats.legsLost;
-  const tiles: Array<{ href: string; title: string; text: string; foot: string; accent: string; icon: typeof Ticket; wide?: boolean }> = [
-    { href: '/?tab=custom', title: 'Creează bilet', text: 'Alegi cota, câte meciuri și cine intră în teren, apoi urmărești dezbaterea pe hartă.', foot: `Până la ${CUSTOM_LIMIT_PER_DAY} bilete custom pe zi`, accent: '#34d399', icon: SlidersHorizontal, wide: true },
-    { href: '/?tab=verifica', title: 'Vino cu biletul tău la analiză', text: 'Îți faci biletul din cote reale; echipa îți spune ce e solid, ce e slab și ce să schimbi.', foot: 'Verdict pe fiecare meci', accent: '#e8c26a', icon: ClipboardCheck },
-    { href: '/?tab=istoric', title: 'Bilete create', text: 'Toate biletele, cu meciurile ieșite verzi sau roșii și cum a fost luată fiecare decizie.', foot: stats.tickets ? `${stats.tickets} ${stats.tickets === 1 ? 'bilet' : 'bilete'}${decided ? `, ${stats.legsWon} din ${decided} meciuri verzi` : ''}` : 'Încă niciun bilet', accent: '#a78bfa', icon: History },
-  ];
-  return (
-    <div className="space-y-10">
-      {reel && reel.events.length > 10 ? <HomeStage events={plain(reel.events)} title={reel.title} finishedAt={reel.finishedAt} target={Number(reel.events.find((e) => e.type === 'TARGET_SELECTED')?.payload.target ?? 0)} />
-        : <div className="py-10"><h1 className="font-display text-5xl font-bold leading-none tracking-tight">Analizează.<br />Dezbate.<br />Decide.</h1><p className="mt-4 max-w-md text-muted">Prima analiză apare aici ca reluare imediat ce se încheie.</p></div>}
-      <nav aria-label="Ce vrei să faci" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {tiles.map(({ href, title, text, foot, accent, icon: Icon }) => (
-          <Link key={href} href={href} className="group relative flex min-h-[188px] flex-col overflow-hidden rounded-[1.4rem] border border-line bg-panel/70 p-5 transition-colors hover:border-[color:var(--a)] focus-visible:border-[color:var(--a)]" style={{ ['--a' as string]: accent }}>
-            <span className="absolute inset-x-0 top-0 h-1 origin-left scale-x-[.18] transition-transform duration-300 group-hover:scale-x-100" style={{ background: accent }} aria-hidden />
-            <Icon size={22} style={{ color: accent }} aria-hidden />
-            <h2 className="mt-4 font-display text-[1.45rem] font-bold leading-tight tracking-tight">{title}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted">{text}</p>
-            <p className="mt-auto pt-4 text-xs font-semibold" style={{ color: accent }}>{foot}</p>
-          </Link>
-        ))}
-      </nav>
-      <HomeThreads threads={plain(frag.threads)} news={frag.news ? plain(frag.news) : null} />
-      {queue.length > 0 && <JobQueue initial={plain(queue)} />}
-    </div>
-  );
+  const [frag, queue, assignments] = await Promise.all([
+    homeThreads(userId, 'community'), jobQueue(userId), activeAssignments(),
+  ]);
+  const models = Object.fromEntries([...assignments].map(([id, a]) => [id, a.primary.model]));
+  return <div className="home-page">
+    <HomeIntro signedIn thread={frag.threads[0] ? plain(frag.threads[0]) : undefined} models={models} />
+    {queue.length > 0 && <div className="mt-8"><JobQueue initial={plain(queue)} /></div>}
+    <HowItWorks />
+    <nav aria-label="Ce vrei să faci" className="home-shortcuts">
+      <Link href="/?tab=custom"><SlidersHorizontal size={22} aria-hidden /><div><h2>Creează bilet custom</h2><p>Alegi cota și meciurile. Urmărești cum decide echipa.</p></div></Link>
+      <Link href="/?tab=verifica"><ClipboardCheck size={22} aria-hidden /><div><h2>Analizează biletul tău</h2><p>Adu propriile selecții și cere verdictul agenților.</p></div></Link>
+      <Link href="/?tab=statistici"><BarChart3 size={22} aria-hidden /><div><h2>Cunoaște agenții</h2><p>Modele, stiluri, verzi și roșii. Rezultatele rămân la vedere.</p></div></Link>
+    </nav>
+  </div>;
 }
 
 async function TicketPanel({ userId, id, fresh, back }: { userId: string; id: string; fresh: boolean; back: string }) {
@@ -208,7 +196,7 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-bold">Bilet custom</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Tu alegi cota, numărul de meciuri și cine intră în teren. Agenții aleși analizează și dezbat live pe hartă, iar jurnalul de sub hartă arată tot ce și-au spus. Maximum {CUSTOM_LIMIT_PER_DAY} bilete custom pe zi.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Alege cota și numărul de meciuri, apoi pornește dezbaterea. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {CUSTOM_LIMIT_PER_DAY} bilete custom pe zi.</p>
       </div>
       <CustomForm agents={cards} />
       {recent.length > 0 && (

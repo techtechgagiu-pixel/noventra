@@ -45,7 +45,19 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
   const [chosen, setChosen] = useState<string[]>(['victor', 'andrei', 'alex', 'robert', 'ioana']);
   const [leagues, setLeagues] = useState<string[]>([]);
   const [catalog, setCatalog] = useState<{ rows: MatchRow[]; leagues: LeagueOption[] } | null>(null);
-  useEffect(() => { api<{ rows: MatchRow[]; leagues: LeagueOption[] }>('/api/matches').then(setCatalog).catch(() => setCatalog(null)); }, []);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
+  // The full fixture catalogue is only needed when the user opens league/interval options.
+  useEffect(() => {
+    if (!optionsOpen || catalog) return;
+    const controller = new AbortController();
+    setCatalogError(false);
+    api<{ rows: MatchRow[]; leagues: LeagueOption[] }>('/api/matches', { signal: controller.signal })
+      .then((data) => { if (!controller.signal.aborted) setCatalog(data); })
+      .catch(() => { if (!controller.signal.aborted) setCatalogError(true); });
+    return () => controller.abort();
+  }, [optionsOpen, catalog, catalogAttempt]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,15 +85,15 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="custom-basics">
         <div className="card p-4">
-          <label htmlFor="target" className="text-xs font-semibold uppercase tracking-wider text-muted">Cota dorită</label>
+          <label htmlFor="target" className="text-xs font-semibold text-muted">Cota dorită</label>
           <input id="target" type="number" inputMode="decimal" min={1.2} max={1000} step={0.1} value={target} onChange={(e) => setTarget(Number(e.target.value) || 0)}
             className="mt-2 w-full rounded-xl border border-line bg-ink px-3 py-2.5 font-display text-2xl font-bold tabular text-text outline-none focus:border-cyan" />
           <div className="mt-2 flex flex-wrap gap-1.5">{TARGETS.map((t) => <button key={t} onClick={() => setTarget(t)} className={`chip ${target === t ? 'text-cyan' : 'text-muted'}`}>{t}</button>)}</div>
         </div>
         <div className="card p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Din câte meciuri</p>
+          <p className="text-xs font-semibold text-muted">Din câte meciuri</p>
           <div className="mt-2 flex items-center gap-2">
             <button aria-label="Mai puține meciuri" onClick={() => setLegs((l) => Math.max(1, l - 1))} className="btn btn-ghost h-11 w-11"><Minus size={16} /></button>
             <output className="flex-1 text-center font-display text-3xl font-bold tabular" aria-live="polite">{legs}</output>
@@ -90,9 +102,25 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
           <p className="mt-2 text-xs text-muted">Biletul va avea exact {legs} {legs === 1 ? 'meci' : 'meciuri'}.</p>
         </div>
         <div className="card p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Cotă necesară pe meci</p>
+          <p className="text-xs font-semibold text-muted">Media de cotă pe meci</p>
           <p className={`mt-2 font-display text-3xl font-bold tabular ${tooLow || tooHigh ? 'text-rose' : risk.c}`}>≈ {Number.isFinite(perLeg) ? perLeg.toFixed(2) : '—'}</p>
-          <p className="mt-1 text-xs text-muted">{tooLow ? 'Prea mică — pune mai puține meciuri.' : tooHigh ? 'Prea mare — pune mai multe meciuri.' : <>Profil <strong className={risk.c}>{risk.t}</strong> · cote acceptate {policy.minOdds.toFixed(2)}–{policy.maxOdds.toFixed(2)}, prob. ≥ {Math.round(policy.minProbability * 100)}%</>}</p>
+          <p className="mt-1 text-xs text-muted">{tooLow ? 'Prea mică — pune mai puține meciuri.' : tooHigh ? 'Prea mare — pune mai multe meciuri.' : <>Pentru cota {target} din {legs} {legs === 1 ? 'meci' : 'meciuri'}. Cotele selecțiilor pot diferi.</>}</p>
+
+        </div>
+      </div>
+
+      <div className="custom-submit">
+        <p className="text-sm text-muted md:flex-1">
+          Cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> voturi pentru o selecție. Mircea Lucescu dă verdictul final.
+        </p>
+        {!chosen.length && <p className="text-sm text-gold">Alege cel puțin un agent din „Echipa de agenți”.</p>}
+        {error && <p className="text-sm text-rose" role="alert">{error}</p>}
+        <button onClick={create} disabled={busy || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && leagues.length > 0 && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : 'Pornește dezbaterea'}</button>
+      </div>
+      <p className="text-xs leading-relaxed text-muted">După pornire vezi agenții pe hartă și argumentele în chat. Cota este o țintă; echipa poate refuza meciuri și poate încheia fără un bilet complet.</p>
+      <details className="custom-options" onToggle={(e) => setOptionsOpen(e.currentTarget.open)}>
+        <summary><span>Interval și ligi</span><span>Peste {dur(fromHours)}–{dur(toHours)} · {leagues.length ? `${leagues.length} ligi` : 'toate ligile'}</span></summary>
+        <div className="custom-options-body">
           <fieldset className="mt-3 space-y-2" aria-label="Intervalul meciurilor">
             <legend className="text-xs text-muted">Meciuri care încep între <strong className="text-text">peste {dur(fromHours)}</strong> și <strong className="text-text">peste {dur(toHours)}</strong></legend>
             <label className="block text-[11px] text-muted">De la
@@ -103,25 +131,26 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
             </label>
             <p className="text-[11px] text-muted tabular" suppressHydrationWarning>{span(fromHours, toHours)}</p>
           </fieldset>
-        </div>
-      </div>
-
-      <section className="card p-4">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-display text-lg font-bold">Din ce ligi</h3>
           <p className="text-xs text-muted">Bifează ligile din care să-ți facă biletul. Nimic bifat = toate ligile.</p>
         </div>
         <div className="mt-3">
           {catalog ? <LeaguePicker leagues={leagueOptions} value={leagues} onChange={setLeagues} allLabel="Toate ligile" />
+            : catalogError ? <p role="status" className="text-sm text-gold">Ligile nu s-au încărcat. Setarea rămâne „Toate ligile”. <button type="button" className="underline" onClick={() => setCatalogAttempt((n) => n + 1)}>Reîncearcă</button></p>
             : <p className="rounded-xl border border-line bg-ink px-3 py-2.5 text-sm text-muted">Încarc ligile disponibile…</p>}
         </div>
         {catalog && <p className={`mt-2 text-xs ${available < legs * 2 ? 'text-gold' : 'text-muted'}`}>
           {available} {available === 1 ? 'meci cu cote' : 'meciuri cu cote'} în intervalul ales{leagues.length ? ` din ${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : ''}.
           {available < legs * 2 && ' Puține pentru un bilet de ' + legs + ' meciuri: echipa poate refuza multe — adaugă ligi sau lărgește intervalul.'}
         </p>}
-      </section>
+        </div>
+      </details>
 
-      <section>
+      <details className="custom-options">
+        <summary><span>Echipa de agenți</span><span className="custom-team-peek" aria-hidden="true">{chosen.slice(0, 5).map((id) => <img key={id} src={AGENT_META[id]?.img} alt="" width={24} height={24} />)}</span><span>{chosen.length} {chosen.length === 1 ? 'agent ales' : 'agenți aleși'} · schimbă echipa</span></summary>
+        <div className="custom-options-body">
+          <div className="mb-4 flex flex-wrap gap-3" aria-label="Echipa selectată">{agents.filter((a) => chosen.includes(a.id)).map((a) => <div key={a.id} className="flex items-center gap-2 rounded-lg border border-line px-2 py-1.5"><img src={AGENT_META[a.id]?.img} alt="" className="h-8 w-8 rounded-full object-cover" /><div><p className="text-xs font-semibold">{a.name}</p><p className="text-[10px] text-muted">{a.model ?? 'Model AI'}</p></div></div>)}</div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h3 className="font-display text-lg font-bold">Alege agenții din teren</h3>
           <span className="text-sm text-muted">{chosen.length} {chosen.length === 1 ? 'ales' : 'aleși'}</span>
@@ -156,6 +185,7 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
                     <span className="text-[10px] tabular text-muted">risc {a.risk}</span>
                   </div>
                   <p className="mt-1 text-[11px] tabular text-muted">max {a.maxOdds.toFixed(2)} · prob ≥ {Math.round(a.minProbability * 100)}%{a.record ? ` · ${a.record}` : ''}</p>
+                  {a.model && <p className="mt-1 truncate text-[10px] text-cyan" title={a.model}>{a.model}</p>}
                   {on && !fits(a) && !tooHigh && <p className="mt-1 text-[11px] text-gold">Cota pe meci e peste caracterul lui — va refuza des.</p>}
                 </div>
                 <span className={`absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border ${on ? 'border-transparent bg-cyan text-ink' : 'border-line'}`}>{on && <Check size={12} strokeWidth={3} />}</span>
@@ -163,15 +193,8 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
             );
           })}
         </div>
-      </section>
-
-      <div className="card sticky bottom-3 z-10 flex flex-col gap-3 p-4 shadow-2xl backdrop-blur md:flex-row md:items-center" style={{ background: 'rgba(10,18,40,0.97)' }}>
-        <p className="text-sm text-muted md:flex-1">
-          Cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · intră pe bilet o selecție susținută de minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> dintre ei. Fără „sub”. Creierul (M. Lucescu) alege pronosticul final.
-        </p>
-        {error && <p className="text-sm text-rose" role="alert">{error}</p>}
-        <button onClick={create} disabled={busy || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && leagues.length > 0 && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : 'CREEAZĂ BILETUL CUSTOM'}</button>
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

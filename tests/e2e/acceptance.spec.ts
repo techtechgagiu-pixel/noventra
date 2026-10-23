@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test';
 
 // Scenario A + E with DEMO fixtures and a deterministic fake AI transport (labelled DEMO).
-test('saved tickets are the default view; old daily links and ticket replay still work', async ({ page }) => {
+test('home explains the product; saved tickets, old daily links and replay still work', async ({ page }) => {
   await page.goto('/auth/test-login?email=e2e@test.local');
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Secțiuni' });
   await expect(nav.getByRole('link', { name: 'Bilete', exact: true })).toHaveCount(0);
-  await expect(nav.getByRole('link', { name: 'Bilete create', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link', { name: 'Acasă', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('heading', { name: 'Biletul tău începe cu o dezbatere.' })).toBeVisible();
+  await nav.getByRole('link', { name: 'Bilete create', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Bilete create', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Toate', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: /CREEAZĂ BILETUL/ })).toHaveCount(0);
@@ -31,7 +33,7 @@ test('saved tickets are the default view; old daily links and ticket replay stil
   // The optional overview remains available without the retired daily-slot tile.
   await page.goto('/?tab=acasa');
   await expect(page.getByRole('navigation', { name: 'Ce vrei să faci' }).getByRole('link')).toHaveCount(3);
-  await expect(page.getByRole('img', { name: /Harta live a agenților/ })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Etapele dezbaterii' })).toBeVisible();
   // Replay: no AI calls, no new jobs, no generate requests.
   const before = await (await page.request.get('/api/test/stats')).json();
   const generateCalls: string[] = [];
@@ -81,7 +83,9 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   await page.getByLabel('Cota dorită').fill('3');
   await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
   await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
+  await page.locator('summary').filter({ hasText: 'Echipa de agenți' }).click();
   await page.getByRole('button', { name: 'Toți', exact: true }).click();
+  await page.locator('summary').filter({ hasText: 'Interval și ligi' }).click();
   await page.getByRole('button', { name: /Ligi.*Toate ligile/ }).click();
   await page.getByRole('option', { name: /Premier League/ }).first().click();
   await page.getByRole('option', { name: /La Liga/ }).first().click();
@@ -89,7 +93,7 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: /Ligi.*2 ligi/ })).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/custom-form.png`, fullPage: true });
-  await page.getByRole('button', { name: /CREEAZĂ BILETUL CUSTOM/ }).click();
+  await page.getByRole('button', { name: /Pornește dezbaterea/ }).click();
   await expect(page).toHaveURL(/tab=custom&job=[0-9a-f-]{36}/);
   await expect(page.getByRole('img', { name: /Harta live a agenților/ })).toBeVisible();
   if (process.env.SHOTS) for (const [i, ms] of [1500, 4000, 8000].entries()) { await page.waitForTimeout(ms - (i ? [1500, 4000][i - 1] : 0)); await page.screenshot({ path: `${process.env.SHOTS}/custom-${i}.png`, fullPage: false }); }

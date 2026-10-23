@@ -15,7 +15,7 @@ test('invite access: anonymous gate, permanent administrator, visitor isolation 
   expect(box.x + box.width).toBeLessThanOrEqual(390);
   expect(box.y).toBeLessThan(100);
   await page.getByRole('link', { name: 'Am un cod de acces', exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login\?next=custom$/);
   await expect(page.getByRole('link', { name: 'Continuă cu Google' })).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/login.png` });
   await page.getByText('Am un cod de acces').click();
