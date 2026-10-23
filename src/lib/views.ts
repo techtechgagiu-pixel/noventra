@@ -2,6 +2,7 @@ import { cleanPayload } from './agent-names';
 import { many, one } from './db';
 import { eventsAfter } from './jobs/events';
 import { slotInfo } from './slots';
+import { incompleteTicketPicks, type IncompletePick } from './incomplete-ticket-picks';
 import { finalAgentPicksCte } from './final-agent-picks';
 
 /** Who made a ticket, as everyone may see it: Google name with a masked e-mail, an invitation label, or the administrator. */
@@ -55,7 +56,8 @@ export async function listTickets(userId: string) {
             , ${CREATOR_COLS}
      FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id JOIN users u ON u.id=t.user_id ORDER BY t.created_at DESC`,
   );
-  return rows.map(({ creator_id, creator_name, creator_email, creator_picture, creator_sub, ...r }) => ({ ...r, creator: creatorOf({ creator_id, creator_name, creator_email, creator_picture, creator_sub }, userId) }));
+  const partial = await incompleteTicketPicks(rows.filter((t) => t.generation_status === 'INCOMPLETE').map((t) => String(t.id)));
+  return rows.map(({ creator_id, creator_name, creator_email, creator_picture, creator_sub, ...r }) => ({ ...r, partialSelections: partial.get(String(r.id)) ?? [], creator: creatorOf({ creator_id, creator_name, creator_email, creator_picture, creator_sub }, userId) }));
 }
 
 export async function ticketDetail(userId: string, ticketId: string) {
@@ -72,6 +74,7 @@ export async function ticketDetail(userId: string, ticketId: string) {
      FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE s.ticket_id=$1 ORDER BY s.position`,
     [ticketId],
   );
+  const partial = t.generation_status === 'INCOMPLETE' ? await incompleteTicketPicks([ticketId]) : new Map<string, IncompletePick[]>();
   const decisions = await many<Record<string, unknown>>('SELECT fixture_id, outcome, market_key, votes_for, votes, validation, reason FROM final_decisions WHERE job_id=$1 ORDER BY id', [t.job_id]);
   const predictions = await many<Record<string, unknown>>(`${finalAgentPicksCte()} SELECT p.id,p.fixture_id,p.agent_id,p.round,p.provider,p.model_id,p.prompt_version,p.decision,p.market_key,p.estimated_probability::float AS estimated_probability,p.confidence,p.risk,p.payload,p.outcome,p.odds::float AS odds,p.created_at,p.settled_at,(fp.id=p.id) AS current_in_stats FROM agent_predictions p LEFT JOIN final_picks fp ON fp.fixture_id=p.fixture_id AND fp.agent_id=p.agent_id WHERE p.job_id=$1 ORDER BY p.fixture_id,p.agent_id,p.round`, [t.job_id]);
   const dossiers = await many<Record<string, unknown>>('SELECT fixture_id, mode, dossier, narrative, model, created_at FROM scout_dossiers WHERE job_id=$1', [t.job_id]);
@@ -82,7 +85,7 @@ export async function ticketDetail(userId: string, ticketId: string) {
     id: t.id as string, jobId: t.job_id as string, slot: slot.id, title: slot.title, subtitle: slot.subtitle, target: t.target as number, actualOdds: t.actual as number | null,
     legCount: t.leg_count as number, generationStatus: t.generation_status as string, outcomeStatus: t.outcome_status as string, mixedBookmakers: t.mixed_bookmakers as boolean,
     createdAt: new Date(t.created_at as string).toISOString(), periodKey: t.period as string, summary: cleanPayload(t.summary) as Record<string, unknown>, eligibleCount: t.eligible_count as number | null,
-    selections, decisions: cleanPayload(decisions), predictions: cleanPayload(predictions), dossiers,
+    selections, partialSelections: partial.get(ticketId) ?? [], decisions: cleanPayload(decisions), predictions: cleanPayload(predictions), dossiers,
     fixtures: snapshots.map((s) => ({ fixtureId: s.fixture_id, fixture: s.payload.fixture, model: s.payload.model, odds: s.payload.odds, dataQuality: s.payload.dataQuality })),
   };
 }

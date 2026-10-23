@@ -4,7 +4,7 @@ export function TicketPerformance({ tickets }: { tickets: PerformanceTicket[] })
   const decided = t.won + t.lost + t.partial_void;
   const stat = (label: string, value: string | number) => <div className="card p-4"><p className="text-xs text-muted">{label}</p><p className="font-display text-3xl font-bold tabular">{value}</p></div>;
   return <section aria-label="Performanța biletelor afișate" className="space-y-4">
-    <div><h2 className="font-display text-2xl font-bold">Performanța biletelor afișate</h2><p className="text-sm text-muted">Aceleași bilete și filtre ca în lista de mai sus. Rezultatele verzi/roșii ale agenților sunt propriile lor pronosticuri, nu rezultatul întregului bilet.</p></div>
+    <div><h2 className="font-display text-2xl font-bold">Performanța biletelor afișate</h2><p className="text-sm text-muted">Aceleași bilete și filtre ca în lista de mai sus. Rezultatele verzi/roșii ale agenților sunt propriile lor pronosticuri, nu rezultatul întregului bilet. Selecțiile acceptate din biletele incomplete sunt afișate separat pentru urmărire și nu intră în calculele de mai jos.</p></div>
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {stat('Bilete afișate',t.total)}{stat('Complete / incomplete / NO BET',`${t.completed} / ${t.incomplete} / ${t.no_bet}`)}
       {stat('Câștigate / pierdute',`${t.won + t.partial_void} / ${t.lost}`)}{stat('În așteptare / anulate',`${t.pending} / ${t.void}`)}{stat('Unități ipotetice (miză 1)',decided ? (t.units >= 0 ? '+' : '') + t.units.toFixed(2) : '—')}
