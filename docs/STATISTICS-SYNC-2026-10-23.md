@@ -43,3 +43,7 @@ Verificarea după deploy trebuie să compare API-urile de statistici/agenți, is
 Render Free rulează verificările în proces: la pornire/trezire și la cinci minute cât procesul este activ. Nu există garanție de execuție continuă cât serviciul doarme. Analizele PAUSED nu sunt reluate de această verificare și nu primesc buget nou automat.
 
 Un meci fără confirmare de la sursă rămâne în așteptare; nu se inventează scoruri. Faptele suplimentare lipsă pentru anumite piețe păstrează regulile existente de anulare. Lipsa unui pronostic valid sau un apel AI eșuat nu este transformată în NO_BET sau într-un rezultat câștigător.
+
+## Corecție observată la verificarea live a catalogului
+
+După completarea etichetelor, cererea Meciuri a depășit 60 de secunde, în timp ce statisticile și health răspundeau normal. Recuperarea etichetelor din JSON a fost mutată din proiecția SQL corelată într-o singură citire de snapshoturi pentru deciziile deja selectate. Încărcarea inițială a surselor este acum așteptată maximum 1,5 secunde per răspuns: pagina primește starea „se actualizează” și verifică din nou, iar descărcarea comună continuă în fundal. Această schimbare evită ținerea cererii HTTP deschise prin toate reîncercările ligilor. Testul suplimentar verifică răspunsul intermediar, deduplicarea și disponibilitatea ulterioară a datelor, fără AI.

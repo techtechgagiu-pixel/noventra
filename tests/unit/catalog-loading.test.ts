@@ -1,0 +1,21 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { fixtureCatalog } from '@/lib/catalog';
+import { loadFixtures } from '@/lib/sports/fixtures';
+vi.mock('@/lib/sports/fixtures', () => ({ loadFixtures: vi.fn() }));
+vi.mock('@/lib/db', () => ({ many: vi.fn() }));
+afterEach(() => vi.useRealTimers());
+it('returns a refreshing response during a slow cold load, shares one request and later exposes the completed catalog', async () => {
+  vi.useFakeTimers();
+  let finish!: (value: Awaited<ReturnType<typeof loadFixtures>>) => void;
+  vi.mocked(loadFixtures).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const first = fixtureCatalog(), second = fixtureCatalog();
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(await first).toMatchObject({ data: null, refreshing: true });
+  expect(await second).toMatchObject({ data: null, refreshing: true });
+  expect(loadFixtures).toHaveBeenCalledTimes(1);
+  const data = { fixtures: [], errors: [], leagues: [], days: [new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(new Date())], fetchedAt: new Date().toISOString() };
+  finish(data);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(await fixtureCatalog()).toMatchObject({ data, refreshing: false });
+  expect(loadFixtures).toHaveBeenCalledTimes(1);
+});
