@@ -2,9 +2,9 @@
 export const AGENT_RANKS = [
   { id: 'normal', name: 'Normal', minimum: 0, rate: 0 },
   { id: 'refined', name: 'Rafinat', minimum: 5, rate: 0.5 },
-  { id: 'unique', name: 'Unic', minimum: 15, rate: 0.6 },
-  { id: 'elite', name: 'Elite', minimum: 30, rate: 0.7 },
-  { id: 'super', name: 'Super', minimum: 75, rate: 0.8 },
+  { id: 'unique', name: 'Unic', minimum: 10, rate: 0.6 },
+  { id: 'elite', name: 'Elite', minimum: 15, rate: 0.7 },
+  { id: 'super', name: 'Super', minimum: 15, rate: 0.8 },
 ] as const;
 
 export function agentProgression(record: { won: number; lost: number }, editorial = false) {
