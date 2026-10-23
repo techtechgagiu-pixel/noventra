@@ -5,13 +5,14 @@ import { AlertTriangle, Check, ClipboardCopy, Download, History, ListChecks, Pla
 import { AGENT_META, OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
 import { superbetPick } from '@/lib/superbet-format';
 import { CreatorBadge } from '@/components/ticket-archive';
+import type { IncompletePick } from '@/lib/incomplete-ticket-picks';
 import type { Creator } from '@/lib/views';
 
 type Sel = { position: number; fixture_id: string; market_key: string; market_label: string; odds: number; bookmaker: string; quote_observed_at: string; votes_for: number; model_probability: number | null; risk: string; snapshot: { match: string; home: string; away: string; league: string; kickoff: string; source: string }; outcome: string; home_score: number | null; away_score: number | null };
 export type TicketData = {
   id: string; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string; creator?: Creator; mine?: boolean;
   summary: { review?: { legs: Array<{ fixtureId: string; match: string; label: string; odds: number; verdict: 'SOLID' | 'RISCANT' | 'SLAB' | 'NEANALIZAT'; supporters: string[]; responded: number; engineProbability: number | null; suggestion: { label: string; odds: number; supporters: number } | null; note: string }>; overall: string; advice: string[]; chance: number | null; model: string | null; userAdvice: string | null; solid: number; risky: number; weak: number }; digest?: { lines: string[]; source: 'ai' | 'data'; model: string | null; createdAt: string }; agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
-  selections: Sel[];
+  selections: Sel[]; partialSelections?: IncompletePick[];
   predictions?: Array<{ id: string; fixture_id: string; agent_id: string; round: number; model_id: string; decision: string; market_key: string | null; outcome: string | null; current_in_stats: boolean; payload: { marketLabel?: string | null } }>;
   decisions: Array<{ fixture_id: string; outcome: string; market_key: string | null; votes_for: number; votes: Array<{ agentId: string; decision: string; marketKey: string | null; model: string; provider: string }>; reason: string }>;
   fixtures: Array<{ fixtureId: string; fixture: { home: string; away: string; league: string; kickoff: string } }>;
@@ -57,6 +58,8 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
   };
   const copySb = async () => { await navigator.clipboard.writeText(superbetText(t)); setCopiedSb(true); setTimeout(() => setCopiedSb(false), 2000); };
   const completed = t.generationStatus === 'COMPLETED';
+  const partial = t.generationStatus === 'INCOMPLETE' ? t.partialSelections ?? [] : [];
+  const shown = completed ? t.selections : partial;
   const copy = async () => { await navigator.clipboard.writeText(ticketText(t)); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   const download = () => { const url = URL.createObjectURL(new Blob([ticketText(t)], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = `primul11-${t.title.replace(/\W+/g, '-').toLowerCase()}-${t.createdAt.slice(0, 10)}.txt`; a.click(); URL.revokeObjectURL(url); };
   const names = Object.fromEntries(t.fixtures.map((f) => [f.fixtureId, `${f.fixture.home} – ${f.fixture.away}`]));
@@ -79,9 +82,11 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
             <div><p className="text-xs text-muted">{t.summary.review ? 'Cota biletului tău' : 'Cotă reală'}</p><p className="font-display text-4xl font-bold text-emerald tabular">{completed ? odds(t.actualOdds) : '—'}</p></div>
           </div>
         </div>
-        {completed ? (
-          <ol className="divide-y divide-line">
-            {t.selections.map((s) => (
+        {completed || partial.length > 0 ? (
+          <>
+          {!completed && <div className="border-b border-line p-5"><p className="flex items-center gap-2 font-semibold text-gold"><AlertTriangle size={18} aria-hidden />Bilet incomplet</p><p className="mt-2 text-sm text-muted">{t.summary.reason || 'Ținta biletului nu a fost atinsă.'}</p>{t.summary.closest && t.summary.closest.legs.length > 0 && <details className="mt-3 text-sm text-muted"><summary className="cursor-pointer">Cea mai apropiată combinație: cotă {odds(t.summary.closest.totalOdds)} din {t.summary.closest.legs.length} meciuri</summary><ul className="mt-2 space-y-1">{t.summary.closest.legs.map((l,i) => <li key={i}>{l.match} — {l.label} @ {odds(l.odds)}</li>)}</ul></details>}<h2 className="mt-4 font-display text-lg font-bold">Meciuri acceptate de agenți ({partial.length})</h2><p className="mt-1 text-xs text-muted">Selecțiile de mai jos au trecut validarea, dar nu formează un bilet finalizat. Rezultatele se actualizează după confirmarea scorurilor.</p></div>}
+          <ol aria-label={completed ? 'Selecțiile biletului' : 'Selecții acceptate ale biletului incomplet'} className="divide-y divide-line">
+            {shown.map((s) => (
               <li key={s.position} className={`grid gap-2 border-l-4 p-5 md:grid-cols-[1fr_auto] md:items-center ${s.outcome === 'WON' ? 'border-l-emerald bg-emerald/10' : s.outcome === 'LOST' ? 'border-l-rose bg-rose/10' : 'border-l-transparent'}`}>
                 <div>
                   <p className="text-xs text-muted">{s.snapshot.league} · {fmtDateTime(s.snapshot.kickoff)}</p>
@@ -89,12 +94,13 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
                   <p className="mt-1 text-sm"><span className="font-semibold text-cyan">{s.market_label}</span> <span className="text-muted">· {s.market_key}</span></p>
                   {(() => { const p = superbetPick(s.market_key, s.snapshot.home, s.snapshot.away); return <p className="text-xs text-muted">Pe Superbet: <span className="text-text">{p.market} → {p.pick}</span>{p.note ? ` (${p.note})` : ''}</p>; })()}
                   {(() => { const rv = t.summary.review?.legs.find((l) => l.fixtureId === s.fixture_id); return rv ? <p className="mt-1 text-xs"><span className={`chip mr-2 font-bold ${VERDICT[rv.verdict].c}`}>{VERDICT[rv.verdict].t}</span><span className="text-muted">{rv.note}</span></p> : null; })()}
-                  <p className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="chip">{s.votes_for}/{t.summary.agents ?? 6} {t.summary.review ? 'agenți susțin' : 'voturi'}</span><span className="chip">{RISK_RO[s.risk]}</span><span className="chip">{s.bookmaker} · observat {fmtDateTime(s.quote_observed_at)}</span>{s.model_probability != null && <span className="chip">p estimat {Math.round(s.model_probability * 100)}%</span>}</p>
+                  <p className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="chip">{s.votes_for}/{t.summary.agents ?? 6} {t.summary.review ? 'agenți susțin' : 'voturi'}</span>{RISK_RO[s.risk] && <span className="chip">{RISK_RO[s.risk]}</span>}<span className="chip">{s.bookmaker} · observat {fmtDateTime(s.quote_observed_at)}</span>{s.model_probability != null && <span className="chip">p estimat {Math.round(s.model_probability * 100)}%</span>}</p>
                 </div>
                 <div className="text-right"><p className="font-display text-3xl font-bold tabular">{odds(s.odds)}</p><p className={`text-xs font-bold ${s.outcome === 'WON' ? 'text-emerald' : s.outcome === 'LOST' ? 'text-rose' : 'text-muted'}`}>{s.outcome === 'WON' ? '✓ A intrat' : s.outcome === 'LOST' ? '✗ Nu a intrat' : s.outcome === 'VOID' ? 'Anulat' : 'În așteptare'}</p></div>
               </li>
             ))}
           </ol>
+          </>
         ) : (
           <div className="p-6">
             <p className="flex items-start gap-2 text-lg"><AlertTriangle className="mt-1 shrink-0 text-gold" size={20} aria-hidden />{t.generationStatus === 'NO_BET' ? 'NO BET — agenții nu au găsit selecții suficient de bine fundamentate.' : 'Biletul nu a putut fi completat cu selecții suficient de bine fundamentate.'}</p>

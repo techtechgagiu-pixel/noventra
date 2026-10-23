@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
 import { SLOTS_UI } from '@/lib/slots-ui';
 import { TicketPerformance } from './ticket-performance';
+import type { IncompletePick } from '@/lib/incomplete-ticket-picks';
 import type { Creator } from '@/lib/views';
 
 export function CreatorBadge({ c, small }: { c?: Creator; small?: boolean }) {
@@ -16,7 +17,7 @@ export function CreatorBadge({ c, small }: { c?: Creator; small?: boolean }) {
   );
 }
 
-type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null }> };
+type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; partialSelections?: IncompletePick[]; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null }> };
 const FILTERS = [['all', 'Toate'], ['today', 'Azi'], ['yesterday', 'Ieri'], ['week', 'Săptămâna asta'], ['weekly', 'Biletul săptămânii'], ['COMPLETED', 'Complete'], ['INCOMPLETE', 'Incomplete'], ['NO_BET', 'NO BET'], ['PENDING', 'În așteptare'], ['settled', 'Câștigate / pierdute']] as const;
 const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
 
@@ -52,7 +53,10 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
       <div className="flex flex-wrap gap-2">{FILTERS.map(([k, l]) => <button key={k} onClick={() => setF(k)} className={`chip ${f === k ? 'border-cyan text-cyan' : 'text-muted'}`} aria-pressed={f === k}>{l}</button>)}</div>
       {list.length === 0 ? <div className="card p-8 text-center text-muted">Niciun bilet în această categorie.</div> : (
         <ul className="grid gap-3 md:grid-cols-2">
-          {list.map((t) => (
+          {list.map((t) => {
+            const partial = t.generation_status === 'INCOMPLETE' ? t.partialSelections ?? [] : [];
+            const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome }));
+            return (
             <li key={t.id}>
               <Link href={`/?tab=istoric&ticket=${t.id}`} className={`card block p-4 transition hover:border-cyan/50 ${t.outcome_status === 'WON' || t.outcome_status === 'PARTIAL_VOID' ? 'border-emerald bg-emerald/10' : t.outcome_status === 'LOST' ? 'border-rose bg-rose/10' : ''}`}>
                 <div className="flex items-start justify-between gap-3">
@@ -63,9 +67,10 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                   <span className={`chip ${t.generation_status === 'COMPLETED' ? 'text-emerald' : 'text-gold'}`}>{t.generation_status === 'COMPLETED' ? `${t.leg_count} meciuri` : t.generation_status === 'NO_BET' ? 'NO BET' : 'Incomplet'}</span>
                   {t.generation_status === 'COMPLETED' && <span className={`chip ${t.outcome_status === 'WON' ? 'text-emerald' : t.outcome_status === 'LOST' ? 'text-rose' : 'text-muted'}`}>{OUTCOME_RO[t.outcome_status]}</span>}
                 </div>
-                {t.selections.length > 0 && (
+                {partial.length > 0 && <p className="mt-3 text-xs text-muted">{partial.length} selecții acceptate · ținta biletului nu a fost atinsă</p>}
+                {shown.length > 0 && (
                   <ul className="mt-3 space-y-1 text-xs">
-                    {t.selections.map((s, i) => (
+                    {shown.map((s, i) => (
                       <li key={i} className="flex items-center gap-2">
                         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.outcome === 'WON' ? 'bg-emerald' : s.outcome === 'LOST' ? 'bg-rose' : s.outcome === 'VOID' ? 'bg-muted' : 'border border-muted'}`} aria-label={s.outcome === 'WON' ? 'a intrat' : s.outcome === 'LOST' ? 'nu a intrat' : s.outcome === 'VOID' ? 'anulat' : 'în așteptare'} />
                         <span className={`truncate ${s.outcome === 'LOST' ? 'text-rose' : s.outcome === 'WON' ? 'text-emerald' : 'text-muted'}`}>{s.match} — {s.label} @ {odds(s.odds)}</span>
@@ -75,7 +80,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                 )}
               </Link>
             </li>
-          ))}
+          ); })}
         </ul>
       )}
       <TicketPerformance tickets={list} />

@@ -58,7 +58,8 @@ async function loadMatchFacts() {
      WHERE f.status='post' AND f.provider='espn' AND (f.ht_home IS NULL OR f.corners_home IS NULL)
        AND (f.facts_checked_at IS NULL OR f.facts_checked_at < now() - interval '15 minutes')
        AND (EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):')
-         OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):'))
+         OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):')
+         OR EXISTS (SELECT 1 FROM final_decisions d JOIN tickets t ON t.job_id=d.job_id WHERE d.fixture_id=f.id AND d.outcome='QUALIFIED' AND t.generation_status='INCOMPLETE' AND f.kickoff_utc>now()-interval '72 hours' AND d.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):'))
      ORDER BY f.facts_checked_at NULLS FIRST, f.id LIMIT 40`);
   for (const r of rows) {
     try {
@@ -79,7 +80,7 @@ async function loadMatchFacts() {
 const factsMissingTooLong = (r: FactRow) => Date.now() - new Date(r.kickoff_utc).getTime() > 72 * 3600_000;
 
 /** Resolve saved selections only from confirmed fixture facts. Never infer a final from elapsed time. */
-function resolvedOutcome(r: FactRow, key: string): 'WON' | 'LOST' | 'VOID' | null {
+export function resolvedOutcome(r: FactRow, key: string): 'WON' | 'LOST' | 'VOID' | null {
   if (r.status === 'post' && r.home_score !== null && r.away_score !== null) return settleMarket(key,r.home_score,r.away_score,factsOf(r)) ?? (factsMissingTooLong(r) ? 'VOID' : null);
   if (r.status === 'cancelled' || (r.status === 'postponed' && Date.now()-new Date(r.kickoff_utc).getTime()>48*3600_000)) return 'VOID';
   return null;
@@ -122,6 +123,7 @@ export async function settlePending() {
       `SELECT DISTINCT f.id AS fixture_id, f.kickoff_utc, f.league_id, f.status, f.results_checked_at FROM fixtures f
        WHERE f.kickoff_utc <= now() AND f.provider='espn'
        AND ((f.status NOT IN ('post','cancelled') AND (f.results_checked_at IS NULL OR f.results_checked_at<now()-interval '5 minutes')) OR (f.status='post' AND f.kickoff_utc>now()-interval '48 hours' AND (f.results_checked_at IS NULL OR f.results_checked_at<now()-interval '30 minutes'))) AND (
+         EXISTS (SELECT 1 FROM final_decisions d JOIN tickets t ON t.job_id=d.job_id WHERE d.fixture_id=f.id AND d.outcome='QUALIFIED' AND t.generation_status='INCOMPLETE' AND (f.status<>'postponed' OR f.kickoff_utc>now()-interval '48 hours')) OR
          EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING') OR
          EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.outcome IS NULL) OR
          (f.status='post' AND (EXISTS(SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id) OR EXISTS(SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE'))))
