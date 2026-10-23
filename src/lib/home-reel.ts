@@ -48,13 +48,19 @@ export type NewsCard = { match: string; at: string; headlines: Array<{ title: st
 const clip = (s: unknown, n: number) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t; };
 
 /** Real debate fragments from the last days: who proposed what, who objected, who changed his mind, what the brain chose. */
-export async function homeThreads(userId: string): Promise<{ threads: Thread[]; news: NewsCard | null }> {
+export async function homeThreads(userId: string, scope: 'mine' | 'community' = 'mine'): Promise<{ threads: Thread[]; news: NewsCard | null }> {
   const rows = await many<{ job_id: string; slot: string; target_odds: string; required_legs: number | null; seq: number; type: string; fixture_id: string | null; agent_id: string | null; payload: Record<string, any>; created_at: Date }>(
     `SELECT e.job_id, j.slot, j.target_odds, j.required_legs, e.seq, e.type, e.fixture_id, e.agent_id, e.payload, e.created_at
      FROM analysis_events e JOIN ticket_generation_jobs j ON j.id=e.job_id
-     WHERE j.user_id=$1 AND j.created_at > now() - interval '7 days' AND e.fixture_id IS NOT NULL
+     WHERE j.id IN (
+       SELECT recent.id FROM ticket_generation_jobs recent
+       WHERE ($2::boolean OR recent.user_id=$1) AND recent.status='COMPLETED'
+         AND recent.created_at > now() - interval '7 days'
+         AND EXISTS (SELECT 1 FROM analysis_events debate WHERE debate.job_id=recent.id AND debate.type='OBJECTION_RECORDED')
+       ORDER BY recent.finished_at DESC NULLS LAST, recent.created_at DESC LIMIT 4
+     ) AND e.fixture_id IS NOT NULL
        AND e.type IN ('PREDICTION_SAVED','OBJECTION_RECORDED','POSITION_REVISED','BRAIN_DECISION','SELECTION_ACCEPTED','SELECTION_REJECTED','LEG_REVIEWED','NEWS_COLLECTED')
-     ORDER BY e.created_at DESC LIMIT 6000`, [userId]);
+     ORDER BY e.created_at DESC, e.seq DESC LIMIT 3000`, [userId, scope === 'community']);
   for (const r of rows) r.payload = cleanPayload(r.payload);
   const groups = new Map<string, typeof rows>();
   for (const r of rows) { const k = `${r.job_id}|${r.fixture_id}`; (groups.get(k) ?? groups.set(k, []).get(k)!).push(r); }

@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { one } from '@/lib/db';
+import { one, query } from '@/lib/db';
 import { recordEvent } from '@/lib/jobs/events';
 import { homeThreads } from '@/lib/home-reel';
 import { closePool, makeUser, resetDb } from './helpers';
@@ -29,4 +29,20 @@ describe('home debate fragments', () => {
     expect(news?.headlines).toHaveLength(2);
     expect(news?.take).toContain('[H1]');
   });
+  it('shows completed shared debates to a new account while keeping personal scope and unfinished work separate', async () => {
+    const owner = await makeUser('owner-home@test.local');
+    const visitor = await makeUser('new-home@test.local');
+    const job = (await one<{ id: string }>(`INSERT INTO ticket_generation_jobs (user_id,slot,period_key,target_odds,seed,config,checkpoint,status,stage) VALUES ($1,'CUSTOM_1',current_date,5,'home','{}','{}','RUNNING','DEBATE') RETURNING id`, [owner]))!.id;
+    await recordEvent(job, { type: 'PREDICTION_SAVED', stage: 'ANALYSIS', fixtureId: 'demo:home', agentId: 'andrei', payload: { match: 'DEMO Gazde – DEMO Oaspeți', decision: 'BET_CANDIDATE', marketLabel: 'DEMO 1X', marketKey: 'DC:1X', odds: 1.4, rationale: 'Argument salvat, fără o nouă inferență.' } });
+    await recordEvent(job, { type: 'OBJECTION_RECORDED', stage: 'DEBATE', fixtureId: 'demo:home', agentId: 'alex', payload: { objection: 'Un contraargument real din jurnal.' } });
+    await recordEvent(job, { type: 'BRAIN_DECISION', stage: 'VOTING', fixtureId: 'demo:home', agentId: 'robert', payload: { match: 'DEMO Gazde – DEMO Oaspeți', choice: 'DC:1X', label: 'DEMO 1X', odds: 1.4, reason: 'Verdictul salvat.' } });
+    expect((await homeThreads(visitor, 'community')).threads).toHaveLength(0);
+    await query("UPDATE ticket_generation_jobs SET status='COMPLETED',stage='DONE',finished_at=now() WHERE id=$1", [job]);
+    expect((await homeThreads(visitor)).threads).toHaveLength(0);
+    const shared = (await homeThreads(visitor, 'community')).threads;
+    expect(shared).toHaveLength(1);
+    expect(shared[0].messages.map((m) => m.kind)).toEqual(['pick','objection','brain']);
+    expect(shared[0].key).toContain(job);
+  });
+
 });

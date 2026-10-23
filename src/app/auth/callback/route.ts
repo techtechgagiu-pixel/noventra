@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (rateLimited('google-login:all', 60, 60_000)) return back('rate');
   try {
     const session = await completeGoogleLogin(code, state, req.cookies.get(OAUTH_COOKIE)?.value, req.headers.get('user-agent') ?? undefined);
-    const res = NextResponse.redirect(`${config.appBaseUrl}/`);
+    const res = NextResponse.redirect(`${config.appBaseUrl}${session.destination}`);
     res.cookies.set(SESSION_COOKIE, session.token, { ...cookieBase, maxAge: session.maxAge });
     res.cookies.set(OAUTH_COOKIE, '', { ...cookieBase, maxAge: 0 });
     return res;

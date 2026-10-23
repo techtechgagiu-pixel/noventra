@@ -94,7 +94,10 @@ function verifySigned<T>(token: string | undefined): T | null {
 export const googleConfigured = () => !!(config.googleClientId && config.googleClientSecret && config.authSecret);
 const redirectUri = () => config.googleRedirectUri || `${config.appBaseUrl}/auth/callback`;
 
-export function googleAuthUrl() {
+/** Only a fixed application destination is accepted; arbitrary redirect URLs are never used. */
+export const loginDestination = (intent: unknown) => intent === 'custom' ? '/?tab=custom' : '/';
+
+export function googleAuthUrl(intent?: string | null) {
   const verifier = b64url(randomBytes(32));
   const nonce = b64url(randomBytes(16));
   const state = b64url(randomBytes(16));
@@ -103,13 +106,13 @@ export function googleAuthUrl() {
     client_id: config.googleClientId, redirect_uri: redirectUri(), response_type: 'code', scope: 'openid email profile', state, nonce,
     code_challenge: b64url(createHash('sha256').update(verifier).digest()), code_challenge_method: 'S256', prompt: 'select_account',
   }).toString();
-  return { url: url.toString(), cookie: sign({ verifier, state, nonce, exp: Date.now() + 10 * 60_000 }) };
+  return { url: url.toString(), cookie: sign({ verifier, state, nonce, intent: intent === 'custom' ? 'custom' : null, exp: Date.now() + 10 * 60_000 }) };
 }
 
 type IdClaims = { sub?: string; email?: string; email_verified?: boolean; name?: string; picture?: string; nonce?: string; aud?: string; iss?: string; exp?: number };
 /** Exchanges the code; the ID token comes straight from Google's token endpoint over TLS, then its claims are checked. */
 export async function completeGoogleLogin(code: string, state: string, oauthCookie: string | undefined, userAgent?: string) {
-  const saved = verifySigned<{ verifier: string; state: string; nonce: string }>(oauthCookie);
+  const saved = verifySigned<{ verifier: string; state: string; nonce: string; intent?: string }>(oauthCookie);
   if (!saved || saved.state !== state) throw new Error('Starea autentificării nu este validă.');
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -128,7 +131,8 @@ export async function completeGoogleLogin(code: string, state: string, oauthCook
     [claims.sub, claims.email.toLowerCase(), claims.name?.slice(0, 120) ?? null, claims.picture?.slice(0, 500) ?? null],
   );
   if (user!.blocked_at) throw new Error('blocked');
-  return createSession(user!.id, userAgent, { google: true });
+  const session = await createSession(user!.id, userAgent, { google: true });
+  return { ...session, destination: loginDestination(saved.intent) };
 }
 
 export async function currentUser(): Promise<User | null> {

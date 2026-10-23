@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('news identities, shared statistics and administrator results checks', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByText('Ștucan', { exact: true })).toBeVisible();
+  await expect(page.locator('.home-team').getByText('Ștucan', { exact: true })).toBeVisible();
   await expect(page.getByText('Hanțu', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Corina Caragea', { exact: true })).toBeVisible();
   await expect(page.locator('img[src="/agents/corina.png"]')).toBeVisible();
