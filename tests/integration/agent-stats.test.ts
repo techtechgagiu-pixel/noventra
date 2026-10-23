@@ -45,3 +45,25 @@ it('makes community and personal scopes explicit and groups a midnight match by 
   expect(await agent('2026-11', 'all')).toMatchObject({ bets: 1, lost: 1 });
   expect(await agent('2026-11', 'mine')).toMatchObject({ bets: 1, won: 1 });
 });
+
+it('uses only decided picks for average odds/probability and exposes all final positions in history', async () => {
+  const user=await makeUser(); const fs=demoFixtures(3); await persistFixtures(fs);
+  const j=await pick(user,fs[0].id,'2026-10-20T08:00:00Z',0,'BET_CANDIDATE','WON');
+  await pick(user,fs[1].id,'2026-10-20T09:00:00Z',0,'BET_CANDIDATE',null,j);
+  await pick(user,fs[2].id,'2026-10-20T10:00:00Z',0,'NO_BET',null,j);
+  await query(`UPDATE agent_predictions SET odds=CASE WHEN fixture_id=$1 THEN 1.4 ELSE 3.0 END,estimated_probability=CASE WHEN fixture_id=$1 THEN 0.7 ELSE 0.3 END WHERE decision='BET_CANDIDATE'`,[fs[0].id]);
+  const r=(await agentStats(user,false,'all')).agents.find((a)=>a.id==='robert')!;
+  expect(r).toMatchObject({bets:2,won:1,lost:0,pending:1,noBet:1,avgOdds:1.4,avgEstimated:0.7});
+  expect(r.recent).toHaveLength(3);
+  expect(r.recent[0]).toMatchObject({decision:'NO_BET',round:0});
+  expect((await allTrackRecords(['robert']))[0].record).toMatchObject({decided:1,avgOdds:r.avgOdds,avgEstimated:r.avgEstimated});
+});
+
+it('does not silently cap the display record at 200 matches',async()=>{
+  const user=await makeUser();const fs=demoFixtures(205);await persistFixtures(fs);
+  const job=await pick(user,fs[0].id,'2026-10-20T08:00:00Z',0,'BET_CANDIDATE','WON');
+  await query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome)
+    SELECT $1,id,'robert',0,'demo','demo','v1','BET_CANDIDATE','1X2:HOME',1.5,'{}','WON' FROM fixtures WHERE id<>$2`,[job,fs[0].id]);
+  expect((await allTrackRecords(['robert']))[0].record).toMatchObject({decided:205,won:205});
+  expect((await agentStats(user,false,'all')).agents.find((a)=>a.id==='robert')).toMatchObject({bets:205,won:205,recent:expect.any(Array)});
+});

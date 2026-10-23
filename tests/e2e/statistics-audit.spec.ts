@@ -22,6 +22,8 @@ test('news identities, shared statistics and administrator results checks', asyn
   await expect(page.getByRole('link', { name: 'Analizele mele', exact: true })).toHaveAttribute('aria-current', 'page');
   const corina = page.getByRole('region', { name: 'Agenții' }).locator('article').filter({ hasText: 'Corina Caragea' });
   await expect(corina).toContainText('fără voturi');
-  await expect(corina).toContainText('anthropic/claude-haiku-5.5');
+  const activeAgents = await (await page.request.get('/api/agents')).json();
+  const corinaAssignment = activeAgents.agents.find((agent: { id: string }) => agent.id === 'corina');
+  await expect(corina).toContainText(corinaAssignment.model.model);
   await expect(corina).toContainText('Decizie editorială');
 });

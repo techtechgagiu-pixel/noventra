@@ -74,3 +74,35 @@ it('keeps a stale catalog response from reverting a confirmed result and applies
   expect((await ticketDetail(user, ticket))!.outcomeStatus).toBe('LOST');
   expect(await one('SELECT outcome FROM agent_predictions WHERE fixture_id=$1', [f.id])).toEqual({ outcome: 'LOST' });
 });
+
+it('refreshes started fixtures during play instead of waiting two hours, without settling live goals',async()=>{
+  const {user,ticket,f}=await savedTicket();
+  const kickoff=new Date(Date.now()-15*60_000).toISOString();
+  await query('UPDATE fixtures SET kickoff_utc=$2 WHERE id=$1',[f.id,kickoff]);
+  vi.mocked(espnLeagueDay).mockResolvedValue([{...f,kickoff,status:'in',homeScore:2,awayScore:0}]);
+  await settlePending();
+  expect(espnLeagueDay).toHaveBeenCalled();
+  expect(await one('SELECT status FROM fixtures WHERE id=$1',[f.id])).toEqual({status:'in'});
+  expect((await ticketDetail(user,ticket))!.selections[0].outcome).toBe('PENDING');
+  expect(await one('SELECT outcome FROM agent_predictions WHERE fixture_id=$1',[f.id])).toEqual({outcome:null});
+});
+
+it('repairs mismatched agent and ticket outcomes from confirmed scores even with recent settlement stamps',async()=>{
+  const {user,ticket,f}=await savedTicket();
+  await query(`UPDATE fixtures SET status='post',home_score=2,away_score=0 WHERE id=$1`,[f.id]);
+  await query(`UPDATE agent_predictions SET outcome='LOST',settled_at=now()`);
+  await query(`UPDATE ticket_selections SET outcome='LOST',settled_at=now()`);
+  await query(`UPDATE tickets SET outcome_status='LOST',settled_at=now()`);
+  const r=await settlePending();
+  expect(r).toMatchObject({status:'completed',detail:{predictionsChanged:1,selectionsChanged:1,ticketsChanged:1}});
+  expect((await ticketDetail(user,ticket))).toMatchObject({outcomeStatus:'WON',actualOdds:1.5,selections:[{outcome:'WON'}],predictions:[{outcome:'WON',current_in_stats:true}]});
+});
+
+it('reconciles a stale ticket total when every leg was already correct',async()=>{
+  const {user,ticket,f}=await savedTicket();
+  await query(`UPDATE fixtures SET status='post',home_score=2,away_score=0 WHERE id=$1`,[f.id]);
+  await settlePending();
+  await query(`UPDATE tickets SET outcome_status='LOST' WHERE id=$1`,[ticket]);
+  expect(await settlePending()).toMatchObject({status:'completed',detail:{selectionsChanged:0,ticketsChanged:1}});
+  expect((await ticketDetail(user,ticket))!.outcomeStatus).toBe('WON');
+});

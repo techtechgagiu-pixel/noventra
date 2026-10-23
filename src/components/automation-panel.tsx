@@ -17,9 +17,9 @@ export function AutomationPanel({ initial }: { initial: Health }) {
   const sync = async () => {
     setBusy(true); setMessage('');
     try {
-      const r = await api<{ result: { status: string }; health: Health }>('/api/admin/automation', { method: 'POST' });
+      const r = await api<{ result: { status: string; detail?: { predictionsChanged?: number; selectionsChanged?: number; ticketsChanged?: number } }; health: Health }>('/api/admin/automation', { method: 'POST' });
       setHealth(r.health); router.refresh();
-      setMessage(r.result.status === 'completed' ? 'Rezultatele au fost verificate.' : r.result.status === 'busy' ? 'O verificare rulează deja.' : 'Verificare incompletă; vezi detaliile și următoarea reîncercare.');
+      setMessage(r.result.status === 'completed' ? `Rezultatele au fost verificate. Actualizări: ${r.result.detail?.predictionsChanged ?? 0} pronosticuri, ${r.result.detail?.selectionsChanged ?? 0} selecții, ${r.result.detail?.ticketsChanged ?? 0} bilete.` : r.result.status === 'busy' ? 'O verificare rulează deja.' : 'Verificare incompletă; vezi detaliile și următoarea reîncercare.');
     } catch (e) { setMessage((e as Error).message); } finally { setBusy(false); }
   };
   return <section aria-label="Actualizări automate" className="card space-y-3 p-4 text-sm">

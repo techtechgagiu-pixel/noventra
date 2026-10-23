@@ -2,6 +2,7 @@ import { cleanPayload } from './agent-names';
 import { many, one } from './db';
 import { eventsAfter } from './jobs/events';
 import { slotInfo } from './slots';
+import { finalAgentPicksCte } from './final-agent-picks';
 
 /** Who made a ticket, as everyone may see it: Google name with a masked e-mail, an invitation label, or the administrator. */
 export type Creator = { name: string; detail: string | null; picture: string | null; mine: boolean };
@@ -50,9 +51,9 @@ export async function listTickets(userId: string) {
   const rows = await many<Record<string, unknown> & { creator_id: string; creator_name: string | null; creator_email: string | null; creator_picture: string | null; creator_sub: string | null }>(
     `SELECT t.id, t.slot, to_char(t.period_key,'YYYY-MM-DD') AS period_key, t.target_odds::float AS target_odds, t.actual_odds::float AS actual_odds, t.leg_count, t.generation_status, t.outcome_status, t.created_at, t.mixed_bookmakers,
             j.id AS job_id, (SELECT count(*) FROM analysis_events e WHERE e.job_id=j.id)::int AS event_count,
-            COALESCE((SELECT json_agg(json_build_object('match', s.snapshot->>'match', 'label', s.market_label, 'odds', s.odds::float, 'outcome', s.outcome) ORDER BY s.position) FROM ticket_selections s WHERE s.ticket_id=t.id), '[]') AS selections
+            COALESCE((SELECT json_agg(json_build_object('match', s.snapshot->>'match', 'label', s.market_label, 'market_key', s.market_key, 'model_probability', s.model_probability::float, 'odds', s.odds::float, 'outcome', s.outcome) ORDER BY s.position) FROM ticket_selections s WHERE s.ticket_id=t.id), '[]') AS selections
             , ${CREATOR_COLS}
-     FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id JOIN users u ON u.id=t.user_id ORDER BY t.created_at DESC LIMIT 400`,
+     FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id JOIN users u ON u.id=t.user_id ORDER BY t.created_at DESC`,
   );
   return rows.map(({ creator_id, creator_name, creator_email, creator_picture, creator_sub, ...r }) => ({ ...r, creator: creatorOf({ creator_id, creator_name, creator_email, creator_picture, creator_sub }, userId) }));
 }
@@ -72,7 +73,7 @@ export async function ticketDetail(userId: string, ticketId: string) {
     [ticketId],
   );
   const decisions = await many<Record<string, unknown>>('SELECT fixture_id, outcome, market_key, votes_for, votes, validation, reason FROM final_decisions WHERE job_id=$1 ORDER BY id', [t.job_id]);
-  const predictions = await many<Record<string, unknown>>('SELECT fixture_id, agent_id, round, provider, model_id, prompt_version, decision, market_key, estimated_probability::float AS estimated_probability, confidence, risk, payload FROM agent_predictions WHERE job_id=$1 ORDER BY fixture_id, agent_id, round', [t.job_id]);
+  const predictions = await many<Record<string, unknown>>(`${finalAgentPicksCte()} SELECT p.id,p.fixture_id,p.agent_id,p.round,p.provider,p.model_id,p.prompt_version,p.decision,p.market_key,p.estimated_probability::float AS estimated_probability,p.confidence,p.risk,p.payload,p.outcome,p.odds::float AS odds,p.created_at,p.settled_at,(fp.id=p.id) AS current_in_stats FROM agent_predictions p LEFT JOIN final_picks fp ON fp.fixture_id=p.fixture_id AND fp.agent_id=p.agent_id WHERE p.job_id=$1 ORDER BY p.fixture_id,p.agent_id,p.round`, [t.job_id]);
   const dossiers = await many<Record<string, unknown>>('SELECT fixture_id, mode, dossier, narrative, model FROM scout_dossiers WHERE job_id=$1', [t.job_id]);
   const snapshots = await many<{ fixture_id: string; payload: { fixture: unknown; model: unknown; odds: unknown; dataQuality: unknown } }>('SELECT DISTINCT ON (fixture_id) fixture_id, payload FROM fixture_snapshots WHERE job_id=$1 ORDER BY fixture_id, id', [t.job_id]);
   const slot = slotInfo(t.slot as string, Number(t.target_odds), t.leg_count as number);

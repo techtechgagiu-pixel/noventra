@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
 import { SLOTS_UI } from '@/lib/slots-ui';
+import { TicketPerformance } from './ticket-performance';
 import type { Creator } from '@/lib/views';
 
 export function CreatorBadge({ c, small }: { c?: Creator; small?: boolean }) {
@@ -15,7 +16,7 @@ export function CreatorBadge({ c, small }: { c?: Creator; small?: boolean }) {
   );
 }
 
-type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; selections: Array<{ match: string; label: string; odds: number; outcome: string }> };
+type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null }> };
 const FILTERS = [['all', 'Toate'], ['today', 'Azi'], ['yesterday', 'Ieri'], ['week', 'Săptămâna asta'], ['weekly', 'Biletul săptămânii'], ['COMPLETED', 'Complete'], ['INCOMPLETE', 'Incomplete'], ['NO_BET', 'NO BET'], ['PENDING', 'În așteptare'], ['settled', 'Câștigate / pierdute']] as const;
 const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
 
@@ -34,7 +35,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
     if (who !== 'all' && who !== 'mine' && `${t.creator?.name}|${t.creator?.detail ?? ''}` !== who) return false;
     const d = dayKey(new Date(t.created_at));
     switch (f) { case 'today': return d === today; case 'yesterday': return d === yesterday; case 'week': return d >= monday; case 'weekly': return t.slot === 'WEEKLY_100';
-      case 'COMPLETED': case 'INCOMPLETE': case 'NO_BET': return t.generation_status === f; case 'PENDING': return t.outcome_status === 'PENDING'; case 'settled': return ['WON', 'LOST'].includes(t.outcome_status); default: return true; }
+      case 'COMPLETED': case 'INCOMPLETE': case 'NO_BET': return t.generation_status === f; case 'PENDING': return t.outcome_status === 'PENDING'; case 'settled': return ['WON', 'LOST', 'PARTIAL_VOID'].includes(t.outcome_status); default: return true; }
   }), [tickets, f, who, today, yesterday, monday]);
   return (
     <div className="space-y-4">
@@ -66,7 +67,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                   <ul className="mt-3 space-y-1 text-xs">
                     {t.selections.map((s, i) => (
                       <li key={i} className="flex items-center gap-2">
-                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.outcome === 'WON' ? 'bg-emerald' : s.outcome === 'LOST' ? 'bg-rose' : s.outcome === 'VOID' ? 'bg-muted' : 'border border-muted'}`} aria-label={s.outcome === 'WON' ? 'a intrat' : s.outcome === 'LOST' ? 'nu a intrat' : 'în așteptare'} />
+                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.outcome === 'WON' ? 'bg-emerald' : s.outcome === 'LOST' ? 'bg-rose' : s.outcome === 'VOID' ? 'bg-muted' : 'border border-muted'}`} aria-label={s.outcome === 'WON' ? 'a intrat' : s.outcome === 'LOST' ? 'nu a intrat' : s.outcome === 'VOID' ? 'anulat' : 'în așteptare'} />
                         <span className={`truncate ${s.outcome === 'LOST' ? 'text-rose' : s.outcome === 'WON' ? 'text-emerald' : 'text-muted'}`}>{s.match} — {s.label} @ {odds(s.odds)}</span>
                       </li>
                     ))}
@@ -77,6 +78,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
           ))}
         </ul>
       )}
+      <TicketPerformance tickets={list} />
     </div>
   );
 }

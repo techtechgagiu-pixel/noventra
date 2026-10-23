@@ -285,7 +285,7 @@ async function AziTab({ userId, ticket }: { userId: string; ticket?: string }) {
 }
 
 async function StatisticiTab({ userId, admin, month, scope }: { userId: string; admin: boolean; month?: string; scope?: string }) {
-  const m = month === 'all' || /^\d{4}-\d{2}$/.test(month ?? '') ? month! : currentMonth();
+  const m = month === 'all' || /^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ? month! : currentMonth();
   const selected = scope === 'mine' ? 'mine' : 'all';
   const { agents, totals } = await agentStats(userId, admin, m, selected);
   return <div className="space-y-6">{admin && <AutomationPanel initial={plain(await automationHealth())} />}<StatsView agents={plain(agents)} totals={totals} month={m} scope={selected} /></div>;

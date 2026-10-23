@@ -4,7 +4,7 @@ export const fmtTime = (iso: string) => new Intl.DateTimeFormat('ro-RO', { timeZ
 export const fmtDay = (d: string) => new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${d}T12:00:00Z`));
 export const odds = (n: number | null | undefined) => (n == null ? '—' : n.toFixed(2));
 export const STATUS_RO: Record<string, string> = { QUEUED: 'În coadă', RUNNING: 'Rulează', WAITING: 'Așteaptă limita furnizorului', PAUSED: 'În pauză', COMPLETED: 'Finalizat', INCOMPLETE: 'Incomplet', NO_BET: 'NO BET', FAILED: 'Eșuat' };
-export const OUTCOME_RO: Record<string, string> = { PENDING: 'Meciuri în desfășurare', WON: 'Câștigat', LOST: 'Pierdut', VOID: 'Anulat', PARTIAL_VOID: 'Câștigat (cu anulări)', NOT_APPLICABLE: '—' };
+export const OUTCOME_RO: Record<string, string> = { PENDING: 'În așteptare', WON: 'Câștigat', LOST: 'Pierdut', VOID: 'Anulat', PARTIAL_VOID: 'Câștigat (cu anulări)', NOT_APPLICABLE: '—' };
 export const AGENT_META: Record<string, { name: string; short?: string; title: string; accent: string; img: string }> = {
   corina: { name: 'Corina Caragea', short: 'Corina', title: 'Redacția sportivă · știri și context', accent: '#ec4899', img: '/agents/corina.png' },
   victor: { name: 'Mircea Sandu', short: 'Sandu', title: 'Fost președinte FRF', accent: '#34d399', img: '/agents/victor.webp' },

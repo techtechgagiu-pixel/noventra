@@ -12,6 +12,7 @@ export type TicketData = {
   id: string; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string; creator?: Creator; mine?: boolean;
   summary: { review?: { legs: Array<{ fixtureId: string; match: string; label: string; odds: number; verdict: 'SOLID' | 'RISCANT' | 'SLAB' | 'NEANALIZAT'; supporters: string[]; responded: number; engineProbability: number | null; suggestion: { label: string; odds: number; supporters: number } | null; note: string }>; overall: string; advice: string[]; chance: number | null; model: string | null; userAdvice: string | null; solid: number; risky: number; weak: number }; digest?: { lines: string[]; source: 'ai' | 'data'; model: string | null; createdAt: string }; agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
   selections: Sel[];
+  predictions?: Array<{ id: string; fixture_id: string; agent_id: string; round: number; model_id: string; decision: string; market_key: string | null; outcome: string | null; current_in_stats: boolean; payload: { marketLabel?: string | null } }>;
   decisions: Array<{ fixture_id: string; outcome: string; market_key: string | null; votes_for: number; votes: Array<{ agentId: string; decision: string; marketKey: string | null; model: string; provider: string }>; reason: string }>;
   fixtures: Array<{ fixtureId: string; fixture: { home: string; away: string; league: string; kickoff: string } }>;
   dossiers: Array<{ fixture_id: string; dossier: { home: { team: string; resultsVsPerformance: string; record: { w: number; d: number; l: number }; sample: number }; away: { team: string; resultsVsPerformance: string; record: { w: number; d: number; l: number }; sample: number }; modeMessage: string; missing: string[] }; narrative: { summary: string; keyObservations: string[] } | null; model: string | null }>;
@@ -148,7 +149,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
       </div>
 
       <section id="analiza" className="space-y-3">
-        <h2 className="font-display text-2xl font-bold">Analiza meciurilor</h2>
+        <h2 className="font-display text-2xl font-bold">Analiza meciurilor</h2><p className="text-xs text-muted">Pozițiile finale din această analiză, cu rezultatul propriu al agentului. Statisticile comunității folosesc ultima analiză a fiecărui meci; o analiză mai veche rămâne păstrată aici.</p>
         {t.decisions.length === 0 && <p className="text-muted">Niciun meci nu a ajuns la vot.</p>}
         {t.decisions.map((d) => {
           const dossier = t.dossiers.find((x) => x.fixture_id === d.fixture_id);
@@ -159,9 +160,13 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
                 <span className={`chip ${d.outcome === 'QUALIFIED' ? 'text-emerald' : 'text-muted'}`}>{d.outcome === 'QUALIFIED' ? `Calificat ${d.votes_for}/${t.summary.agents ?? 6}` : d.outcome === 'NO_BET' ? 'NO BET' : d.outcome === 'REJECTED' ? 'Respins la validare' : 'Fără consens'}</span>
               </summary>
               <p className="mt-3 text-sm">{d.reason}</p>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                {d.votes.map((v) => <div key={v.agentId} className="card-soft p-2 text-xs"><p className="font-bold" style={{ color: AGENT_META[v.agentId]?.accent }}>{AGENT_META[v.agentId]?.name}</p><p>{v.decision === 'BET_CANDIDATE' ? v.marketKey : 'NO BET'}</p><p className="truncate text-muted" title={v.model}>{v.model}</p></div>)}
-              </div>
+              {(() => {
+                const latest = new Map<string, NonNullable<TicketData['predictions']>[number]>();
+                for (const p of t.predictions ?? []) if (p.fixture_id === d.fixture_id && (!latest.has(p.agent_id) || latest.get(p.agent_id)!.round < p.round)) latest.set(p.agent_id,p);
+                const cards = latest.size ? [...latest.values()].map((p) => ({ agent: p.agent_id, pick: p.decision === 'NO_BET' ? 'NO BET' : p.payload.marketLabel ?? p.market_key, model: p.model_id, outcome: p.decision === 'BET_CANDIDATE' ? p.outcome ?? 'PENDING' : null, current: p.current_in_stats, counted: d.votes.some((v) => v.agentId === p.agent_id), round: p.round })) : d.votes.map((v) => ({ agent: v.agentId, pick: v.decision === 'BET_CANDIDATE' ? v.marketKey : 'NO BET', model: v.model, outcome: null, current: null, counted: true, round: null }));
+                return <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">{cards.map((v) => <div key={v.agent} className="card-soft space-y-1 p-2 text-xs"><p className="font-bold" style={{ color: AGENT_META[v.agent]?.accent }}>{AGENT_META[v.agent]?.name ?? v.agent}</p><p>{v.pick}</p>{v.outcome && <p className={v.outcome === 'WON' ? 'text-emerald' : v.outcome === 'LOST' ? 'text-rose' : 'text-muted'}>{v.outcome === 'WON' ? '✓ Verde' : v.outcome === 'LOST' ? '✗ Roșu' : v.outcome === 'VOID' ? 'Anulat' : 'În așteptare'}</p>}{!v.counted && <p className="text-muted">Nenumărat la votul echipei</p>}{v.current === false && <p className="text-muted">Există o poziție mai nouă în statistici</p>}{v.round !== null && <p className="text-muted">Runda {v.round + 1}</p>}<p className="truncate text-muted" title={v.model}>{v.model}</p></div>)}</div>;
+              })()}
+
               {dossier && (
                 <div className="mt-3 text-sm">
                   <p className="font-semibold text-cyan">SCOUT</p>

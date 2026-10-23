@@ -66,12 +66,15 @@ export function trackRecordText(r: TrackRecord | null, minDecided = 5): string |
   return parts.join(' ');
 }
 
-export async function allTrackRecords(agentIds: string[]) {
+/** Display records cover the same scope/month as statistics, with no silent last-200 cap.
+ * The separate prompt feedback function keeps its existing bounded sample. */
+export async function allTrackRecords(agentIds: string[], options: { userId?: string; month?: string } = {}) {
   const rows = await many<{ agent_id: string; outcome: string; odds: string | null; estimated_probability: string | null }>(
-    `${finalAgentPicksCte()}, ranked AS (
-       SELECT p.*, row_number() OVER (PARTITION BY p.agent_id ORDER BY f.kickoff_utc DESC,p.id DESC) AS n
-       FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id
-       WHERE p.agent_id=ANY($1) AND p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST')
-     ) SELECT agent_id,outcome,odds,estimated_probability FROM ranked WHERE n<=200 ORDER BY agent_id,n`, [agentIds]);
+    `${finalAgentPicksCte(true)}
+     SELECT p.agent_id,p.outcome,p.odds,p.estimated_probability
+     FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id
+     WHERE p.agent_id=ANY($2) AND p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST')
+       AND ($3='all' OR to_char(f.kickoff_utc AT TIME ZONE 'Europe/Bucharest','YYYY-MM')=$3)
+     ORDER BY p.agent_id,f.kickoff_utc DESC,p.id DESC`, [options.userId ?? null, agentIds, options.month ?? 'all']);
   return agentIds.map((id) => ({ id, record: recordOf(id, rows.filter((r) => r.agent_id === id)) }));
 }

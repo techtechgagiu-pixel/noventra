@@ -68,7 +68,8 @@ describe('production invitation access', () => {
     const admin = await loginWithCode(adminCode);
     const owner = (await userFromToken(admin!.token))!;
     const invite = await issueInvitation(owner.id, 'Expiry test');
-    await query("UPDATE invitation_codes SET expires_at=now()+interval '2 days' WHERE id=$1", [invite.id]);
+    // Use elapsed hours: two calendar days can span 49 hours across autumn DST.
+    await query("UPDATE invitation_codes SET expires_at=now()+interval '48 hours' WHERE id=$1", [invite.id]);
     const session = await loginWithCode(invite.code);
     expect(session!.maxAge).toBeLessThanOrEqual(2 * 86400);
     await query("UPDATE invitation_codes SET expires_at=now()-interval '1 second' WHERE id=$1", [invite.id]);
