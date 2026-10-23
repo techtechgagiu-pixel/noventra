@@ -54,3 +54,55 @@ body {
 @keyframes fadein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @keyframes lowerthird { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { [class*='lowerthird'] { animation: none !important; } }
+
+/* Compact football collection cards: the portrait shares the face with actual results. */
+.agent-player-grid { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 1rem; }
+@media (min-width: 600px) { .agent-player-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .agent-player-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .agent-player-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.agent-player-card, .player-rank-rule { --rarity: #9ba9be; --rarity-deep: #263145; }
+[data-rarity='refined'] { --rarity: #c78f68; --rarity-deep: #432e26; }
+[data-rarity='unique'] { --rarity: #e5c477; --rarity-deep: #403620; }
+[data-rarity='elite'] { --rarity: #aaa1f5; --rarity-deep: #30284b; }
+[data-rarity='super'] { --rarity: #80e1c5; --rarity-deep: #173d39; }
+[data-rarity='editorial'] { --rarity: #d4abc8; --rarity-deep: #382b3b; }
+.agent-player-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid color-mix(in srgb, var(--rarity) 65%, #111a2c); border-radius: 12px 12px 18px 18px; background: #0a1020; box-shadow: inset 0 0 0 3px #0a1020, inset 0 0 0 4px color-mix(in srgb, var(--rarity) 13%, transparent); transition: border-color .15s, transform .15s; }
+.agent-player-card:hover { border-color: var(--rarity); transform: translateY(-2px); }
+.player-card-face { isolation: isolate; position: relative; padding: 10px 12px 15px; text-align: center; }
+.player-card-face::before { content: ''; position: absolute; z-index: -1; inset: 4px 4px 0; clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% 92%, 50% 100%, 0 92%, 0 10px); background: linear-gradient(122deg, transparent 20%, color-mix(in srgb, var(--rarity) 13%, transparent) 20.5%, transparent 21%, transparent 72%, color-mix(in srgb, var(--rarity) 16%, transparent) 72.5%, transparent 73%), linear-gradient(155deg, var(--rarity-deep), #0d1527 56%, var(--rarity-deep)); }
+.player-card-face::after { content: ''; position: absolute; left: 28%; right: 28%; bottom: 0; height: 1px; background: var(--rarity); opacity: .65; }
+.player-card-topline { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 9px; color: #c0c9da; }
+.player-rarity { display: inline-flex; align-items: center; gap: 4px; color: var(--rarity); font-weight: 700; }
+.player-rarity::before { content: ''; width: 6px; height: 6px; background: var(--rarity); transform: rotate(45deg); }
+.player-card-portrait-row { display: grid; grid-template-columns: minmax(0,1fr) 86px minmax(0,1fr); align-items: center; gap: 5px; margin-top: 3px; }
+.player-card-portrait { position: relative; width: 86px; height: 90px; overflow: hidden; border-radius: 10px 10px 22px 22px; background: color-mix(in srgb, var(--rarity) 12%, transparent); mask-image: linear-gradient(#000 78%, transparent); }
+.player-card-portrait img { width: 100%; height: 100%; object-fit: cover; object-position: center 22%; }
+.player-card-portrait > span { display: grid; height: 100%; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 44px; color: var(--rarity); }
+.player-card-rating, .player-card-level { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.player-card-rating > strong { font-family: var(--font-display); font-size: 34px; line-height: 1; letter-spacing: -.05em; font-weight: 700; }
+.player-card-rating small { font-size: 13px; letter-spacing: 0; }
+.player-card-rating > span { margin-top: 3px; font-size: 9px; color: #bdc8dc; white-space: nowrap; }
+.player-card-rating > span:last-child { font-size: 8px; }
+.player-card-level > span { font-size: 9px; color: #bdc8dc; }
+.player-card-level > strong { font-family: var(--font-display); font-size: 25px; line-height: 1.15; color: var(--rarity); }
+.player-card-level > .player-card-role { font-size: 17px; margin: 5px 0; }
+.player-card-face h2 { font-family: var(--font-display); font-size: 18px; font-weight: 700; line-height: 1.2; margin-top: 2px; letter-spacing: -.035em; }
+.player-card-specialty { font-size: 9px; color: var(--rarity); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-card-model { font-size: 9px; color: #b6c1d5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
+.player-card-body { padding: 8px 13px 12px; }
+.player-card-results { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); text-align: center; gap: 5px; }
+.player-card-results dt { color: #aab7ce; font-size: 9px; white-space: nowrap; }
+.player-card-results dd { font-family: var(--font-display); font-size: 21px; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.player-card-xp { margin-top: 7px; }
+.player-card-xp > div:first-child { display: flex; justify-content: space-between; gap: 6px; font-size: 9px; color: #b4c1d7; }
+.player-card-xp-track { height: 4px; margin-top: 4px; border-radius: 2px; background: #202b42; overflow: hidden; }
+.player-card-xp-track > span { display: block; height: 100%; background: var(--rarity); }
+.player-card-xp > p { display: flex; gap: 3px; font-size: 9px; color: #aab7ce; margin-top: 4px; }
+.player-card-xp > p > span:last-child { margin-left: auto; color: #8494b0; }
+.player-card-details { margin-top: 8px; padding-top: 6px; border-top: 1px solid #23304b; }
+.player-card-details summary { cursor: pointer; font-size: 10px; color: #b4c1d7; }
+.player-card-body > details[aria-label] { margin-top: 7px; }
+.player-card-body > details[aria-label] > summary { font-size: 10px; color: var(--rarity); }
+.player-card-editorial { min-height: 85px; display: flex; align-items: center; text-align: center; font-size: 11px; line-height: 1.6; color: #b4c1d7; }
+.player-rank-rule { padding: 5px 8px; border: 1px solid color-mix(in srgb, var(--rarity) 28%, transparent); border-radius: 6px; color: #adbcd4; }
+.player-rank-rule strong { color: var(--rarity); margin-right: 4px; }

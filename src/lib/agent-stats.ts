@@ -11,6 +11,7 @@ export type AgentStat = {
   bets: number; won: number; lost: number; voided: number; pending: number; noBet: number; hitRate: number | null; avgOdds: number | null; avgEstimated: number | null;
   recent: Array<{ predictionId: string; decision: string; round: number; model: string; fixtureId: string; jobId: string; match: string; league: string; label: string; odds: number | null; outcome: string | null; at: string; kickoff: string; status: string; score: string | null }>;
   upcoming: number; live: number; awaiting: number; editorial: boolean;
+  career: { won: number; lost: number };
   usage: { calls: number; failed: number; fallback: number; inTokens: number; outTokens: number; costToday: number; cost7d: number; costMonth: number; costTotal: number; avgLatencyMs: number | null; models: string[] };
 };
 
@@ -42,7 +43,13 @@ export async function agentStats(userId: string, admin = false, month = currentM
             sum(output_tokens) FILTER (WHERE to_char(created_at AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM') = $3) AS month_o
      FROM model_usage_logs WHERE $2 OR job_id IN (SELECT id FROM ticket_generation_jobs WHERE user_id=$1)
      GROUP BY 1,2,3,4`, [userId, scope === 'all', month === 'all' ? currentMonth() : month]);
-  const assignments = await activeAssignments();
+  const [assignments, careerRows] = await Promise.all([
+    activeAssignments(),
+    many<{ agent_id: string; won: number; lost: number }>(`${finalAgentPicksCte(true)}
+      SELECT agent_id,count(*) FILTER(WHERE outcome='WON')::int AS won,count(*) FILTER(WHERE outcome='LOST')::int AS lost
+      FROM final_picks WHERE decision='BET_CANDIDATE' GROUP BY agent_id`, [scope === 'mine' ? userId : null]),
+  ]);
+  const career = new Map(careerRows.map((r) => [r.agent_id, { won: r.won, lost: r.lost }]));
   const stats: AgentStat[] = AGENTS.map((a) => {
     const mine = picks.filter((p) => p.agent_id === a.id);
     const bets = mine.filter((p) => p.decision === 'BET_CANDIDATE');
@@ -62,6 +69,7 @@ export async function agentStats(userId: string, admin = false, month = currentM
       live: bets.filter((p) => !p.outcome && p.status === 'in').length,
       awaiting: bets.filter((p) => !p.outcome && p.status !== 'in' && !(p.status === 'pre' && p.kickoff_utc.getTime() > Date.now())).length,
       editorial: a.id === 'scout' || a.id === 'corina',
+      career: career.get(a.id) ?? { won: 0, lost: 0 },
       hitRate: won + lost ? won / (won + lost) : null,
       avgOdds: priced.length ? priced.reduce((s, p) => s + Number(p.odds), 0) / priced.length : null,
       avgEstimated: est.length ? est.reduce((s, p) => s + Number(p.estimated_probability), 0) / est.length : null,

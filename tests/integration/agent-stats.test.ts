@@ -41,9 +41,9 @@ it('makes community and personal scopes explicit and groups a midnight match by 
   await pick(a, f.id, '2026-10-20T08:00:00Z', 0, 'BET_CANDIDATE', 'WON');
   await pick(b, f.id, '2026-10-21T08:00:00Z', 0, 'BET_CANDIDATE', 'LOST');
   const agent = async (month: string, scope: 'all' | 'mine') => (await agentStats(a, false, month, scope)).agents.find((x) => x.id === 'robert')!;
-  expect(await agent('2026-10', 'all')).toMatchObject({ bets: 0 });
-  expect(await agent('2026-11', 'all')).toMatchObject({ bets: 1, lost: 1 });
-  expect(await agent('2026-11', 'mine')).toMatchObject({ bets: 1, won: 1 });
+  expect(await agent('2026-10', 'all')).toMatchObject({ bets: 0, career: { won: 0, lost: 1 } });
+  expect(await agent('2026-11', 'all')).toMatchObject({ bets: 1, lost: 1, career: { won: 0, lost: 1 } });
+  expect(await agent('2026-11', 'mine')).toMatchObject({ bets: 1, won: 1, career: { won: 1, lost: 0 } });
 });
 
 it('uses only decided picks for average odds/probability and exposes all final positions in history', async () => {

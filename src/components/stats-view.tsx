@@ -1,7 +1,7 @@
-import { AGENT_META } from '@/lib/format';
 import type { AgentStat } from '@/lib/agent-stats';
 import Link from 'next/link';
-import { AgentPredictionHistory } from './agent-prediction-history';
+import { AgentPlayerCard } from './agent-player-card';
+import { AGENT_RANKS } from '@/lib/agent-progression';
 
 const money = (x: number) => (x < 0.01 && x > 0 ? '< 0,01 $' : `${x.toFixed(2).replace('.', ',')} $`);
 const num = (x: number) => new Intl.NumberFormat('ro-RO').format(Math.round(x));
@@ -39,45 +39,12 @@ export function StatsView({ agents, totals, month, scope = 'all' }: { agents: Ag
       <p className="-mt-5 text-[11px] text-muted">Costul e calculat din tokenii consumați și prețul listat pe OpenRouter pentru fiecare model; factura exactă o vezi în contul OpenRouter.</p>
 
       <h2 className="font-display text-xl font-bold">Clasamentul {month === 'all' ? 'de la început' : `lunii ${monthName(month)}`}</h2>
-      <section aria-label="Agenții" className="-mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {sorted.map((a, rank) => {
-          const m = AGENT_META[a.id];
-          const decided = a.won + a.lost;
-          return (
-            <article id={`agent-${a.id}`} key={a.id} className="flex flex-col rounded-[1.4rem] border border-line bg-panel/60 p-4" style={{ borderTopColor: m?.accent, borderTopWidth: 3 }}>
-              <header className="flex items-center gap-3">
-                {m?.img ? <img src={m.img} alt="" className="h-12 w-12 rounded-full border-2 object-cover" style={{ borderColor: m.accent }} /> : <span className="h-12 w-12 rounded-full bg-panel-2" />}
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate font-display text-lg font-bold leading-tight" style={{ color: m?.accent }}><span className="mr-1.5 text-sm text-muted tabular">{decided ? `${rank + 1}.` : ''}</span>{a.name}</h2>
-                  <p className="truncate text-[11px] text-muted">{a.ownModel ?? a.model ?? 'încă nefolosit'}{!a.editorial && a.ownModelShare !== null && a.ownModelShare < 0.995 ? `, ${Math.round(a.ownModelShare * 100)}% din pronosticuri pe el` : ''}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-display text-2xl font-bold tabular">{a.hitRate === null ? '—' : `${Math.round(a.hitRate * 100)}%`}</p>
-                  <p className="text-[11px] text-muted">{decided ? `${a.won} din ${decided} verzi` : 'nimic decis încă'}</p>
-                </div>
-              </header>
-              <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-line" aria-hidden>
-                {a.bets > 0 && <><span className="bg-emerald" style={{ width: `${(a.won / a.bets) * 100}%` }} /><span className="bg-rose" style={{ width: `${(a.lost / a.bets) * 100}%` }} /><span className="bg-muted/40" style={{ width: `${((a.pending + a.voided) / a.bets) * 100}%` }} /></>}
-              </div>
-              <dl className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-                <div><dt className="text-muted">Verzi</dt><dd className="font-bold text-emerald tabular">{a.won}</dd></div>
-                <div><dt className="text-muted">Roșii</dt><dd className="font-bold text-rose tabular">{a.lost}</dd></div>
-                <div><dt className="text-muted">În așteptare</dt><dd className="font-bold tabular">{a.pending}</dd></div>
-                <div><dt className="text-muted">Anulate</dt><dd className="font-bold tabular">{a.voided}</dd></div><div><dt className="text-muted">Pronosticuri</dt><dd className="font-bold tabular">{a.bets}</dd></div><div><dt className="text-muted">NO BET</dt><dd className="font-bold tabular">{a.noBet}</dd></div>
-                <div><dt className="text-muted">Cotă medie (decise)</dt><dd className="font-bold tabular">{a.avgOdds ? a.avgOdds.toFixed(2) : '—'}</dd></div>
-                <div><dt className="text-muted">Estimare medie (decise)</dt><dd className="font-bold tabular">{a.avgEstimated ? `${Math.round(a.avgEstimated * 100)}%` : '—'}</dd></div>
-              </dl>
-              {!a.editorial && <p className="mt-2 text-[11px] text-muted">{a.upcoming} viitoare · {a.live} live · {a.awaiting} așteaptă confirmare</p>}
-              {a.editorial && <p className="mt-2 text-xs text-muted">{a.id === 'corina' ? 'Decizie editorială: selectează și prioritizează știrile, citează sursele și semnalează contradicțiile; fără voturi.' : 'Cercetare și context; fără pronosticuri proprii.'}</p>}
-              {!a.bets && a.usage.failed > 0 && !a.editorial && <p className="mt-2 text-xs text-gold">Niciun pronostic valid salvat. {a.usage.failed} apeluri au eșuat; abținerile nu sunt voturi NO BET.</p>}
-              <div className="mt-3 rounded-xl border border-line bg-ink/40 px-3 py-2 text-xs text-muted">
-                <p><span className="text-text tabular">{money(a.usage.costToday)}</span> azi, <span className="text-text tabular">{money(a.usage.cost7d)}</span> în 7 zile, <span className="text-text tabular">{money(a.usage.costMonth)}</span> luna {month === 'all' ? 'curentă' : monthName(month)}, <span className="text-text tabular">{money(a.usage.costTotal)}</span> total</p>
-                <p className="mt-0.5">{num(a.usage.calls)} apeluri, {num(a.usage.inTokens + a.usage.outTokens)} tokeni{a.usage.avgLatencyMs ? `, ${(a.usage.avgLatencyMs / 1000).toFixed(1)} s pe răspuns` : ''}{a.usage.calls ? `, ${Math.round((a.usage.fallback / a.usage.calls) * 100)}% pe alte modele` : ''}{a.usage.failed ? `, ${a.usage.failed} eșuate` : ''}</p>
-              </div>
-              {a.recent.length > 0 && <AgentPredictionHistory agent={a.name} entries={a.recent} />}
-            </article>
-          );
-        })}
+      <div className="!-mt-5 space-y-2">
+        <p className="text-xs text-muted">Rezultatele respectă luna aleasă. Nivelul și rangul folosesc cariera completă din sfera selectată.</p>
+        <details className="text-xs text-muted"><summary className="cursor-pointer text-cyan">Cum cresc nivelul și rangul</summary><div className="mt-2 space-y-2"><p>Un rezultat verde adaugă 30 XP; unul roșu scade 15 XP, până la minimum zero. Fiecare 100 XP înseamnă un nivel. Rezultatele în așteptare, anulate și NO BET nu modifică nivelul.</p><div className="flex flex-wrap gap-2">{AGENT_RANKS.map((r) => <span key={r.id} className="player-rank-rule" data-rarity={r.id}><strong>{r.name}</strong> {r.minimum ? `≥ ${r.minimum} decise · ≥ ${Math.round(r.rate * 100)}% verzi` : 'rang inițial'}</span>)}</div><p>Rangul poate scădea după rezultate roșii sau corecții oficiale. Indicator vizual al istoricului; nu estimează rezultatele viitoare. Corina și SCOUT au roluri editoriale.</p></div></details>
+      </div>
+      <section aria-label="Agenții" className="agent-player-grid">
+        {sorted.map((a, rank) => <AgentPlayerCard key={a.id} agent={a} place={rank + 1} monthLabel={month === 'all' ? 'luna curentă' : monthName(month)} />)}
       </section>
     </div>
   );
