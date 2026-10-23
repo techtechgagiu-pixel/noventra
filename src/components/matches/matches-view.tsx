@@ -5,11 +5,14 @@ import { RefreshCw, Search } from 'lucide-react';
 import { api } from '@/lib/format';
 import { useVisibleRefresh } from '@/lib/use-visible-refresh';
 import type { MatchRow } from '@/lib/catalog';
+import type { AdditionalSourceStatus } from '@/lib/sports/api-football-catalog';
 import { LeaguePicker, type LeagueOption } from './league-picker';
 
-type Data = { rows: MatchRow[]; leagues: LeagueOption[]; refreshing: boolean; updatedAt: string | null; errors: number };
+type Data = { rows: MatchRow[]; leagues: LeagueOption[]; refreshing: boolean; updatedAt: string | null; errors: number; additionalSource?: AdditionalSourceStatus };
 const TZ = 'Europe/Bucharest';
-const dayOf = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(iso));
+const dayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
+const dayOf = (iso: string) => dayFormatter.format(new Date(iso));
+const PAGE_SIZE = 120;
 const time = (iso: string) => new Date(iso).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', timeZone: TZ });
 const dayLabel = (d: string, today: string) => {
   const diff = Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000);
@@ -22,6 +25,7 @@ const STATUS: Array<{ id: Status; label: string }> = [
 ];
 
 function Verdict({ m }: { m: MatchRow }) {
+  if (m.source === 'api-football') return <span className="text-muted/70">API-Football · program și scoruri{m.status === 'postponed' ? ' · amânat' : m.status === 'cancelled' ? ' · anulat' : ''}</span>;
   const a = m.analysis;
   if (a?.onTicket) {
     const outcome = a.selectionOutcome;
@@ -44,9 +48,12 @@ export function MatchesView() {
   const [hideDone, setHideDone] = useState(true);
   const [q, setQ] = useState('');
   const [today, setToday] = useState('');
+  const [source, setSource] = useState<'all' | 'existing' | 'api-football'>('all');
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  useEffect(() => { setLimit(PAGE_SIZE); }, [leagues, day, status, hideDone, q, source]);
 
   const load = useCallback(async () => {
-    try { setData(await api<Data>('/api/matches')); setError(null); } catch (e) { setError((e as Error).message); }
+    try { setData(await api<Data>('/api/matches?includeInformational=1')); setError(null); } catch (e) { setError((e as Error).message); }
   }, []);
   useEffect(() => { setToday(dayOf(new Date().toISOString())); void load(); }, [load]);
   useVisibleRefresh(load);
@@ -54,17 +61,22 @@ export function MatchesView() {
   useEffect(() => { if (!data?.refreshing) return; const t = setTimeout(load, 15_000); return () => clearTimeout(t); }, [data, load]);
 
   const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  const base = useMemo(() => (data?.rows ?? []).filter((m) => (!hideDone || m.status !== 'post') && (!leagues.length || leagues.includes(m.leagueId)) && (!q || norm(`${m.home} ${m.away} ${m.league} ${m.country}`).includes(norm(q)))), [data, leagues, q, hideDone]);
+  const base = useMemo(() => (data?.rows ?? []).filter((m) => (source === 'all' || (source === 'api-football' ? m.source === source : m.source !== 'api-football')) && (!hideDone || m.status !== 'post') && (!leagues.length || leagues.includes(m.leagueId)) && (!q || norm(`${m.home} ${m.away} ${m.league} ${m.country}`).includes(norm(q)))), [data, leagues, q, hideDone, source]);
   const days = useMemo(() => [...new Set(base.map((m) => dayOf(m.kickoff)))].sort(), [base]);
-  const shown = base.filter((m) => (day === 'all' || dayOf(m.kickoff) === day) && (
-    status === 'all' ? true : status === 'odds' ? !!m.odds : status === 'analyzed' ? !!m.analysis : status === 'ticket' ? !!m.analysis?.onTicket : !m.analysis && !!m.odds));
+  const shown = useMemo(() => base.filter((m) => (day === 'all' || dayOf(m.kickoff) === day) && (
+    status === 'all' ? true : status === 'odds' ? !!m.odds : status === 'analyzed' ? !!m.analysis : status === 'ticket' ? !!m.analysis?.onTicket : !m.analysis && !!m.odds))
+    .sort((a, b) => a.kickoff.localeCompare(b.kickoff) || a.id.localeCompare(b.id)), [base, day, status]);
   const groups = useMemo(() => {
     const by = new Map<string, MatchRow[]>();
-    for (const m of shown) { const k = `${m.country} · ${m.league}`; by.set(k, [...(by.get(k) ?? []), m]); }
+    for (const m of shown.slice(0, limit)) { const k = `${m.country} · ${m.league}`; by.set(k, [...(by.get(k) ?? []), m]); }
     return [...by.entries()];
-  }, [shown]);
+  }, [shown, limit]);
   const counts = { all: data?.rows.length ?? 0, odds: data?.rows.filter((m) => m.odds).length ?? 0, analyzed: data?.rows.filter((m) => m.analysis).length ?? 0 };
-  const pickerLeagues = (data?.leagues ?? []).map((l) => ({ ...l, count: (data?.rows ?? []).filter((m) => m.leagueId === l.id && (!hideDone || m.status !== 'post')).length }));
+  const pickerLeagues = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of data?.rows ?? []) if ((!hideDone || m.status !== 'post') && (source === 'all' || (source === 'api-football' ? m.source === source : m.source !== 'api-football'))) counts.set(m.leagueId, (counts.get(m.leagueId) ?? 0) + 1);
+    return (data?.leagues ?? []).map((l) => ({ ...l, count: counts.get(l.id) ?? 0 }));
+  }, [data, hideDone, source]);
 
   return (
     <div className="space-y-5">
@@ -81,6 +93,19 @@ export function MatchesView() {
           <button onClick={() => void load()} className="btn btn-ghost px-2 py-1" aria-label="Reîncarcă"><RefreshCw size={14} /></button>
         </div>
       </div>
+
+      {data?.additionalSource?.configured && <div className="rounded-xl border border-line bg-ink/40 px-3 py-2 text-xs text-muted" role="status">
+        <span className="font-semibold text-cyan">API-Football + ESPN + LPF</span>
+        {' · '}{data.additionalSource.datesLoaded}/8 zile încărcate
+        {data.additionalSource.updatedAt && <> · date API-Football de la {new Date(data.additionalSource.updatedAt).toLocaleString('ro-RO', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</>}
+        {data.additionalSource.refreshing && ' · se încarcă programul suplimentar'}
+        {data.additionalSource.error && <p className="mt-1 text-gold">{data.additionalSource.error}</p>}
+      </div>}
+
+      {data?.additionalSource?.configured && <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sursa meciurilor">
+        {([{ id: 'all', label: 'Toate sursele' }, { id: 'existing', label: 'ESPN / LPF' }, { id: 'api-football', label: 'API-Football' }] as const).map((s) =>
+          <button key={s.id} onClick={() => { setSource(s.id); setLeagues([]); setDay('all'); setStatus('all'); }} aria-pressed={source === s.id} className={`chip ${source === s.id ? 'text-cyan' : 'text-muted'}`}>{s.label}</button>)}
+      </div>}
 
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <LeaguePicker leagues={pickerLeagues} value={leagues} onChange={setLeagues} />
@@ -136,8 +161,12 @@ export function MatchesView() {
           </section>
         ))}
       </div>
+      {shown.length > 0 && <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-muted">
+        <span>Afișate {Math.min(limit, shown.length)} din {shown.length} meciuri</span>
+        {limit < shown.length && <button onClick={() => setLimit((n) => n + PAGE_SIZE)} className="btn btn-ghost">Arată mai multe meciuri</button>}
+      </div>}
       {data && data.errors > 0 && <p className="text-xs text-muted">{data.errors} cereri către sursă au eșuat; meciurile lor apar la următoarea actualizare.</p>}
-      <p className="text-xs text-muted">Sursa: ESPN (cote Bet365/DraftKings) și LPF pentru SuperLiga. Doar meciurile cu cote pot intra la analiză.</p>
+      <p className="text-xs text-muted">Surse: ESPN și LPF pentru SuperLiga{data?.additionalSource?.configured ? ', completate de API-Football pentru program și scoruri. Programul suplimentar este informativ și nu intră în analizele agenților. Scorurile API-Football se reîmprospătează la cel mult o cerere pe 30 de minute pentru ziua curentă și pot avea întârziere' : ''}.</p>
     </div>
   );
 }

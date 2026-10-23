@@ -10,5 +10,5 @@ export async function GET(req: NextRequest) {
   const user = await requireUser(req);
   if (user instanceof NextResponse) return user;
   if (rateLimited(`matches:${user.id}`, 30, 60_000)) return json({ error: 'Prea multe cereri.' }, 429);
-  return json(await matchList(user.id, req.nextUrl.searchParams.get('scope') === 'mine' ? 'mine' : 'all'));
+  return json(await matchList(user.id, req.nextUrl.searchParams.get('scope') === 'mine' ? 'mine' : 'all', req.nextUrl.searchParams.get('includeInformational') === '1'));
 }
