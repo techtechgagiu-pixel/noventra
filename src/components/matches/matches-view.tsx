@@ -72,7 +72,7 @@ export function MatchesView() {
         <div>
           <h1 className="font-display text-2xl font-bold">Toate meciurile</h1>
           <p className="text-sm text-muted">
-            {data ? <>{counts.all} meciuri în {data.leagues.filter((l) => l.count).length} ligi · {counts.odds} cu cote · {counts.analyzed} analizate de echipă</> : 'Încarc meciurile din toate ligile…'}
+            {data ? <>{counts.all} meciuri în {data.leagues.filter((l) => l.count).length} ligi · {counts.odds} cu cote · {counts.analyzed} analizate în comunitate</> : 'Încarc meciurile din toate ligile…'}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2 text-xs text-muted">

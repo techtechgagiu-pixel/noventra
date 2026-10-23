@@ -1,10 +1,10 @@
-import { AGENT_META, fmtDateTime } from '@/lib/format';
+import { AGENT_META } from '@/lib/format';
 import type { AgentStat } from '@/lib/agent-stats';
 import Link from 'next/link';
+import { AgentPredictionHistory } from './agent-prediction-history';
 
 const money = (x: number) => (x < 0.01 && x > 0 ? '< 0,01 $' : `${x.toFixed(2).replace('.', ',')} $`);
 const num = (x: number) => new Intl.NumberFormat('ro-RO').format(Math.round(x));
-const OUT: Record<string, { t: string; c: string }> = { WON: { t: 'verde', c: 'bg-emerald' }, LOST: { t: 'roșu', c: 'bg-rose' }, VOID: { t: 'anulat', c: 'bg-muted' } };
 
 const MONTHS = ['ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie', 'iulie', 'august', 'septembrie', 'octombrie', 'noiembrie', 'decembrie'];
 const monthName = (m: string) => (m === 'all' ? 'de la început' : `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`);
@@ -19,7 +19,7 @@ export function StatsView({ agents, totals, month, scope = 'all' }: { agents: Ag
     <div className="space-y-8">
       <div>
         <h1 className="font-display text-[1.9rem] font-bold leading-tight tracking-tight">Statistici</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Ultima poziție a fiecărui agent pe fiecare meci, fără dublarea analizelor repetate. Luna se referă la data meciului. Scorurile finale actualizează rezultatele; data analizei este afișată separat.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Ultima poziție a fiecărui agent pe fiecare meci, fără dublarea analizelor repetate. Luna se referă la data meciului. Rata și mediile folosesc doar selecțiile decise (verde/roșu), inclusiv cele rămase în afara biletelor. Data analizei este afișată separat.</p>
         <nav aria-label="Sfera statisticilor" className="mt-3 flex gap-2"><Link href={`/?tab=statistici&luna=${month}&scope=all`} aria-current={scope === 'all' ? 'page' : undefined} className={`chip ${scope === 'all' ? 'text-cyan' : 'text-muted'}`}>Toată comunitatea</Link><Link href={`/?tab=statistici&luna=${month}&scope=mine`} aria-current={scope === 'mine' ? 'page' : undefined} className={`chip ${scope === 'mine' ? 'text-cyan' : 'text-muted'}`}>Analizele mele</Link></nav>
         <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Luna">
           {choices.map((c) => <a key={c} href={`/?tab=statistici&luna=${c}&scope=${scope}`} aria-current={c === month ? 'page' : undefined} className={`chip ${c === month ? 'text-cyan' : 'text-muted'}`}>{c === 'all' ? 'De la început' : monthName(c)}</a>)}
@@ -44,7 +44,7 @@ export function StatsView({ agents, totals, month, scope = 'all' }: { agents: Ag
           const m = AGENT_META[a.id];
           const decided = a.won + a.lost;
           return (
-            <article key={a.id} className="flex flex-col rounded-[1.4rem] border border-line bg-panel/60 p-4" style={{ borderTopColor: m?.accent, borderTopWidth: 3 }}>
+            <article id={`agent-${a.id}`} key={a.id} className="flex flex-col rounded-[1.4rem] border border-line bg-panel/60 p-4" style={{ borderTopColor: m?.accent, borderTopWidth: 3 }}>
               <header className="flex items-center gap-3">
                 {m?.img ? <img src={m.img} alt="" className="h-12 w-12 rounded-full border-2 object-cover" style={{ borderColor: m.accent }} /> : <span className="h-12 w-12 rounded-full bg-panel-2" />}
                 <div className="min-w-0 flex-1">
@@ -63,30 +63,18 @@ export function StatsView({ agents, totals, month, scope = 'all' }: { agents: Ag
                 <div><dt className="text-muted">Verzi</dt><dd className="font-bold text-emerald tabular">{a.won}</dd></div>
                 <div><dt className="text-muted">Roșii</dt><dd className="font-bold text-rose tabular">{a.lost}</dd></div>
                 <div><dt className="text-muted">În așteptare</dt><dd className="font-bold tabular">{a.pending}</dd></div>
-                <div><dt className="text-muted">NO BET</dt><dd className="font-bold tabular">{a.noBet}</dd></div>
-                <div><dt className="text-muted">Cotă medie</dt><dd className="font-bold tabular">{a.avgOdds ? a.avgOdds.toFixed(2) : '—'}</dd></div>
-                <div><dt className="text-muted">Estimare medie</dt><dd className="font-bold tabular">{a.avgEstimated ? `${Math.round(a.avgEstimated * 100)}%` : '—'}</dd></div>
+                <div><dt className="text-muted">Anulate</dt><dd className="font-bold tabular">{a.voided}</dd></div><div><dt className="text-muted">Pronosticuri</dt><dd className="font-bold tabular">{a.bets}</dd></div><div><dt className="text-muted">NO BET</dt><dd className="font-bold tabular">{a.noBet}</dd></div>
+                <div><dt className="text-muted">Cotă medie (decise)</dt><dd className="font-bold tabular">{a.avgOdds ? a.avgOdds.toFixed(2) : '—'}</dd></div>
+                <div><dt className="text-muted">Estimare medie (decise)</dt><dd className="font-bold tabular">{a.avgEstimated ? `${Math.round(a.avgEstimated * 100)}%` : '—'}</dd></div>
               </dl>
               {!a.editorial && <p className="mt-2 text-[11px] text-muted">{a.upcoming} viitoare · {a.live} live · {a.awaiting} așteaptă confirmare</p>}
               {a.editorial && <p className="mt-2 text-xs text-muted">{a.id === 'corina' ? 'Decizie editorială: selectează și prioritizează știrile, citează sursele și semnalează contradicțiile; fără voturi.' : 'Cercetare și context; fără pronosticuri proprii.'}</p>}
               {!a.bets && a.usage.failed > 0 && !a.editorial && <p className="mt-2 text-xs text-gold">Niciun pronostic valid salvat. {a.usage.failed} apeluri au eșuat; abținerile nu sunt voturi NO BET.</p>}
               <div className="mt-3 rounded-xl border border-line bg-ink/40 px-3 py-2 text-xs text-muted">
-                <p><span className="text-text tabular">{money(a.usage.costToday)}</span> azi, <span className="text-text tabular">{money(a.usage.cost7d)}</span> în 7 zile, <span className="text-text tabular">{money(a.usage.costMonth)}</span> luna aceasta, <span className="text-text tabular">{money(a.usage.costTotal)}</span> total</p>
-                <p className="mt-0.5">{num(a.usage.calls)} apeluri, {num(a.usage.inTokens + a.usage.outTokens)} tokeni{a.usage.avgLatencyMs ? `, ${(a.usage.avgLatencyMs / 1000).toFixed(1)} s pe răspuns` : ''}{a.usage.calls ? `, ${Math.round((a.usage.fallback / a.usage.calls) * 100)}% pe rezervă` : ''}{a.usage.failed ? `, ${a.usage.failed} eșuate` : ''}</p>
+                <p><span className="text-text tabular">{money(a.usage.costToday)}</span> azi, <span className="text-text tabular">{money(a.usage.cost7d)}</span> în 7 zile, <span className="text-text tabular">{money(a.usage.costMonth)}</span> luna {month === 'all' ? 'curentă' : monthName(month)}, <span className="text-text tabular">{money(a.usage.costTotal)}</span> total</p>
+                <p className="mt-0.5">{num(a.usage.calls)} apeluri, {num(a.usage.inTokens + a.usage.outTokens)} tokeni{a.usage.avgLatencyMs ? `, ${(a.usage.avgLatencyMs / 1000).toFixed(1)} s pe răspuns` : ''}{a.usage.calls ? `, ${Math.round((a.usage.fallback / a.usage.calls) * 100)}% pe alte modele` : ''}{a.usage.failed ? `, ${a.usage.failed} eșuate` : ''}</p>
               </div>
-              {a.recent.length > 0 && (
-                <details className="group mt-3">
-                  <summary className="cursor-pointer text-xs font-semibold text-cyan">Ultimele pronosticuri</summary>
-                  <ul className="mt-2 space-y-1.5">
-                    {a.recent.map((r, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs">
-                        <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${OUT[r.outcome ?? '']?.c ?? 'border border-muted'}`} title={OUT[r.outcome ?? '']?.t ?? 'în așteptare'} />
-                        <span className="min-w-0 flex-1"><span className="text-text">{r.match}{r.score ? ` (${r.score})` : ''}</span><span className="block text-muted">{r.league} · Meci: {fmtDateTime(r.kickoff)}</span><span className="block text-muted">{r.label}{r.odds ? ` @ ${r.odds.toFixed(2)}` : ''}</span><span className="block text-muted">Analizat: {fmtDateTime(r.at)} · <Link href={`/?tab=analiza&job=${r.jobId}`} className="text-cyan">jurnal</Link>{r.fixtureId.startsWith('espn:') && <> · <a className="text-cyan" href={`https://www.espn.com/soccer/match/_/gameId/${r.fixtureId.slice(5)}`} target="_blank" rel="noreferrer">sursa meciului</a></>}</span></span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
+              {a.recent.length > 0 && <AgentPredictionHistory agent={a.name} entries={a.recent} />}
             </article>
           );
         })}

@@ -57,8 +57,8 @@ async function loadMatchFacts() {
     `SELECT DISTINCT f.id, f.provider_id, l.provider_key, f.facts_checked_at FROM fixtures f JOIN leagues l ON l.id=f.league_id
      WHERE f.status='post' AND f.provider='espn' AND (f.ht_home IS NULL OR f.corners_home IS NULL)
        AND (f.facts_checked_at IS NULL OR f.facts_checked_at < now() - interval '15 minutes')
-       AND (EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING' AND s.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):')
-         OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.outcome IS NULL AND p.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):'))
+       AND (EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):')
+         OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):'))
      ORDER BY f.facts_checked_at NULLS FIRST, f.id LIMIT 40`);
   for (const r of rows) {
     try {
@@ -78,18 +78,24 @@ async function loadMatchFacts() {
 /** A finished leg whose extra facts never arrive (≥ 3 days) is voided rather than guessed. */
 const factsMissingTooLong = (r: FactRow) => Date.now() - new Date(r.kickoff_utc).getTime() > 72 * 3600_000;
 
-/** Settles every agent pick (not only ticket legs) so each agent builds a verified track record. */
+/** Resolve saved selections only from confirmed fixture facts. Never infer a final from elapsed time. */
+function resolvedOutcome(r: FactRow, key: string): 'WON' | 'LOST' | 'VOID' | null {
+  if (r.status === 'post' && r.home_score !== null && r.away_score !== null) return settleMarket(key,r.home_score,r.away_score,factsOf(r)) ?? (factsMissingTooLong(r) ? 'VOID' : null);
+  if (r.status === 'cancelled' || (r.status === 'postponed' && Date.now()-new Date(r.kickoff_utc).getTime()>48*3600_000)) return 'VOID';
+  return null;
+}
+
+/** Reconcile cached outcomes, even if a previous write stamped an incorrect but recent result.
+ * Writes are batched and only differing outcomes are written; historical picks and prices stay intact. */
 export async function settleAgentPredictions() {
-  const rows = await many<FactRow & { id: string; market_key: string }>(
-    `SELECT p.id, p.market_key, f.status, f.home_score, f.away_score, f.kickoff_utc, f.ht_home, f.ht_away, f.corners_home, f.corners_away FROM agent_predictions p JOIN fixtures f ON f.id=p.fixture_id
-     WHERE p.decision='BET_CANDIDATE' AND p.market_key IS NOT NULL AND (p.outcome IS NULL OR p.settled_at < GREATEST(f.updated_at,COALESCE(f.facts_checked_at,f.updated_at))) AND f.status IN ('post','cancelled','postponed') ORDER BY p.settled_at NULLS FIRST,p.id LIMIT 2000`,
-  );
-  for (const r of rows) {
-    let outcome: string | null = null;
-    if (r.status === 'post' && r.home_score !== null && r.away_score !== null) outcome = settleMarket(r.market_key, r.home_score, r.away_score, factsOf(r)) ?? (factsMissingTooLong(r) ? 'VOID' : null);
-    else if (r.status === 'cancelled' || (r.status === 'postponed' && Date.now() - new Date(r.kickoff_utc).getTime() > 48 * 3600_000)) outcome = 'VOID';
-    if (outcome) await query('UPDATE agent_predictions SET outcome=$2, settled_at=now() WHERE id=$1', [r.id, outcome]);
-  }
+  const rows = await many<FactRow & { id: string; market_key: string; outcome: string | null }>(
+    `SELECT p.id,p.market_key,p.outcome,f.status,f.home_score,f.away_score,f.kickoff_utc,f.ht_home,f.ht_away,f.corners_home,f.corners_away
+     FROM agent_predictions p JOIN fixtures f ON f.id=p.fixture_id
+     WHERE p.decision='BET_CANDIDATE' AND p.market_key IS NOT NULL AND f.status IN ('post','cancelled','postponed') ORDER BY p.id`);
+  const changed = rows.flatMap((r) => { const outcome=resolvedOutcome(r,r.market_key); return outcome!==r.outcome ? [{id:String(r.id),outcome}] : []; });
+  for (let i=0;i<changed.length;i+=500) await query(`UPDATE agent_predictions p SET outcome=u.outcome,settled_at=CASE WHEN u.outcome IS NULL THEN NULL ELSE now() END
+    FROM jsonb_to_recordset($1::jsonb) AS u(id bigint,outcome text) WHERE p.id=u.id`, [JSON.stringify(changed.slice(i,i+500))]);
+  return changed.length;
 }
 
 // Next bundles may load this module more than once; scheduling and the guard belong to the process.
@@ -114,8 +120,8 @@ export async function settlePending() {
     let sourceErrors = 0;
     const due = await many<{ fixture_id: string; kickoff_utc: Date; league_id: string; status: string }>(
       `SELECT DISTINCT f.id AS fixture_id, f.kickoff_utc, f.league_id, f.status, f.results_checked_at FROM fixtures f
-       WHERE f.kickoff_utc < now() - interval '2 hours' AND f.provider='espn'
-       AND (f.status NOT IN ('post','cancelled') OR (f.status='post' AND f.kickoff_utc>now()-interval '48 hours' AND (f.results_checked_at IS NULL OR f.results_checked_at<now()-interval '30 minutes'))) AND (
+       WHERE f.kickoff_utc <= now() AND f.provider='espn'
+       AND ((f.status NOT IN ('post','cancelled') AND (f.results_checked_at IS NULL OR f.results_checked_at<now()-interval '5 minutes')) OR (f.status='post' AND f.kickoff_utc>now()-interval '48 hours' AND (f.results_checked_at IS NULL OR f.results_checked_at<now()-interval '30 minutes'))) AND (
          EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING') OR
          EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.outcome IS NULL) OR
          (f.status='post' AND (EXISTS(SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id) OR EXISTS(SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE'))))
@@ -141,23 +147,22 @@ export async function settlePending() {
     await query('UPDATE fixtures SET results_checked_at=now() WHERE id=ANY($1)', [due.map((d) => d.fixture_id)]);
     }
     sourceErrors += await loadMatchFacts();
-    await settleAgentPredictions();
-    const rows = await many<FactRow & { id: string; ticket_id: string; market_key: string }>(
-      `SELECT s.id, s.ticket_id, s.market_key, f.status, f.home_score, f.away_score, f.kickoff_utc, f.ht_home, f.ht_away, f.corners_home, f.corners_away FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE s.outcome='PENDING' OR (f.status IN ('post','cancelled') AND (s.settled_at IS NULL OR s.settled_at < GREATEST(f.updated_at,COALESCE(f.facts_checked_at,f.updated_at))))`,
-    );
-    const touched = new Set<string>();
-    for (const r of rows) {
-      let outcome: string | null = null;
-      if (r.status === 'post' && r.home_score !== null && r.away_score !== null) outcome = settleMarket(r.market_key, r.home_score, r.away_score, factsOf(r)) ?? (factsMissingTooLong(r) ? 'VOID' : null);
-      else if (r.status === 'cancelled' || (r.status === 'postponed' && Date.now() - new Date(r.kickoff_utc).getTime() > 48 * 3600_000)) outcome = 'VOID';
-      if (outcome) { await query('UPDATE ticket_selections SET outcome=$2,settled_at=now() WHERE id=$1', [r.id, outcome]); touched.add(r.ticket_id); }
-    }
-    for (const t of touched) {
-      const legs = await many<{ outcome: string }>('SELECT outcome FROM ticket_selections WHERE ticket_id=$1', [t]);
-      const o = ticketOutcome(legs.map((l) => l.outcome));
-      await query(`UPDATE tickets SET outcome_status=$2, settled_at=CASE WHEN $2='PENDING' THEN NULL ELSE now() END WHERE id=$1`, [t, o]);
-    }
-    return { checkedFixtures: due.length, sourceErrors, ticketsChecked: touched.size };
+    const predictionsChanged = await settleAgentPredictions();
+    const rows = await many<FactRow & { id: string; ticket_id: string; market_key: string; outcome: string }>(
+      `SELECT s.id,s.ticket_id,s.market_key,s.outcome,f.status,f.home_score,f.away_score,f.kickoff_utc,f.ht_home,f.ht_away,f.corners_home,f.corners_away
+       FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE f.status IN ('post','cancelled','postponed')`);
+    const changed = rows.flatMap((r) => { const outcome=resolvedOutcome(r,r.market_key) ?? 'PENDING'; return outcome!==r.outcome ? [{id:String(r.id),outcome,ticket:r.ticket_id}] : []; });
+    for (let i=0;i<changed.length;i+=500) await query(`UPDATE ticket_selections s SET outcome=u.outcome,settled_at=CASE WHEN u.outcome='PENDING' THEN NULL ELSE now() END
+      FROM jsonb_to_recordset($1::jsonb) AS u(id bigint,outcome text) WHERE s.id=u.id`, [JSON.stringify(changed.slice(i,i+500))]);
+    // Recompute every completed ticket aggregate, including previously stale totals with already-correct legs.
+    const tickets = await many<{ id: string; outcome_status: string; outcomes: string[] }>(
+      `SELECT t.id,t.outcome_status,array_agg(s.outcome) AS outcomes FROM tickets t JOIN ticket_selections s ON s.ticket_id=t.id
+       WHERE t.generation_status='COMPLETED' GROUP BY t.id`);
+    const ticketChanges = tickets.flatMap((t) => { const outcome=ticketOutcome(t.outcomes); return outcome!==t.outcome_status ? [{id:t.id,outcome}] : []; });
+    if (ticketChanges.length) await query(`UPDATE tickets t SET outcome_status=u.outcome,settled_at=CASE WHEN u.outcome='PENDING' THEN NULL ELSE now() END
+      FROM jsonb_to_recordset($1::jsonb) AS u(id uuid,outcome text) WHERE t.id=u.id`, [JSON.stringify(ticketChanges)]);
+    const touched = new Set([...changed.map((x) => x.ticket), ...ticketChanges.map((x) => x.id)]);
+    return { checkedFixtures: due.length, sourceErrors, ticketsChecked: touched.size, predictionsChanged, selectionsChanged: changed.length, ticketsChanged: ticketChanges.length };
     });
   } catch (error) {
     console.warn(JSON.stringify({ event: 'settlement_failed', message: (error as Error).message }));

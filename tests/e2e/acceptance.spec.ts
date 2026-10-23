@@ -58,6 +58,7 @@ test('another account sees shared tickets but not missing ones', async ({ page, 
 
 test('anonymous home is public while application sections and APIs remain protected', async ({ request }) => {
   expect((await request.get('/api/ticket-slots')).status()).toBe(401);
+  expect((await request.get('/api/statistics')).status()).toBe(401);
   expect((await request.get('/api/admin/models')).status()).toBe(401);
   const home = await request.get('/', { maxRedirects: 0 });
   expect(home.status()).toBe(200);

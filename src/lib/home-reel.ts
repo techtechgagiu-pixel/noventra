@@ -31,12 +31,13 @@ export async function homeReel(userId: string) {
 
 /** Real totals for the home page (never estimated). */
 export async function homeStats(userId: string) {
+  void userId;
   const t = await one<{ tickets: string; won: string; lost: string; legs_won: string; legs_lost: string }>(
-    `SELECT (SELECT count(*) FROM tickets WHERE user_id=$1 AND generation_status='COMPLETED') AS tickets,
-            (SELECT count(*) FROM tickets WHERE user_id=$1 AND outcome_status IN ('WON','PARTIAL_VOID')) AS won,
-            (SELECT count(*) FROM tickets WHERE user_id=$1 AND outcome_status='LOST') AS lost,
-            (SELECT count(*) FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.user_id=$1 AND s.outcome='WON') AS legs_won,
-            (SELECT count(*) FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.user_id=$1 AND s.outcome='LOST') AS legs_lost`, [userId]);
+    `SELECT (SELECT count(*) FROM tickets ) AS tickets,
+            (SELECT count(*) FROM tickets WHERE outcome_status IN ('WON','PARTIAL_VOID')) AS won,
+            (SELECT count(*) FROM tickets WHERE outcome_status='LOST') AS lost,
+            (SELECT count(*) FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE s.outcome='WON') AS legs_won,
+            (SELECT count(*) FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE s.outcome='LOST') AS legs_lost`);
   return { tickets: Number(t?.tickets ?? 0), won: Number(t?.won ?? 0), lost: Number(t?.lost ?? 0), legsWon: Number(t?.legs_won ?? 0), legsLost: Number(t?.legs_lost ?? 0) };
 }
 
