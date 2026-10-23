@@ -96,7 +96,7 @@ export function MatchesView() {
 
       {data?.additionalSource?.configured && <div className="rounded-xl border border-line bg-ink/40 px-3 py-2 text-xs text-muted" role="status">
         <span className="font-semibold text-cyan">API-Football + ESPN + LPF</span>
-        {' · '}{data.additionalSource.datesLoaded}/8 zile încărcate
+        {' · '}{data.additionalSource.datesLoaded}/{data.additionalSource.daysRequested} zile API-Football încărcate · plan gratuit: azi și mâine
         {data.additionalSource.updatedAt && <> · date API-Football de la {new Date(data.additionalSource.updatedAt).toLocaleString('ro-RO', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</>}
         {data.additionalSource.refreshing && ' · se încarcă programul suplimentar'}
         {data.additionalSource.error && <p className="mt-1 text-gold">{data.additionalSource.error}</p>}

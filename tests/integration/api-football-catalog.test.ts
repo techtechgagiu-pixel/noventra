@@ -77,12 +77,20 @@ it('accounts for requests made outside the app and stops before fetching more da
   expect((await apiFootballCatalog(today, 8)).source).toMatchObject({ requestsUsed: 91, datesLoaded: 1 });
 });
 it('refreshes today after 30 minutes while retaining fresh future days for six hours', async () => {
-  const days = dateRange(today, 3), at = new Date(Date.now() - 3600_000).toISOString();
+  const days = dateRange(today, 2), at = new Date(Date.now() - 3600_000).toISOString();
   const payload = Object.fromEntries(days.map((day) => [day, { at, fixtures: parseApiFootballMatches([raw(day)], day) }]));
   await query('INSERT INTO sports_catalog_cache(provider,payload,next_attempt_at) VALUES($1,$2,$3)', ['api-football', JSON.stringify(payload), new Date(0)]);
-  await apiFootballCatalog(today, 3); await wait();
+  await apiFootballCatalog(today, 2); await wait();
   expect(fetch).toHaveBeenCalledTimes(1);
-  expect((await apiFootballCatalog(today, 3)).source.datesLoaded).toBe(3);
+  expect((await apiFootballCatalog(today, 2)).source.datesLoaded).toBe(2);
+});
+it('limits the Free plan to today and tomorrow, even when the main catalog requests eight days', async () => {
+  vi.mocked(fetch).mockImplementation(async (url) => response(new URL(String(url)).searchParams.get('date')!));
+  await apiFootballCatalog(today, 8); await wait();
+  expect(vi.mocked(fetch).mock.calls.map(([url]) => new URL(String(url)).searchParams.get('date'))).toEqual(dateRange(today, 2));
+  expect((await apiFootballCatalog(today, 8)).source).toMatchObject({ datesLoaded: 2, daysRequested: 2, error: null });
+  await query("UPDATE sports_catalog_cache SET last_error='old unavailable date outside the current window'");
+  expect((await apiFootballCatalog(today, 8)).source.error).toBeNull();
 });
 it('includes extra fixtures only on explicit informational reads, without modifying the shared catalog', async () => {
   await seedCache(0, new Date(Date.now() + 300_000));
