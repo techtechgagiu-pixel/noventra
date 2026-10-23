@@ -74,7 +74,7 @@ export async function ticketDetail(userId: string, ticketId: string) {
   );
   const decisions = await many<Record<string, unknown>>('SELECT fixture_id, outcome, market_key, votes_for, votes, validation, reason FROM final_decisions WHERE job_id=$1 ORDER BY id', [t.job_id]);
   const predictions = await many<Record<string, unknown>>(`${finalAgentPicksCte()} SELECT p.id,p.fixture_id,p.agent_id,p.round,p.provider,p.model_id,p.prompt_version,p.decision,p.market_key,p.estimated_probability::float AS estimated_probability,p.confidence,p.risk,p.payload,p.outcome,p.odds::float AS odds,p.created_at,p.settled_at,(fp.id=p.id) AS current_in_stats FROM agent_predictions p LEFT JOIN final_picks fp ON fp.fixture_id=p.fixture_id AND fp.agent_id=p.agent_id WHERE p.job_id=$1 ORDER BY p.fixture_id,p.agent_id,p.round`, [t.job_id]);
-  const dossiers = await many<Record<string, unknown>>('SELECT fixture_id, mode, dossier, narrative, model FROM scout_dossiers WHERE job_id=$1', [t.job_id]);
+  const dossiers = await many<Record<string, unknown>>('SELECT fixture_id, mode, dossier, narrative, model, created_at FROM scout_dossiers WHERE job_id=$1', [t.job_id]);
   const snapshots = await many<{ fixture_id: string; payload: { fixture: unknown; model: unknown; odds: unknown; dataQuality: unknown } }>('SELECT DISTINCT ON (fixture_id) fixture_id, payload FROM fixture_snapshots WHERE job_id=$1 ORDER BY fixture_id, id', [t.job_id]);
   const slot = slotInfo(t.slot as string, Number(t.target_odds), t.leg_count as number);
   return {

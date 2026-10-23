@@ -38,7 +38,8 @@ export async function matchList(userId: string, scope: 'all' | 'mine' = 'all') {
   const ids = fixtures.map((f) => f.id);
   const decided = ids.length ? await many<{ fixture_id: string; outcome: string; selection_outcome: string | null; market_key: string | null; votes_for: number; created_at: Date; job_id: string; label: string | null; odds: string | null; on_ticket: boolean }>(
     `SELECT DISTINCT ON (fd.fixture_id) fd.fixture_id, fd.outcome, fd.market_key, fd.votes_for, fd.created_at, fd.job_id,
-            COALESCE(ts.market_label, (SELECT p.payload->>'marketLabel' FROM agent_predictions p WHERE p.job_id=fd.job_id AND p.fixture_id=fd.fixture_id AND p.market_key=fd.market_key LIMIT 1)) AS label,
+            COALESCE(ts.market_label, (SELECT p.payload->>'marketLabel' FROM agent_predictions p WHERE p.job_id=fd.job_id AND p.fixture_id=fd.fixture_id AND p.market_key=fd.market_key AND NULLIF(p.payload->>'marketLabel','') IS NOT NULL ORDER BY p.round DESC,p.id DESC LIMIT 1),
+              (SELECT m->>'label' FROM fixture_snapshots s CROSS JOIN LATERAL jsonb_array_elements(s.payload->'model'->'markets') m WHERE s.job_id=fd.job_id AND s.fixture_id=fd.fixture_id AND m->>'key'=fd.market_key ORDER BY s.id DESC LIMIT 1), fd.market_key) AS label,
             COALESCE(ts.odds, (SELECT p.odds FROM agent_predictions p WHERE p.job_id=fd.job_id AND p.fixture_id=fd.fixture_id AND p.market_key=fd.market_key AND p.odds IS NOT NULL LIMIT 1)) AS odds,
             ts.ticket_id IS NOT NULL AS on_ticket, ts.outcome AS selection_outcome
      FROM final_decisions fd JOIN ticket_generation_jobs j ON j.id=fd.job_id

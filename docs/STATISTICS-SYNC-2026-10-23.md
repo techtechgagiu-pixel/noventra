@@ -19,6 +19,8 @@
 6. Aceeași funcție deterministă stabilește rezultatele pronosticurilor și selecțiilor din scoruri/fapte confirmate. Rezultatele diferite se corectează în loturi; agregatele tuturor biletelor complete sunt reverificate. Pronosticurile și cotele originale nu sunt înlocuite.
 7. Scorurile pot fi actualizate din momentul începerii meciului, cu interval de cinci minute. Un scor live nu devine rezultat final doar din cauza timpului trecut. Snapshotul Meciuri nu retrogradează un rezultat final salvat.
 8. Modelul afișat este atribuirea activă. Latența medie este ponderată cu apelurile reușite; costul lunar urmărește luna selectată. Costurile rămân estimări din tokeni/prețurile configurate, nu factura OpenRouter.
+9. Contextul SCOUT din detaliul unui bilet este datat cu momentul salvării și identificat ca sinteză AI istorică. O mențiune veche despre scor în text nu înlocuiește scorul final confirmat al selecției.
+10. În Meciuri, o selecție validată fără pronostic individual identic își recuperează denumirea din snapshotul acelei analize; nu afișează un câmp gol și nu împrumută o selecție de la alt meci.
 
 ## Verificări locale
 
