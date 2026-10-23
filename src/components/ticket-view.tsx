@@ -15,7 +15,7 @@ export type TicketData = {
   predictions?: Array<{ id: string; fixture_id: string; agent_id: string; round: number; model_id: string; decision: string; market_key: string | null; outcome: string | null; current_in_stats: boolean; payload: { marketLabel?: string | null } }>;
   decisions: Array<{ fixture_id: string; outcome: string; market_key: string | null; votes_for: number; votes: Array<{ agentId: string; decision: string; marketKey: string | null; model: string; provider: string }>; reason: string }>;
   fixtures: Array<{ fixtureId: string; fixture: { home: string; away: string; league: string; kickoff: string } }>;
-  dossiers: Array<{ fixture_id: string; dossier: { home: { team: string; resultsVsPerformance: string; record: { w: number; d: number; l: number }; sample: number }; away: { team: string; resultsVsPerformance: string; record: { w: number; d: number; l: number }; sample: number }; modeMessage: string; missing: string[] }; narrative: { summary: string; keyObservations: string[] } | null; model: string | null }>;
+  dossiers: Array<{ fixture_id: string; created_at?: string; dossier: { home: { team: string; resultsVsPerformance: string; record: { w: number; d: number; l: number }; sample: number }; away: { team: string; resultsVsPerformance: string; record: { w: number; d: number; l: number }; sample: number }; modeMessage: string; missing: string[] }; narrative: { summary: string; keyObservations: string[] } | null; model: string | null }>;
 };
 const VERDICT: Record<string, { t: string; c: string }> = { SOLID: { t: '✓ SOLID', c: 'text-emerald' }, RISCANT: { t: '⚠ RISCANT', c: 'text-gold' }, SLAB: { t: '✗ SLAB', c: 'text-rose' }, NEANALIZAT: { t: '— NEANALIZAT', c: 'text-muted' } };
 const RISK_RO: Record<string, string> = { LOW: 'Risc scăzut', MEDIUM: 'Risc mediu', HIGH: 'Risc ridicat' };
@@ -169,7 +169,8 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
 
               {dossier && (
                 <div className="mt-3 text-sm">
-                  <p className="font-semibold text-cyan">SCOUT</p>
+                  <p className="font-semibold text-cyan">SCOUT — context salvat la analiză</p>
+                  <p className="text-xs text-muted">Date și sinteză AI salvate la {fmtDateTime(dossier.created_at ?? t.createdAt)}. Textul descrie contextul disponibil atunci; rezultatele sunt calculate separat din scorurile confirmate.</p>
                   <p className="text-xs text-muted">{dossier.dossier.modeMessage}</p>
                   {dossier.narrative?.summary && <p className="mt-1">{dossier.narrative.summary}</p>}
                   <ul className="mt-1 list-disc pl-5 text-xs text-muted"><li>{dossier.dossier.home.team}: {dossier.dossier.home.record.w}V-{dossier.dossier.home.record.d}E-{dossier.dossier.home.record.l}Î în {dossier.dossier.home.sample} meciuri. {dossier.dossier.home.resultsVsPerformance}</li><li>{dossier.dossier.away.team}: {dossier.dossier.away.record.w}V-{dossier.dossier.away.record.d}E-{dossier.dossier.away.record.l}Î în {dossier.dossier.away.sample} meciuri. {dossier.dossier.away.resultsVsPerformance}</li></ul>
