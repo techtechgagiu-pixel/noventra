@@ -13,10 +13,11 @@ type DayCache = { at: string; fixtures: AdditionalMatch[] };
 type CacheRow = { payload: Record<string, DayCache>; next_attempt_at: Date; last_error: string | null };
 export type AdditionalSourceStatus = {
   configured: boolean; refreshing: boolean; updatedAt: string | null;
-  requestsUsed: number; dailyLimit: number; datesLoaded: number; error: string | null;
+  requestsUsed: number; dailyLimit: number; datesLoaded: number; daysRequested: number; error: string | null;
 };
 const PROVIDER = 'api-football';
-// 48 refreshes for today + 4 for each of seven future days = about 76 requests/day.
+// Free plan only allows yesterday through tomorrow. The forward catalog covers today and tomorrow.
+// 48 refreshes for today + 4 for tomorrow = about 52 requests/day.
 // Leave at least 10 requests of the Free plan for account checks and manual tests.
 export const API_FOOTBALL_DAILY_LIMIT = 90;
 const g = globalThis as unknown as { __p11ApiFootballRefresh?: Promise<void> | null };
@@ -125,9 +126,9 @@ async function refresh(today: string, days: string[], key: string) {
 
 export async function apiFootballCatalog(today: string, count: number, enabled = true) {
   const key = process.env.API_FOOTBALL_KEY;
-  const empty = { fixtures: [] as AdditionalMatch[], source: { configured: false, refreshing: false, updatedAt: null, requestsUsed: 0, dailyLimit: API_FOOTBALL_DAILY_LIMIT, datesLoaded: 0, error: null } as AdditionalSourceStatus };
+  const days = dateRange(today, Math.min(2, Math.max(1, count)));
+  const empty = { fixtures: [] as AdditionalMatch[], source: { configured: false, refreshing: false, updatedAt: null, requestsUsed: 0, dailyLimit: API_FOOTBALL_DAILY_LIMIT, datesLoaded: 0, daysRequested: days.length, error: null } as AdditionalSourceStatus };
   if (!enabled || !key) return empty;
-  const days = dateRange(today, Math.min(8, Math.max(1, count)));
   try {
     const [cached, usage] = await Promise.all([
       one<CacheRow>('SELECT payload,next_attempt_at,last_error FROM sports_catalog_cache WHERE provider=$1', [PROVIDER]),
@@ -139,11 +140,13 @@ export async function apiFootballCatalog(today: string, count: number, enabled =
         .finally(() => { g.__p11ApiFootballRefresh = null; });
     }
     const snapshots = days.flatMap((day) => cached?.payload[day] ? [cached.payload[day]] : []);
+    // An older refresh may have failed on a date outside the current requested window.
+    const allFresh = days.every((day) => cached?.payload[day] && Date.now() - Date.parse(cached.payload[day].at) < ttl(day, today));
     return {
       fixtures: snapshots.flatMap((d) => d.fixtures),
       source: { configured: true, refreshing: !!g.__p11ApiFootballRefresh,
         updatedAt: snapshots.length ? snapshots.map((d) => d.at).sort()[0] : null,
-        requestsUsed: usage?.requests ?? 0, dailyLimit: API_FOOTBALL_DAILY_LIMIT, datesLoaded: snapshots.length, error: cached?.last_error ?? null },
+        requestsUsed: usage?.requests ?? 0, dailyLimit: API_FOOTBALL_DAILY_LIMIT, datesLoaded: snapshots.length, daysRequested: days.length, error: allFresh ? null : cached?.last_error ?? null },
     };
   } catch {
     return { ...empty, source: { ...empty.source, configured: true, error: 'Catalogul API-Football nu poate fi citit acum. ESPN și LPF rămân active.' } };

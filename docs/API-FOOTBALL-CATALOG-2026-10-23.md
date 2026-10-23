@@ -18,7 +18,7 @@ Sursele se deduplică după echipe normalizate, aceeași ordine gazdă/oaspete �
 
 - Variabilă secretă exclusiv pe server: `API_FOOTBALL_KEY`. Valoarea se configurează prin setările serviciului Render existent; fișierul Blueprint nu este modificat. Nu există chei în Git.
 - Migrarea aditivă `016_sports_catalog_cache.sql` se aplică automat la pornire prin mecanismul existent.
-- Maximum 8 zile din calendarul Europe/Bucharest; prima încărcare cere câte o zi pe apel.
+- API-Football: azi și mâine în calendarul Europe/Bucharest; prima încărcare cere câte o zi pe apel. Verificat pe contul Free: accesul la poimâine este refuzat explicit de furnizor, care permite ieri–mâine. ESPN/LPF păstrează intervalul de 8 zile. Nu se repetă cereri pentru zilele nepermise.
 - Cache persistent: 30 de minute pentru ziua curentă, 6 ore pentru zilele viitoare. Actualizarea este declanșată la citirea paginii; nu este un flux live și nu ține serverul Render treaz.
 - Buget comun de maximum 90 de cereri/zi UTC, rezervat atomic în `provider_usage` înainte de fiecare apel. Marjă de 10 cereri față de planul Free de 100. Antetul furnizorului ajustează contorul pentru consum extern când este disponibil.
 - Blocare comună în PostgreSQL de 5 minute pentru a evita descărcări paralele; timeout de 12 secunde pe apel. Fiecare zi încărcată devine vizibilă imediat în cache.
@@ -27,7 +27,7 @@ Sursele se deduplică după echipe normalizate, aceeași ordine gazdă/oaspete �
 
 ## Verificare
 
-- 20 teste unitare/de integrare pentru catalog: maparea stărilor și scorurilor, date locale/DST, duplicate, izolare, cititori concurenți, blocare, buget, consum extern, date expirate și indisponibilitatea sursei.
+- 21 teste unitare/de integrare pentru catalog: maparea stărilor și scorurilor, date locale/DST, duplicate, izolare, cititori concurenți, blocare, buget, consum extern, date expirate, indisponibilitatea sursei și limitarea la zilele permise de planul Free.
 - Build Next.js de producție reușit, inclusiv verificare TypeScript.
 - Verificare în Chrome cu 245 de meciuri fictive într-o bază locală separată: filtru sursă, 120 → 240 de rânduri, căutare, afișarea scorului final după debifarea ascunderii meciurilor terminate; fără erori în consolă.
 
