@@ -5,10 +5,15 @@ import { RefreshCw, Search } from 'lucide-react';
 import { api } from '@/lib/format';
 import { useVisibleRefresh } from '@/lib/use-visible-refresh';
 import type { MatchRow } from '@/lib/catalog';
-import type { AdditionalSourceStatus } from '@/lib/sports/api-football-catalog';
+import type { InformationalSourceStatus } from '@/lib/sports/the-odds-catalog';
 import { LeaguePicker, type LeagueOption } from './league-picker';
 
-type Data = { rows: MatchRow[]; leagues: LeagueOption[]; refreshing: boolean; updatedAt: string | null; errors: number; additionalSource?: AdditionalSourceStatus };
+type Data = { rows: MatchRow[]; leagues: LeagueOption[]; refreshing: boolean; updatedAt: string | null; errors: number; additionalSource?: InformationalSourceStatus };
+type Source = 'all' | 'existing' | 'the-odds-api';
+const fromSource = (m: MatchRow, source: Source) => {
+  const sources = m.sources ?? (m.source ? [m.source] : []);
+  return source === 'all' || (source === 'existing' ? m.source !== 'the-odds-api' : sources.includes(source));
+};
 const TZ = 'Europe/Bucharest';
 const dayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
 const dayOf = (iso: string) => dayFormatter.format(new Date(iso));
@@ -25,7 +30,7 @@ const STATUS: Array<{ id: Status; label: string }> = [
 ];
 
 function Verdict({ m }: { m: MatchRow }) {
-  if (m.source === 'api-football') return <span className="text-muted/70">API-Football · program și scoruri{m.status === 'postponed' ? ' · amânat' : m.status === 'cancelled' ? ' · anulat' : ''}</span>;
+  if (m.source === 'the-odds-api') return <span className="text-muted/70">The Odds API · program informativ{m.status === 'unknown' ? ' · scor indisponibil' : ''}</span>;
   const a = m.analysis;
   if (a?.onTicket) {
     const outcome = a.selectionOutcome;
@@ -48,7 +53,7 @@ export function MatchesView() {
   const [hideDone, setHideDone] = useState(true);
   const [q, setQ] = useState('');
   const [today, setToday] = useState('');
-  const [source, setSource] = useState<'all' | 'existing' | 'api-football'>('all');
+  const [source, setSource] = useState<Source>('all');
   const [limit, setLimit] = useState(PAGE_SIZE);
   useEffect(() => { setLimit(PAGE_SIZE); }, [leagues, day, status, hideDone, q, source]);
 
@@ -61,7 +66,7 @@ export function MatchesView() {
   useEffect(() => { if (!data?.refreshing) return; const t = setTimeout(load, 15_000); return () => clearTimeout(t); }, [data, load]);
 
   const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  const base = useMemo(() => (data?.rows ?? []).filter((m) => (source === 'all' || (source === 'api-football' ? m.source === source : m.source !== 'api-football')) && (!hideDone || m.status !== 'post') && (!leagues.length || leagues.includes(m.leagueId)) && (!q || norm(`${m.home} ${m.away} ${m.league} ${m.country}`).includes(norm(q)))), [data, leagues, q, hideDone, source]);
+  const base = useMemo(() => (data?.rows ?? []).filter((m) => fromSource(m, source) && (!hideDone || m.status !== 'post') && (!leagues.length || leagues.includes(m.leagueId)) && (!q || norm(`${m.home} ${m.away} ${m.league} ${m.country}`).includes(norm(q)))), [data, leagues, q, hideDone, source]);
   const days = useMemo(() => [...new Set(base.map((m) => dayOf(m.kickoff)))].sort(), [base]);
   const shown = useMemo(() => base.filter((m) => (day === 'all' || dayOf(m.kickoff) === day) && (
     status === 'all' ? true : status === 'odds' ? !!m.odds : status === 'analyzed' ? !!m.analysis : status === 'ticket' ? !!m.analysis?.onTicket : !m.analysis && !!m.odds))
@@ -74,7 +79,7 @@ export function MatchesView() {
   const counts = { all: data?.rows.length ?? 0, odds: data?.rows.filter((m) => m.odds).length ?? 0, analyzed: data?.rows.filter((m) => m.analysis).length ?? 0 };
   const pickerLeagues = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const m of data?.rows ?? []) if ((!hideDone || m.status !== 'post') && (source === 'all' || (source === 'api-football' ? m.source === source : m.source !== 'api-football'))) counts.set(m.leagueId, (counts.get(m.leagueId) ?? 0) + 1);
+    for (const m of data?.rows ?? []) if ((!hideDone || m.status !== 'post') && fromSource(m, source)) counts.set(m.leagueId, (counts.get(m.leagueId) ?? 0) + 1);
     return (data?.leagues ?? []).map((l) => ({ ...l, count: counts.get(l.id) ?? 0 }));
   }, [data, hideDone, source]);
 
@@ -94,16 +99,19 @@ export function MatchesView() {
         </div>
       </div>
 
-      {data?.additionalSource?.configured && <div className="rounded-xl border border-line bg-ink/40 px-3 py-2 text-xs text-muted" role="status">
-        <span className="font-semibold text-cyan">API-Football + ESPN + LPF</span>
-        {' · '}{data.additionalSource.datesLoaded}/{data.additionalSource.daysRequested} zile API-Football încărcate · plan gratuit: azi și mâine
-        {data.additionalSource.updatedAt && <> · date API-Football de la {new Date(data.additionalSource.updatedAt).toLocaleString('ro-RO', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</>}
-        {data.additionalSource.refreshing && ' · se încarcă programul suplimentar'}
-        {data.additionalSource.error && <p className="mt-1 text-gold">{data.additionalSource.error}</p>}
+      {data?.additionalSource && <div className="rounded-xl border border-line bg-ink/40 px-3 py-2 text-xs text-muted" role="status">
+        <span className="font-semibold text-cyan">ESPN / LPF + The Odds API</span>
+        {data.additionalSource.configured ? <>
+          {' · '}{data.additionalSource.leaguesLoaded}/{data.additionalSource.leaguesTotal} competiții suplimentare încărcate
+          {data.additionalSource.updatedAt && <> · program de la {new Date(data.additionalSource.updatedAt).toLocaleString('ro-RO', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</>}
+          {data.additionalSource.creditsRemaining !== null && <> · {data.additionalSource.creditsRemaining} credite disponibile</>}
+          {data.additionalSource.refreshing && ' · se încarcă programul suplimentar'}
+          {data.additionalSource.error && <p className="mt-1 text-gold">{data.additionalSource.error}</p>}
+        </> : ' · sursa suplimentară nu este configurată'}
       </div>}
 
       {data?.additionalSource?.configured && <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sursa meciurilor">
-        {([{ id: 'all', label: 'Toate sursele' }, { id: 'existing', label: 'ESPN / LPF' }, { id: 'api-football', label: 'API-Football' }] as const).map((s) =>
+        {([{ id: 'all', label: 'Toate sursele' }, { id: 'existing', label: 'ESPN / LPF' }, { id: 'the-odds-api', label: 'The Odds API' }] as const).map((s) =>
           <button key={s.id} onClick={() => { setSource(s.id); setLeagues([]); setDay('all'); setStatus('all'); }} aria-pressed={source === s.id} className={`chip ${source === s.id ? 'text-cyan' : 'text-muted'}`}>{s.label}</button>)}
       </div>}
 
@@ -147,7 +155,7 @@ export function MatchesView() {
                       <span className="truncate">{m.away}</span>
                       {m.awayLogo && <img src={m.awayLogo} alt="" className="h-4 w-4 shrink-0 object-contain" loading="lazy" />}
                     </p>
-                    <p className="truncate text-xs"><Verdict m={m} /></p>
+                    <p className="truncate text-xs"><Verdict m={m} />{m.source !== 'the-odds-api' && m.sources?.includes('the-odds-api') && <span className="ml-2 text-muted/70">· program confirmat și de The Odds API</span>}</p>
                   </div>
                   <div className="col-start-2 flex items-center gap-1.5 text-xs tabular sm:col-start-3 sm:justify-end">
                     {m.odds && (['home', 'draw', 'away'] as const).map((k, i) => (
@@ -166,7 +174,7 @@ export function MatchesView() {
         {limit < shown.length && <button onClick={() => setLimit((n) => n + PAGE_SIZE)} className="btn btn-ghost">Arată mai multe meciuri</button>}
       </div>}
       {data && data.errors > 0 && <p className="text-xs text-muted">{data.errors} cereri către sursă au eșuat; meciurile lor apar la următoarea actualizare.</p>}
-      <p className="text-xs text-muted">Surse: ESPN și LPF pentru SuperLiga{data?.additionalSource?.configured ? ', completate de API-Football pentru program și scoruri. Programul suplimentar este informativ și nu intră în analizele agenților. Scorurile API-Football se reîmprospătează la cel mult o cerere pe 30 de minute pentru ziua curentă și pot avea întârziere' : ''}.</p>
+      <p className="text-xs text-muted">Surse: ESPN și LPF pentru SuperLiga{data?.additionalSource?.configured ? ', completate de The Odds API pentru programul competițiilor de fotbal. Sursa suplimentară se actualizează aproximativ o dată pe oră cât pagina este folosită și nu intră în analizele agenților. Cererile pentru program nu consumă creditele lunare; nu importăm cote sau scoruri din această sursă' : ''}.</p>
     </div>
   );
 }

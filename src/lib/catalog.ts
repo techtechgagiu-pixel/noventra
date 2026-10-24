@@ -2,7 +2,8 @@ import { many } from './db';
 import { loadFixtures } from './sports/fixtures';
 import { localDate } from './time';
 import type { Fixture } from './sports/types';
-import { apiFootballCatalog, mergeInformationalMatches } from './sports/api-football-catalog';
+import { theOddsCatalog } from './sports/the-odds-catalog';
+import { mergeInformationalMatches } from './sports/informational-matches';
 
 /**
  * Every fixture the sources publish for the next days, shared by the "Meciuri" tab and the custom-ticket league picker.
@@ -33,7 +34,8 @@ export async function fixtureCatalog() {
 }
 
 export type MatchRow = {
-  source?: 'espn' | 'lpf' | 'api-football' | 'demo';
+  source?: 'espn' | 'lpf' | 'the-odds-api' | 'demo';
+  sources?: Array<'espn' | 'lpf' | 'the-odds-api' | 'demo'>;
   id: string; leagueId: string; league: string; country: string; home: string; away: string; homeLogo: string | null; awayLogo: string | null;
   kickoff: string; status: string; score: string | null; odds: { home: number | null; draw: number | null; away: number | null; markets: number; bookmaker: string } | null;
   analysis: { outcome: string; selectionOutcome: string | null; label: string | null; odds: number | null; votes: number; onTicket: boolean; at: string; jobId: string } | null;
@@ -42,7 +44,7 @@ export type MatchRow = {
 /** Shared annotations: prefer a saved ticket, otherwise the latest team decision; never trigger AI. */
 export async function matchList(userId: string, scope: 'all' | 'mine' = 'all', includeInformational = false) {
   // Only the informational Meciuri view opts in. Custom and the shared fixture catalog remain unchanged.
-  const [{ data, refreshing, at }, additional] = await Promise.all([fixtureCatalog(), apiFootballCatalog(localDate(), CATALOG_DAYS, includeInformational)]);
+  const [{ data, refreshing, at }, additional] = await Promise.all([fixtureCatalog(), theOddsCatalog(localDate(), CATALOG_DAYS, includeInformational)]);
   const fixtures: Fixture[] = data?.fixtures ?? [];
   const ids = fixtures.map((f) => f.id);
   const decided = ids.length ? await many<{ fixture_id: string; outcome: string; selection_outcome: string | null; market_key: string | null; votes_for: number; created_at: Date; job_id: string; label: string | null; odds: string | null; on_ticket: boolean }>(
