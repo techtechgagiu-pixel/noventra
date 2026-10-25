@@ -1,81 +1,93 @@
-# PRIMUL 11 — pregătirea mutării pe Cloudflare
+# PRIMUL 11 — mutare Cloudflare, staging hibrid
 
-Stare la 25 octombrie 2026: **pregătire verificată, migrarea aplicației nu este încă terminată**.
-Render/Neon și DNS-ul de producție nu au fost modificate. Nu s-a activat niciun abonament.
+Stare 25 octombrie 2026: adaptorul D1 și legătura cu Render sunt implementate și testate local. **Producția nu este mutată.** DNS-ul și configurația Render/Neon rămân neschimbate. Nu s-a activat niciun abonament și nu s-au executat apeluri AI reale.
 
-## Ce există și ce s-a verificat
+## Arhitectura pregătită
 
-- Build OpenNext 1.20.13 pentru Next 16.4.2 / React 19.2.0. Vinext 1.3.0 a fost evaluat, dar cere React >=19.3.1; nu am forțat actualizarea aplicației existente.
-- Wrangler 4.152.0, configurare fără domeniu, fără adresă publică workers.dev și fără servicii R2/Images plătite/provizionate. Varianta Render își păstrează comenzile existente.
-- Previzualizare locală în workerd: prezentarea publică și paginile legale. Etichetată explicit, fără cookies/autorizare transmise mai departe; orice login/API/operație de scriere primește 503. `/api/migration-readiness` spune explicit `productionReady:false`.
-- `instrumentation.ts` nu pornește intervalele Node și nu actualizează configurația agenților în runtime-ul Cloudflare. Nu se pornesc apeluri AI reale.
-- D1 **primul11-staging**, ID `bbd70eca-6c37-4915-9cdd-95ac477019e9`, jurisdicție UE, regiune EEUR. Schema cu 26 tabele este aplicată și verificată; **zero conturi și zero bilete**. Migrarea D1 este separată de migrările PostgreSQL.
-- Export local DEMO: 26 tabele / 765 înregistrări; conversie SQLite 782336 bytes, verificare FK/integritate și comparație a fiecărui rând. Import în D1 local reușit. Acestea **nu sunt datele reale din Neon**.
-- 185 teste Vitest, 8 teste Python de conversie, typecheck Next și Worker, build OpenNext și `wrangler deploy --dry-run` reușite. Nu s-a publicat un Worker.
+- **Site și date:** Next 16.4.2 / React 19.2.0, OpenNext 1.20.13, Cloudflare Workers + D1.
+- **Analize lungi:** serviciul web Render existent execută joburile cerute explicit de utilizatori. Nu se creează serviciu Render Background Worker plătit. Păstrează pașii, modelele, personajele, consensul și checkpointurile pipeline-ului existent.
+- **Acces Render la date:** POST semnat HMAC-SHA256 la `/_internal/database`, TLS, termen de 60 s, nonce unic, corp limitat la 2 MB. Se folosesc query-uri pregătite și loturi D1 native, atomice; DDL și declarațiile multiple sunt respinse. Secretul permite acces intern la baza aplicației, asemenea vechilor credențiale PostgreSQL: numai în secretele serverelor, niciodată în browser. Nu se dă tokenul contului Cloudflare serviciului Render. Reîncercarea automată a unei scrieri cu răspuns pierdut este interzisă.
+- **Rezultate:** `SettlementWorkflow`, pagini de maximum două meciuri și două seturi de date suplimentare, maximum 30 pagini per execuție. Scoruri confirmate, fără presupuneri după ora meciului. Folosește lease în D1 și înregistrează succesul/erorile în `automation_runs`. Dispecerul programat acceptă livrări duplicate fără să creeze două instanțe.
+- **Programare:** expresia de activat după validarea producției este `*/5 * * * *`. **În configurația de staging lista crons este goală**, ca să nu existe automatizări active prematur. Handlerul și Workflow-ul au fost invocate local în workerd, inclusiv repetat.
+- **Trezire Render:** la cereri relevante de catalog/creare/reluare se apelează numai GET `/api/health` al originii Render configurate. Programarea trezește runnerul dacă există joburi autorizate restante; nu îl ține activ când coada este goală. Render poate avea pornire lentă, iar o analiză poate aștepta următoarea verificare.
+- **Catalog:** cererile Cloudflare citesc oferta persistată în D1. Render o actualizează la pornire/trezire, maximum o dată pe oră, cu lease comun și inserări grupate. Nu se descarcă toate cele 77 de ligi într-o cerere de pagină Cloudflare. The Odds API rămâne catalog informativ; în Cloudflare se citește cache-ul, fără refresh de fundal suspendat după răspuns.
+- **Buget:** D1 rezervă atomic o estimare conservatoare înainte de fiecare apel OpenRouter plătit, în microdolari; ajustează după tokenii confirmați. Rezultatele de rețea incerte rămân rezervate. Pragul rămâne cel existent, implicit 5 USD/zi. Tarifele sunt cele din catalogul aplicației, deci nu înlocuiesc limita de cheie configurată la furnizor; verifică tarifele înainte de producție. Un model plătit fără preț configurat trece la fallback. Nu există promisiune de exact-once pentru facturarea API-urilor externe.
 
-## Instrumente gata de folosit
+Rezumatele explicite ale biletelor folosesc și ruta existentă de rezumat; aceasta poate efectua un apel AI din Worker. Pipeline-ul lung de analiză este cel delegat Render. Dacă măsurătorile Free nu permit ruta de rezumat, trebuie delegată și ea înainte de activare.
+
+## Staging și verificări
+
+D1 **primul11-staging**, ID `bbd70eca-6c37-4915-9cdd-95ac477019e9`, jurisdicție UE / EEUR. Migrările 0001–0006 sunt aplicate. Conține configurația publică a **34 agenți și 77 ligi**, **zero utilizatori și zero bilete**; FK verificate. Nu conține date din Neon sau DEMO.
+
+Verificările locale acoperă autentificarea și revocarea invitațiilor, exact 7 zile de valabilitate, Google fără drepturi admin, ultima rundă/analiză și luna românească în statistici, istoric incomplet, evenimente concurente fără goluri, limita de 20 Custom, retry stabil peste miezul nopții, continuarea atomică, finalizarea biletelor, maximum două lease-uri de job și o analiză completă prin HTTP Render–D1 cu furnizori simulați. Bugetul comun este verificat cu rezervări simultane și reglare idempotentă.
+
+Proba OpenNext în workerd verifică 15 pagini/API-uri, refuzul accesului admin pentru o sesiune locală de tip Google, refuzul accesului nesemnat la bridge și persistența unei execuții programate. Este o sesiune sintetică locală, nu o conectare OAuth reală la Google.
+
+Buildul și dry-run-ul nu demonstrează respectarea limitei CPU Free. Mai trebuie măsurate SSR, proxy-ul Node (suport experimental în OpenNext), pașii de settlement cu date reale, D1 reads/writes și volumul de istoric. Un pas are I/O limitat, dar reconcilierea rezultatelor citește și istoricul existent; poate necesita împărțire suplimentară la volume mari. Nu se activează automat un plan plătit dacă nu încape.
+
+Verificare finală: **197 teste unitare/integrare, 17 teste browser, 8 teste de conversie**, typecheck aplicație/Worker, build OpenNext, dry-run și proba HTTP locală trecute. Nu s-au folosit furnizori AI reali. Corecția jurnalului include salvarea atomică a mesajului final împreună cu starea biletului și golirea tuturor evenimentelor restante înainte de închiderea stream-ului.
+
+## Comenzi
 
 ```sh
 npm ci --include=dev
-npm run cf:build
-npm run cf:typecheck
-npm run cf:preview
-# http://localhost:8787 — numai prezentarea, nu aplicația cu date
+npm run typecheck
+npm test
 npm run cf:test-conversion
-npm run cf:audit
+npm run cf:build:staging
+npm run cf:types:staging
+npm run cf:typecheck:staging
+npx wrangler deploy --config wrangler.staging.jsonc --dry-run
+npx wrangler d1 migrations apply primul11-staging --config wrangler.staging.jsonc --local
+npm run cf:preview:staging
+# într-un al doilea terminal, numai localhost:
+npx tsx scripts/cloudflare/smoke-staging.ts
 ```
 
-`npm run cf:deploy` este blocat intenționat de audit cât timp lipsesc adaptorul D1, execuția de fundal și validarea de staging. Nu modifica `productionReady` doar pentru a trece această verificare.
+Pentru local există `.dev.vars` ignorat de Git. Exemplul cu cheile necesare este în `cloudflare/staging.env.example`; copiază-l într-un fișier privat și completează-l. `ANALYSIS_RUNNER_URL` poate rămâne gol la probe fără furnizori. Tipurile bindingurilor sunt generate de Wrangler, nu scrise manual.
 
-### Exportul sursei, când Neon acceptă conexiuni
+`wrangler.jsonc` și `npm run cf:build` păstrează previzualizarea publică restrânsă din etapa întâi, cu login/API blocate. `wrangler.staging.jsonc` este aplicația D1 completă. Ambele au `workers_dev:false`, `preview_urls:false`, fără routes. **Nu este publicat niciun Worker.** `cf:deploy` rămâne blocat de audit. Nu modifica `productionReady` doar pentru a elimina blocajul.
 
-Secretul `MIGRATION_DATABASE_URL` trebuie încărcat în mediu dintr-o sursă privată, fără a fi pus în argumente, Git, chat sau jurnale. Nu folosi baza locală DEMO ca înlocuitor pentru producție.
+## Secrete și configurare la activare
+
+În Cloudflare: `AUTH_SECRET`, `OWNER_ACCESS_CODE_HASH`, `OWNER_EMAIL`/`ADMIN_EMAILS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `APP_BASE_URL`, `D1_BRIDGE_SECRET`, `ANALYSIS_RUNNER_URL`. Configurațiile AI necesare verificării disponibilității și rutei de rezumat folosesc secretele existente ale furnizorilor; nu le inventa și nu le publica în vars. `ODDS_API_KEY` rămâne necesară numai runnerului care reîmprospătează sursa informativă.
+
+Pe serviciul Render existent: `BETMIND_DATABASE=d1-http`, `D1_BRIDGE_URL=https://<originea Cloudflare verificată>`, același `D1_BRIDGE_SECRET`, cheile AI/sport existente și limitele existente. **Nu seta `BETMIND_DISABLE_WORKER=1` pe runner.** `scripts/start.mjs` nu rulează migrările PostgreSQL în modul d1-http. `instrumentation` pornește numai workerul Node și refresh-ul catalogului; settlement-ul Node este dezactivat pentru D1, ca să nu dubleze Cloudflare.
+
+Păstrează aceleași hash-uri/ID-uri/secrete de autentificare la transfer. Callback-ul Google rămâne `https://primul11.noventra.ro/auth/callback` când domeniul este mutat. OAuth și cookie-urile trebuie verificate efectiv în staging cu o origine separată, fără reutilizarea sesiunilor de producție.
+
+## Export și import, după restabilirea accesului Neon
+
+Neon este blocat de cota lunară; nu există un snapshot complet al producției. Exportul local anterior de 26 tabele / 765 rânduri este **DEMO**, nu backup de producție. Nu îl importa ca înlocuitor.
 
 ```sh
-# director NOU; directorul părinte trebuie să existe, în afara Git/public
+# MIGRATION_DATABASE_URL se încarcă privat în mediu, niciodată în argumente sau jurnale.
 npm run cf:export -- /private/path/primul11-snapshot
 python3 scripts/cloudflare/convert-d1.py /private/path/primul11-snapshot /private/path/primul11-converted
 ```
 
-Exportul folosește o tranzacție **REPEATABLE READ READ ONLY**, citire cu cursor de 100 rânduri și fișiere JSONL; nu modifică sursa. Manifestul `complete:true` apare abia după toate tabelele și COMMIT. Snapshotul păstrează JSON brut, BIGINT, ID-uri, date și hash-uri; director 0700 și fișiere 0600. Un export incomplet/corupt nu se importă, iar fișierele existente nu se suprascriu.
+Exportul este REPEATABLE READ READ ONLY cu cursor 100, JSONL, directoare 0700 și fișiere 0600. Manifestul complet se scrie după COMMIT. Conversia produce `database.sqlite`, `schema.sql`, `import.sql`, `data-only.sql`, `verification.json`; verifică fiecare rând după PK, FK, integritate, SHA256, tipuri, UTC, JSON și BIGINT. NUMERIC SQLite poate fi reprezentat double, asemenea calculelor JS. Golirea lease-urilor temporare este singura schimbare de stare intenționată.
 
-Conversia produce `database.sqlite`, `schema.sql`, `import.sql`, `verification.json`. Verifică toate rândurile prin cheia primară, FK-urile și integritatea, dimensiunea bazei și limitele declarațiilor/rândurilor D1. JSON și BIGINT sunt păstrate exact; numericile folosesc afinitatea NUMERIC SQLite (cotele fracționare pot fi reprezentate ca double, ca în calculele JS). Datele sunt UTC ISO cu șase zecimale; adaptorul de runtime va trebui să le decodeze în tipurile așteptate de aplicație (Date/boolean/JSON).
+Se blochează importul pentru tip/expresie necunoscută, date corupte, FK rupte, rând >2 MB, SQL >100 KB sau bază >500 MB. Checkpointurile nu se trunchiază. Nu putem confirma compatibilitatea datelor reale înainte de acest control.
 
-Singura schimbare de stare la conversie: lease-urile temporare Render sunt golite în `ticket_generation_jobs` și `automation_runs`. Nu se șterg analize, istorice, sesiuni, rezultate sau plafoane de consum.
+**Nu importa peste staging-ul deja populat cu configurații.** Pregătește o țintă nouă, goală. Compară schema generată cu baseline-ul 0001 și rezolvă explicit orice diferență. Aplică doar baseline-ul 0001 folosind temporar un director de migrări care conține numai acel fișier; importă apoi `data-only.sql`, care nu creează/șterge tabele și nu face upsert peste date. Verifică din nou fiecare rând și FK, apoi aplică migrările 0002–0006 din directorul normal. Bootstrap-ul agenților păstrează asignările/prompturile existente și adaugă doar lipsurile. Nu aplica migrarea 0001 peste o bază creată deja cu `import.sql`.
 
-**Limite care blochează importul:** tip/expresie necunoscută, FK rupt, hash sau număr de rânduri diferit, rând >2 MB, SQL >100 KB, bază >500 MB. Un checkpoint mare trebuie împărțit sau mutat în altă stocare înaintea migrării; nu este trunchiat. Nu putem declara baza reală compatibilă înainte să ruleze acest control pe snapshotul Neon.
+`verification.json` confirmă conversia locală; nu este o confirmare a egalității bazei remote. Comparația integrală remote cu snapshotul real rămâne obligatorie înainte de cutover.
 
-Schema staging este deja creată. **Nu executa `import.sql` peste ea**: conține CREATE TABLE și date, pentru o țintă goală. Pentru importul final trebuie adaptat importerul să aplice doar date pe schema verificată sau folosită o bază nouă, după validarea egalității schemelor. Nu șterge staging/producția automat.
+## Ordinea mutării și rollback
 
-Fișierele private includ conturi și hash-uri de sesiune/coduri: nu se publică, nu se comit, nu se includ în capturile de ecran. `migration-private/`, `.dev.vars*`, `.open-next/`, `.wrangler/` sunt ignorate de Git.
+1. Restabilește accesul Neon, exportă datele reale și păstrează și backup PostgreSQL nativ.
+2. Verifică integral importul izolat, login/OAuth, statistici per agent, istoricele, permisiunile și reluarea. Configurează bridge-ul și runnerul în staging separat de producție.
+3. Verifică latența la trezirea Render și limitele reale Free. O analiză reală se pornește numai la cererea explicită a utilizatorului, în plafoanele existente.
+4. Oprește temporar scrierile și runnerul vechi, fă snapshotul final coerent și importul final verificat. Păstrează datele sursă.
+5. Configurează domeniul și bridge-ul, comută runnerul existent pe D1, activează Cron la 5 minute și verifică o execuție fără vizitatori. Schimbă DNS/rutele numai după verificările de mai sus.
+6. Rollback doar prin schimbare DNS este sigur înainte de primele scrieri D1. După scrieri noi oprește scrierile și reconciliază datele înapoi înainte de revenire; altfel se pierde istoricul nou.
 
-## Lucrări necesare înainte de mutarea completă
+## Referințe
 
-Inventarul regenerabil este în `docs/cloudflare-readiness-2026-10-25.json`; este o căutare de indicii, **nu un parser SQL sau o estimare de timp**.
-
-1. **Repository D1.** Conversie explicită a interogărilor din auth/conturi, catalog, assignments/usage, statistici/views, job service/pipeline, settlement și automation. Înlocuirea `pg.Pool`, `DISTINCT ON`, casturilor, operatorilor JSONB, ANY/array_agg, intervalelor și regex-urilor. Păstrarea contractelor Date/boolean/JSON/numeric ale apelanților. Nicio traducere SQL generică prin înlocuiri la runtime.
-2. **Atomicitate.** Înlocuirea `tx`, advisory locks și `FOR UPDATE SKIP LOCKED` cu loturi D1 atomice și UPDATE condiționat cu lease/token. Teste cu cereri concurente pentru max. 20 bilete, batch request ID idempotent, o singură execuție per job, plafon global OpenRouter și drepturi de creator/admin.
-3. **Workflows.** Granularitate per pas de cercetare/agent/rundă și finalizare, cu ID stabil per operație. Rezultatele deja persistate nu se recalculează la reluare; evenimentele și rezervările de buget trebuie deduplicate. Timeout-ul unui furnizor după facturare poate avea rezultat incert: nu promitem exact-once la API-ul extern. Rămân modelele, personajele, regulile de consens, limitele și 5 USD/zi existente.
-4. **Programare rezultate.** Cron la 5 minute, procesare în loturi și lease D1, actualizare deterministă a rezultatelor și statisticilor chiar fără vizitatori. Nu generează bilete/analize AI noi fără cerere explicită. Salvarea `automation_runs` și verificarea întârzierilor. Fără intervale Node persistente.
-5. **Live/replay.** Citire de evenimente după `seq`, numai câmpurile necesare pentru progres; backoff și oprire când tabul este ascuns. Nu se citește checkpointul complet la fiecare actualizare. Verificare cu două persoane care urmăresc aceeași analiză și reconectare/reluare.
-6. **Autentificare.** Aceleași ID-uri/hash-uri/secrete, invitații și drepturi. OAuth callback rămâne `https://primul11.noventra.ro/auth/callback` după mutarea aceluiași domeniu. Staging are cookie/origine separate; nu se dă acces administrator prin Google. Secretele se configurează prin Wrangler secret, nu vars în Git.
-7. **Limite Free.** Măsurare CPU per cerere/pas, subrequests, pași Workflow, citiri/scrieri și creșterea datelor; SSR nu este garantat sub limita de 10 ms. D1 Free are limite zilnice și poate refuza cereri la depășire. OpenRouter rămâne cu propriile costuri/limite. Nu activa automat un plan plătit sau R2/Images.
-
-## Procedura de schimbare a producției
-
-1. Restabilirea accesului Neon și export complet verificat; înainte de schimbare se păstrează și un backup PostgreSQL nativ pentru restaurare.
-2. Aplicația D1 + Workflows trece toate testele în staging cu date autorizate; se verifică egalitatea rezultatelor/statisticilor per agent, istoricul incomplet, invitațiile, Google și generarea/reluarea cu furnizori simulați.
-3. Validare controlată cu furnizori reali, în plafonul existent și numai pentru o analiză cerută explicit. Măsurare performanță și costuri Free.
-4. Oprire temporară a scrierilor și workerului vechi, export final coerent, import într-o țintă verificată, comparație integrală și backup țintă. Nu porni simultan două schedulere pe aceleași joburi.
-5. Abia apoi se configurează domeniul/custom route și se testează login/creare/reluare/settlement. Datele vechi nu sunt șterse.
-6. Rollback simplu către Render/Neon este sigur **înainte de acceptarea scrierilor pe D1**. După scrieri noi trebuie reconciliate/exportate înapoi; simpla schimbare DNS ar pierde acele modificări. Dacă reconcilierea nu este pregătită, se opresc scrierile înainte de rollback.
-
-## Referințe verificate
-
-- https://developers.cloudflare.com/workers/framework-guides/web-apps/opennext/
-- https://opennext.js.org/cloudflare/get-started
-- https://developers.cloudflare.com/d1/best-practices/import-export-data/
-- https://developers.cloudflare.com/d1/platform/limits/
-- https://developers.cloudflare.com/d1/platform/pricing/
-- https://developers.cloudflare.com/workers/platform/limits/
-- https://developers.cloudflare.com/workflows/reference/pricing/
+- [OpenNext / bindings](https://opennext.js.org/cloudflare/bindings)
+- [D1 database API și batch](https://developers.cloudflare.com/d1/worker-api/d1-database/)
+- [Workers best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/)
+- [Workflows API](https://developers.cloudflare.com/workflows/build/workers-api/)
+- [Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
+- [D1 limits](https://developers.cloudflare.com/d1/platform/limits/)

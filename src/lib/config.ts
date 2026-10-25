@@ -15,7 +15,7 @@ export const config = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   /** Redirect registered at Google; may be the old domain, which forwards (308) to the app with the code. */
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
-  adminEmails: (process.env.ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+  adminEmails: (process.env.ADMIN_EMAILS || '').split(',').map((s:string) => s.trim().toLowerCase()).filter(Boolean),
   groqApiKey: process.env.GROQ_API_KEY || '',
   geminiApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
   openRouterApiKey: process.env.OPENROUTER_API_KEY || '',

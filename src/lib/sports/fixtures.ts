@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { many, query } from '../db';
+import { many, query, SQL_NOW, isD1, atomic } from '../db';
 import { dateRange, localDate, yyyymmdd } from '../time';
 import { espnLeagueDay, espnMatchDays } from './espn';
 import { lpfFixtures } from './lpf';
@@ -59,21 +59,24 @@ export const activeProvider = () => g.__bmFixtureOverride ?? liveProvider;
 
 /** Persists fixtures/odds only when their content changed (no rewriting of unchanged rows). */
 export async function persistFixtures(fixtures: Fixture[]) {
+  const writes:import('../d1/client').Statement[]=[];
+  const write=isD1()?async(text:string,params:unknown[])=>{writes.push({text,params});}:query;
   for (const f of fixtures) {
     const contentHash = hash([f.home, f.away, f.kickoff, f.status, f.homeScore, f.awayScore]);
-    await query(
+    await write(
       `INSERT INTO fixtures (id, provider, provider_id, league_id, home_team, away_team, home_team_id, away_team_id, home_logo, away_logo, kickoff_utc, status, home_score, away_score, content_hash, source_observed_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        ON CONFLICT (id) DO UPDATE SET home_team=EXCLUDED.home_team, away_team=EXCLUDED.away_team, kickoff_utc=EXCLUDED.kickoff_utc,
          status=EXCLUDED.status, home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, content_hash=EXCLUDED.content_hash, source_observed_at=EXCLUDED.source_observed_at,
-         updated_at=CASE WHEN fixtures.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN now() ELSE fixtures.updated_at END
+         updated_at=CASE WHEN fixtures.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN ${SQL_NOW()} ELSE fixtures.updated_at END
        WHERE (fixtures.source_observed_at IS NULL OR EXCLUDED.source_observed_at>=fixtures.source_observed_at)
-         AND NOT (fixtures.status='post' AND EXCLUDED.status IN ('pre','in'))`,
+         AND NOT (fixtures.status='post' AND EXCLUDED.status IN ('pre','in'))
+         ${isD1()? 'AND fixtures.content_hash IS DISTINCT FROM EXCLUDED.content_hash':''}`,
       [f.id, f.provider, f.providerId, f.leagueId, f.home, f.away, f.homeTeamId ?? null, f.awayTeamId ?? null, f.homeLogo ?? null, f.awayLogo ?? null, f.kickoff, f.status, f.homeScore ?? null, f.awayScore ?? null, contentHash, f.fetchedAt],
     );
     if (f.odds) {
       const oddsHash = hash([f.odds.bookmaker, f.odds.markets]);
-      await query(
+      await write(
         `INSERT INTO odds_snapshots (fixture_id, bookmaker, source, markets, observed_at, provider_updated_at, content_hash)
          SELECT $1,$2,$3,$4,$5,$6,$7
          WHERE NOT EXISTS (SELECT 1 FROM (SELECT content_hash FROM odds_snapshots WHERE fixture_id=$1 ORDER BY observed_at DESC LIMIT 1) last WHERE last.content_hash=$7)`,
@@ -81,10 +84,18 @@ export async function persistFixtures(fixtures: Fixture[]) {
       );
     }
   }
+  for(let i=0;i<writes.length;i+=20)await atomic(writes.slice(i,i+20));
 }
 
 /** Fixtures for a window of local days. Cached by the HTTP layer; DB writes only on change. */
 export async function loadFixtures(startDate: string, days: number, opts: { top10Only?: boolean; persist?: boolean } = {}) {
+  if(process.env.BETMIND_RUNTIME?.startsWith('cloudflare')&&!g.__bmFixtureOverride){
+    const {storedCatalog}=await import('../d1/catalog');
+    const {data}=await storedCatalog(startDate,days);
+    const leagues=(opts.top10Only??true)?data.leagues.filter(l=>l.top10):data.leagues;
+    const allowed=new Set(leagues.map(l=>l.id));
+    return {...data,leagues,fixtures:data.fixtures.filter(f=>allowed.has(f.leagueId))};
+  }
   const leagues = await getLeagues({ top10Only: opts.top10Only ?? true });
   const window = dateRange(startDate, days);
   const { fixtures, errors } = await activeProvider()(leagues, window);

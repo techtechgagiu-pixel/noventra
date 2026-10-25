@@ -33,7 +33,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         const m = await jobMeta(user.id, id);
         send(`event: meta\ndata: ${JSON.stringify(m)}\n\n`);
         if (m && (TERMINAL as string[]).includes(m.status) && !events.length) break;
-        await new Promise((r) => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, process.env.BETMIND_RUNTIME?.startsWith('cloudflare')?5000:1500));
       }
       send('event: end\ndata: {}\n\n');
       closed = true;

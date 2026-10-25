@@ -51,7 +51,7 @@ export async function sportsGet<T = unknown>(url: string, opts: { provider: stri
           signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
         });
       } finally { release(); }
-      void recordProviderUsage(opts.provider, { errors: response.ok ? 0 : 1 });
+      await recordProviderUsage(opts.provider, { errors: response.ok ? 0 : 1 });
       if (response.ok || ![403, 429, 500, 502, 503, 504].includes(response.status)) break;
     }
     response = response!;

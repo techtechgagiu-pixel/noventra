@@ -1,5 +1,5 @@
 import { cleanPayload } from './agent-names';
-import { many, one } from './db';
+import { many, one, dialect } from './db';
 import { eventsAfter } from './jobs/events';
 import { slotInfo } from './slots';
 import { incompleteTicketPicks, type IncompletePick } from './incomplete-ticket-picks';
@@ -22,8 +22,8 @@ const CREATOR_COLS = `u.id AS creator_id, u.name AS creator_name, u.email AS cre
 /** Shared read access: every signed-in account may watch any analysis; only its creator may act on it. */
 export async function jobMeta(userId: string, jobId: string) {
   const j = await one<Record<string, unknown>>(
-    `SELECT j.id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.target_odds, j.required_legs, j.status, j.stage, j.eligible_count, j.last_error, j.next_run_at, j.created_at, j.finished_at, j.last_event_seq,
-            jsonb_build_object('batchCount',jsonb_array_length(COALESCE(j.checkpoint->'batches','[]'::jsonb)),
+    `SELECT j.id, j.slot, ${dialect("to_char(j.period_key,'YYYY-MM-DD')", 'j.period_key')} AS period_key, j.target_odds, j.required_legs, j.status, j.stage, j.eligible_count, j.last_error, j.next_run_at, j.created_at, j.finished_at, j.last_event_seq,
+            ${dialect('jsonb_build_object', 'json_object')}('batchCount',${dialect("jsonb_array_length(COALESCE(j.checkpoint->'batches','[]'::jsonb))", "json_array_length(COALESCE(j.checkpoint->'batches','[]'))")},
               'batchIndex',j.checkpoint->'batchIndex','analyzed',j.checkpoint->'analyzed','qualified',j.checkpoint->'qualified') AS progress,
             j.config->'customBatch' AS custom_batch, t.id AS ticket_id
             , ${CREATOR_COLS}
@@ -54,9 +54,9 @@ export async function jobEvents(userId: string, jobId: string, after = 0) {
 /** "Bilete create": every account's tickets, newest first, each with its creator. */
 export async function listTickets(userId: string) {
   const rows = await many<Record<string, unknown> & { creator_id: string; creator_name: string | null; creator_email: string | null; creator_picture: string | null; creator_sub: string | null }>(
-    `SELECT t.id, t.slot, to_char(t.period_key,'YYYY-MM-DD') AS period_key, t.target_odds::float AS target_odds, t.actual_odds::float AS actual_odds, t.leg_count, t.generation_status, t.outcome_status, t.created_at, t.mixed_bookmakers,
-            j.id AS job_id, (SELECT count(*) FROM analysis_events e WHERE e.job_id=j.id)::int AS event_count,
-            COALESCE((SELECT json_agg(json_build_object('match', s.snapshot->>'match', 'label', s.market_label, 'market_key', s.market_key, 'model_probability', s.model_probability::float, 'odds', s.odds::float, 'outcome', s.outcome) ORDER BY s.position) FROM ticket_selections s WHERE s.ticket_id=t.id), '[]') AS selections
+    `SELECT t.id, t.slot, ${dialect("to_char(t.period_key,'YYYY-MM-DD')", 't.period_key')} AS period_key, CAST(t.target_odds AS DOUBLE PRECISION) AS target_odds, CAST(t.actual_odds AS DOUBLE PRECISION) AS actual_odds, t.leg_count, t.generation_status, t.outcome_status, t.created_at, t.mixed_bookmakers,
+            j.id AS job_id, CAST((SELECT count(*) FROM analysis_events e WHERE e.job_id=j.id) AS INTEGER) AS event_count,
+            COALESCE((SELECT ${dialect('json_agg', 'json_group_array')}(${dialect('json_build_object', 'json_object')}('match', s.snapshot->>'match', 'label', s.market_label, 'market_key', s.market_key, 'model_probability', CAST(s.model_probability AS DOUBLE PRECISION), 'odds', CAST(s.odds AS DOUBLE PRECISION), 'outcome', s.outcome) ORDER BY s.position) FROM ticket_selections s WHERE s.ticket_id=t.id), '[]') AS selections
             , ${CREATOR_COLS}
      FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id JOIN users u ON u.id=t.user_id ORDER BY t.created_at DESC`,
   );
@@ -66,23 +66,23 @@ export async function listTickets(userId: string) {
 
 export async function ticketDetail(userId: string, ticketId: string) {
   const t = await one<Record<string, unknown>>(
-    `SELECT t.*, t.target_odds::float AS target, t.actual_odds::float AS actual, to_char(t.period_key,'YYYY-MM-DD') AS period, j.created_at AS job_created, j.finished_at, j.eligible_count, j.seed
+    `SELECT t.*, CAST(t.target_odds AS DOUBLE PRECISION) AS target, CAST(t.actual_odds AS DOUBLE PRECISION) AS actual, ${dialect("to_char(t.period_key,'YYYY-MM-DD')", 't.period_key')} AS period, j.created_at AS job_created, j.finished_at, j.eligible_count, j.seed
             , ${CREATOR_COLS}
      FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id JOIN users u ON u.id=t.user_id WHERE t.id=$1`,
     [ticketId],
   );
   if (!t) return null;
   const selections = await many<Record<string, unknown>>(
-    `SELECT s.position, s.fixture_id, s.market_key, s.market_label, s.odds::float AS odds, s.bookmaker, s.quote_observed_at, s.votes_for, s.model_probability::float AS model_probability, s.risk, s.snapshot, s.outcome,
+    `SELECT s.position, s.fixture_id, s.market_key, s.market_label, CAST(s.odds AS DOUBLE PRECISION) AS odds, s.bookmaker, s.quote_observed_at, s.votes_for, CAST(s.model_probability AS DOUBLE PRECISION) AS model_probability, s.risk, s.snapshot, s.outcome,
             f.home_score, f.away_score, f.status AS fixture_status
      FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE s.ticket_id=$1 ORDER BY s.position`,
     [ticketId],
   );
   const partial = t.generation_status === 'INCOMPLETE' ? await incompleteTicketPicks([ticketId]) : new Map<string, IncompletePick[]>();
   const decisions = await many<Record<string, unknown>>('SELECT fixture_id, outcome, market_key, votes_for, votes, validation, reason FROM final_decisions WHERE job_id=$1 ORDER BY id', [t.job_id]);
-  const predictions = await many<Record<string, unknown>>(`${finalAgentPicksCte()} SELECT p.id,p.fixture_id,p.agent_id,p.round,p.provider,p.model_id,p.prompt_version,p.decision,p.market_key,p.estimated_probability::float AS estimated_probability,p.confidence,p.risk,p.payload,p.outcome,p.odds::float AS odds,p.created_at,p.settled_at,(fp.id=p.id) AS current_in_stats FROM agent_predictions p LEFT JOIN final_picks fp ON fp.fixture_id=p.fixture_id AND fp.agent_id=p.agent_id WHERE p.job_id=$1 ORDER BY p.fixture_id,p.agent_id,p.round`, [t.job_id]);
+  const predictions = await many<Record<string, unknown>>(`${finalAgentPicksCte()} SELECT p.id,p.fixture_id,p.agent_id,p.round,p.provider,p.model_id,p.prompt_version,p.decision,p.market_key,CAST(p.estimated_probability AS DOUBLE PRECISION) AS estimated_probability,p.confidence,p.risk,p.payload,p.outcome,CAST(p.odds AS DOUBLE PRECISION) AS odds,p.created_at,p.settled_at,(fp.id=p.id) AS current_in_stats FROM agent_predictions p LEFT JOIN final_picks fp ON fp.fixture_id=p.fixture_id AND fp.agent_id=p.agent_id WHERE p.job_id=$1 ORDER BY p.fixture_id,p.agent_id,p.round`, [t.job_id]);
   const dossiers = await many<Record<string, unknown>>('SELECT fixture_id, mode, dossier, narrative, model, created_at FROM scout_dossiers WHERE job_id=$1', [t.job_id]);
-  const snapshots = await many<{ fixture_id: string; payload: { fixture: unknown; model: unknown; odds: unknown; dataQuality: unknown } }>('SELECT DISTINCT ON (fixture_id) fixture_id, payload FROM fixture_snapshots WHERE job_id=$1 ORDER BY fixture_id, id', [t.job_id]);
+  const snapshots = await many<{ fixture_id: string; payload: { fixture: unknown; model: unknown; odds: unknown; dataQuality: unknown } }>('SELECT fixture_id,payload FROM (SELECT fixture_id,payload,ROW_NUMBER() OVER(PARTITION BY fixture_id ORDER BY id) AS rank FROM fixture_snapshots WHERE job_id=$1) ranked WHERE rank=1 ORDER BY fixture_id', [t.job_id]);
   const slot = slotInfo(t.slot as string, Number(t.target_odds), t.leg_count as number);
   return {
     creator: creatorOf(t as never, userId), mine: t.creator_id === userId,

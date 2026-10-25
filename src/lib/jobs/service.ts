@@ -1,6 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { config } from '../config';
-import { many, one, tx } from '../db';
+import { many, one, tx, dialect, isD1, SQL_AGO, timeCompare } from '../db';
+import { createD1CustomJobs } from '../d1/custom-jobs';
+import { createD1Job, resumeD1Job, transitionD1Job } from '../d1/job-mutations';
+import { SQL_NOW } from '../db';
 import { providerConfigured, resetModelExhaustion } from '../ai/router';
 import { aiUsageToday } from '../usage';
 import { CUSTOM_LIMIT_PER_DAY, REVIEW_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, isReviewSlot, slotInfo, type ReviewLeg, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
@@ -11,11 +14,11 @@ import type { Checkpoint } from './types';
 import { kickWorker } from './worker';
 import { getLeagues, loadFixtures } from '../sports/fixtures';
 import { withExtraMarkets } from './pipeline';
+import type { JobRow } from './pipeline';
 import { isBannedMarket } from './analysis';
 
-export class SlotError extends Error {
-  constructor(message: string, public status = 400) { super(message); }
-}
+import { SlotError } from './errors';
+export { SlotError } from './errors';
 
 export type SlotState = {
   slot: SlotDefinition;
@@ -29,10 +32,10 @@ export type SlotState = {
 export async function slotStates(userId: string, at = new Date()): Promise<SlotState[]> {
   const keys = SLOTS.map((s) => periodKey(s, at));
   const rows = await many<{ id: string; slot: string; period_key: string; status: string; stage: string; created_at: Date; last_error: string | null; next_run_at: Date; ticket_id: string | null; generation_status: string | null; actual_odds: string | null; leg_count: number | null; t_created: Date | null; outcome_status: string | null }>(
-    `SELECT j.id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.status, j.stage, j.created_at, j.last_error, j.next_run_at,
+    `SELECT j.id, j.slot, ${dialect("to_char(j.period_key,'YYYY-MM-DD')", 'j.period_key')} AS period_key, j.status, j.stage, j.created_at, j.last_error, j.next_run_at,
             t.id AS ticket_id, t.generation_status, t.actual_odds, t.leg_count, t.created_at AS t_created, t.outcome_status
      FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
-     WHERE j.user_id=$1 AND j.period_key = ANY($2::date[])`,
+     WHERE j.user_id=$1 AND ${dialect('j.period_key = ANY($2::date[])','j.period_key IN (SELECT value FROM json_each($2))')}`,
     [userId, [...new Set(keys)]],
   );
   return SLOTS.map((slot, i) => {
@@ -80,7 +83,11 @@ export async function createOrGetJob(userId: string, slotId: string, at = new Da
   const seed = randomBytes(16).toString('hex');
   const cfg = { votingAgentIds: VOTING_AGENTS.map((a) => a.id), windowStart: window.startDate, windowDays: window.days, top10Only: false, maxFixtures: slot.period === 'weekly' ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, batchSize: config.limits.batchSize, avoidFixtures };
   const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
-  const created = await tx(async (c) => {
+  const created = isD1() ? await createD1Job({userId,slot:slot.id,day:key,target:slot.target,requiredLegs:slot.requiredLegs,seed,config:cfg,checkpoint,events:[
+    {type:'JOB_CREATED',payload:{title:slot.title,period:key,agentIds:cfg.votingAgentIds,authorizedBy:'click CREEAZĂ BILETUL'}},
+    {type:'TARGET_SELECTED',payload:{target:slot.target,requiredLegs:slot.requiredLegs,tolerance:config.limits.targetTolerance,window:cfg}},
+    {type:'SEED_GENERATED',payload:{seedPrefix:seed.slice(0,12),note:'Seed generat pe server; determină doar ordinea de explorare a meciurilor.'}},
+  ]}) : await tx(async (c) => {
     const ins = await c.query(
       `INSERT INTO ticket_generation_jobs (user_id, slot, period_key, target_odds, required_legs, seed, config, checkpoint, status, stage)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'QUEUED','QUEUED') ON CONFLICT (user_id, slot, period_key) DO NOTHING RETURNING id`,
@@ -146,7 +153,7 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
   const maxFixtures = Math.min(weekly ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, Math.max(12, custom.legs * 4));
   const cfg = { windowStart: key, windowDays: days, top10Only: false, maxFixtures, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], custom };
   const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
-  const result = await tx(async (c) => {
+  const result = isD1() ? await createD1CustomJobs({userId,day:key,requestId,count,custom,cfg,checkpoint,policy,callLimit:config.limits.aiDailyCalls}) : await tx(async (c) => {
     // One user lock protects the daily allowance and retry IDs, including retries after midnight.
     await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`custom:${userId}`]);
     const previous = await c.query(`SELECT id, config FROM ticket_generation_jobs WHERE user_id=$1 AND config->'customBatch'->>'id'=$2 ORDER BY (config->'customBatch'->>'index')::int`, [userId, requestId]);
@@ -157,7 +164,7 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
       if (first.customBatch.count !== count || sorted(first.custom) !== sorted(custom)) throw new SlotError('Cererea a fost deja folosită cu alte setări. Reîncarcă formularul.', 409);
       return { jobIds: previous.rows.map((r) => r.id as string), created: false };
     }
-    const n = Number((await c.query("SELECT count(*) AS n FROM ticket_generation_jobs WHERE user_id=$1 AND period_key=$2 AND slot LIKE 'CUSTOM\\_%'", [userId, key])).rows[0].n);
+    const n = Number((await c.query("SELECT count(*) AS n FROM ticket_generation_jobs WHERE user_id=$1 AND period_key=$2 AND substr(slot,1,7)='CUSTOM_'", [userId, key])).rows[0].n);
     const remaining = CUSTOM_LIMIT_PER_DAY - n;
     if (count > remaining) throw new SlotError(`Mai poți crea ${remaining} bilete custom azi din ${CUSTOM_LIMIT_PER_DAY}. Ai cerut ${count}.`, 429);
     const usage = await aiUsageToday(c);
@@ -189,18 +196,18 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
 
 export type CustomBatchJob = { id: string; index: number; status: string; ticketId: string | null };
 export async function customBatchJobs(userId: string, batchId: string) {
-  return many<CustomBatchJob>(`SELECT j.id, (j.config->'customBatch'->>'index')::int AS index, j.status, t.id AS "ticketId"
+  return many<CustomBatchJob>(`SELECT j.id, CAST(j.config->'customBatch'->>'index' AS INTEGER) AS "index", j.status, t.id AS "ticketId"
     FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
-    WHERE j.user_id=$1 AND j.config->'customBatch'->>'id'=$2 ORDER BY index`, [userId, batchId]);
+    WHERE j.user_id=$1 AND j.config->'customBatch'->>'id'=$2 ORDER BY "index"`, [userId, batchId]);
 }
 
 /** Custom jobs of the last days, newest first (with their ticket, if built). */
 export async function customJobs(userId: string, limit = 20) {
   return many<{ id: string; slot: string; period_key: string; status: string; stage: string; target_odds: string; required_legs: number; config: { custom?: CustomConfig }; created_at: Date; ticket_id: string | null; generation_status: string | null; actual_odds: string | null; outcome_status: string | null }>(
-    `SELECT j.id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.status, j.stage, j.target_odds, j.required_legs, j.config, j.created_at,
+    `SELECT j.id, j.slot, ${dialect("to_char(j.period_key,'YYYY-MM-DD')", 'j.period_key')} AS period_key, j.status, j.stage, j.target_odds, j.required_legs, j.config, j.created_at,
             t.id AS ticket_id, t.generation_status, t.actual_odds, t.outcome_status
      FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
-     WHERE j.user_id=$1 AND j.slot LIKE 'CUSTOM\\_%' ORDER BY j.created_at DESC LIMIT $2`, [userId, limit]);
+     WHERE j.user_id=$1 AND substr(j.slot,1,7)='CUSTOM_' ORDER BY j.created_at DESC LIMIT $2`, [userId, limit]);
 }
 
 /** "Vino cu biletul tău": validates the user's own ticket against live prices and queues it for the agents. */
@@ -233,9 +240,12 @@ export async function createReviewJob(userId: string, input: unknown, at = new D
   const cfg = { votingAgentIds: VOTING_AGENTS.map((a) => a.id), windowStart: key, windowDays: 7, top10Only: false, maxFixtures: legs.length, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], review: { legs, advice } };
   const seed = randomBytes(16).toString('hex');
   const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
-  const id = await tx(async (c) => {
+  const id = isD1() ? await createD1Job({userId,slot:'REVIEW',day:key,target,requiredLegs:legs.length,seed,config:cfg,checkpoint,review:true,events:[
+    {type:'JOB_CREATED',payload:{title:`BILETUL TĂU — COTĂ ${target}`,period:key,agentIds:cfg.votingAgentIds,authorizedBy:'click TRIMITE LA ANALIZĂ',review:{legs:legs.map(l=>({match:l.match,label:l.label,odds:l.odds})),advice}}},
+    {type:'TARGET_SELECTED',payload:{target,requiredLegs:legs.length,tolerance:0,window:{windowStart:key,windowDays:7}}},
+  ]}) : await tx(async (c) => {
     await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`review:${userId}:${key}`]);
-    const n = Number((await c.query("SELECT count(*) AS n FROM ticket_generation_jobs WHERE user_id=$1 AND period_key=$2 AND slot LIKE 'REVIEW\\_%'", [userId, key])).rows[0].n);
+    const n = Number((await c.query("SELECT count(*) AS n FROM ticket_generation_jobs WHERE user_id=$1 AND period_key=$2 AND substr(slot,1,7)='REVIEW_'", [userId, key])).rows[0].n);
     if (n >= REVIEW_LIMIT_PER_DAY) throw new SlotError(`Ai trimis deja ${REVIEW_LIMIT_PER_DAY} bilete la analiză azi. Revino mâine.`, 429);
     const slot = `REVIEW_${n + 1}`;
     const ins = await c.query(
@@ -250,6 +260,7 @@ export async function createReviewJob(userId: string, input: unknown, at = new D
     return jobId;
   });
   kickWorker();
+  if(!id)throw new SlotError('Biletul nu a putut fi rezervat. Reîncearcă.',409);
   return { jobId: id, created: true };
 }
 
@@ -258,11 +269,12 @@ export async function reviewJobs(userId: string, limit = 12) {
   return many<{ id: string; status: string; target_odds: string; required_legs: number; created_at: Date; ticket_id: string | null; outcome_status: string | null; summary: { review?: { solid: number; risky: number; weak: number } } | null }>(
     `SELECT j.id, j.status, j.target_odds, j.required_legs, j.created_at, t.id AS ticket_id, t.outcome_status, t.summary
      FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
-     WHERE j.user_id=$1 AND j.slot LIKE 'REVIEW\\_%' ORDER BY j.created_at DESC LIMIT $2`, [userId, limit]);
+     WHERE j.user_id=$1 AND substr(j.slot,1,7)='REVIEW_' ORDER BY j.created_at DESC LIMIT $2`, [userId, limit]);
 }
 
 /** Continues the same incomplete ticket, preserving its analysis and looking for additional fixtures. */
 export async function completeIncompleteTicket(userId: string, ticketId: string, at = new Date()) {
+  if(isD1())return completeD1IncompleteTicket(userId,ticketId,at);
   const result = await tx(async (c) => {
     // Lock the job only: the worker finalizes ticket then job, so locking both here could deadlock.
     const row = (await c.query(`SELECT j.* FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id
@@ -289,12 +301,42 @@ export async function completeIncompleteTicket(userId: string, ticketId: string,
   return result;
 }
 
+async function completeD1IncompleteTicket(userId:string,ticketId:string,at:Date){
+  const row=await one<JobRow & {last_event_seq:number;ticket_generation_status:string}>(`SELECT j.*,t.generation_status AS ticket_generation_status FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id WHERE t.id=$1 AND t.user_id=$2 AND j.user_id=$2`,[ticketId,userId]);
+  if(!row)throw new SlotError('Biletul nu există sau nu îți aparține.',404);
+  if(row.ticket_generation_status!=='INCOMPLETE'||row.config.review)throw new SlotError('Doar un bilet incomplet poate fi finalizat.',409);
+  if(['QUEUED','RUNNING','WAITING'].includes(row.status))return {jobId:row.id,ticketId,resumed:false};
+  const usage=await aiUsageToday();
+  if(usage.requests+20>config.limits.aiDailyCalls)throw new SlotError('Limita AI zilnică este aproape epuizată. Reîncearcă după resetare.',503);
+  const continuing=!!row.config.completion&&['PAUSED','FAILED'].includes(row.status);
+  const completion=continuing?row.config.completion!:{requestedAt:at.toISOString(),attempt:(row.config.completion?.attempt??0)+1};
+  const cfg={...row.config,windowStart:localDate(at),completion};
+  const cp=continuing?row.checkpoint:{...row.checkpoint,phase:'DISCOVER',batchIndex:0,batchStep:'FETCH',batches:[],agentsDone:[]};
+  const resumed=await transitionD1Job({
+    text:`UPDATE ticket_generation_jobs SET status='QUEUED',stage='QUEUED',config=$2,checkpoint=$3,next_run_at=${SQL_NOW()},finished_at=NULL,started_at=CASE WHEN $4 THEN started_at ELSE NULL END,last_error=NULL,attempt_count=0,lease_owner=NULL,lease_expires_at=NULL,last_event_seq=last_event_seq+1 WHERE id=$1 AND last_event_seq=$5 AND status=$6 RETURNING id`,
+    params:[row.id,JSON.stringify(cfg),JSON.stringify(cp),continuing,row.last_event_seq,row.status],
+  },row.id,{type:'JOB_RESUMED',stage:'QUEUED',payload:{by:'user',completion:true,attempt:completion.attempt,note:'Finalizarea biletului incomplet: păstrăm analiza salvată, reverificăm selecțiile și căutăm meciuri noi cu aceeași țintă și echipă.'}},
+  {userId,action:'ticket_completion_requested',detail:{ticketId,jobId:row.id,attempt:completion.attempt}});
+  if(!resumed){
+    const latest=await one<{status:string}>('SELECT status FROM ticket_generation_jobs WHERE id=$1',[row.id]);
+    if(!latest||!['QUEUED','RUNNING','WAITING'].includes(latest.status))throw new SlotError('Analiza s-a modificat între timp. Reîncearcă.',409);
+  }
+  if(resumed)resetModelExhaustion();
+  kickWorker();
+  return {jobId:row.id,ticketId,resumed};
+}
+
 /** Resumes the SAME job (same seed, same candidate order). Never creates a new draw. */
 export async function resumeJob(userId: string, jobId: string) {
   const job = await one<{ status: string }>('SELECT status FROM ticket_generation_jobs WHERE id=$1 AND user_id=$2', [jobId, userId]);
   if (!job) throw new SlotError('Analiza nu există.', 404);
   if (!['PAUSED', 'FAILED', 'WAITING'].includes(job.status)) return { resumed: false, status: job.status };
   resetModelExhaustion();
+  if(isD1()){
+    const resumed=await resumeD1Job(userId,jobId);
+    kickWorker();
+    return {resumed,status:'QUEUED'};
+  }
   await tx(async (c) => {
     await c.query("UPDATE ticket_generation_jobs SET status='QUEUED', next_run_at=now(), attempt_count=0, last_error=NULL, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1", [jobId]);
     await recordEvent(jobId, { type: 'JOB_RESUMED', stage: 'QUEUED', payload: { by: 'user', note: 'Reluare a aceleiași analize, cu același seed și aceeași ordine a meciurilor.' } }, c);
@@ -309,7 +351,7 @@ export async function jobQueue(userId: string) {
     `SELECT j.id, j.slot, j.status, j.stage, j.target_odds, j.required_legs, j.config, j.checkpoint, j.created_at, j.started_at, j.finished_at, j.next_run_at, j.last_error,
             t.id AS ticket_id, t.actual_odds, t.generation_status
      FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
-     WHERE j.user_id=$1 AND (j.status IN ('QUEUED','RUNNING','WAITING','PAUSED') OR j.finished_at > now() - interval '2 hours')
+     WHERE j.user_id=$1 AND (j.status IN ('QUEUED','RUNNING','WAITING','PAUSED') OR ${timeCompare('j.finished_at','>',SQL_AGO(2,'hours'))})
      ORDER BY CASE WHEN j.status IN ('QUEUED','RUNNING','WAITING','PAUSED') THEN 0 ELSE 1 END, j.created_at DESC LIMIT 20`, [userId]);
   const waiting = rows.filter((r) => r.status === 'QUEUED').sort((a, b) => +a.created_at - +b.created_at).map((r) => r.id);
   return rows.map((r) => {

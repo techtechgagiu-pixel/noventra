@@ -1,4 +1,4 @@
-import { many } from './db';
+import { many, dialect } from './db';
 import { resolvedOutcome } from './settlement';
 
 export type IncompletePick = {
@@ -24,13 +24,13 @@ export async function incompleteTicketPicks(ticketIds: string[]) {
   const grouped = new Map<string, IncompletePick[]>();
   if (!ticketIds.length) return grouped;
   const rows = await many<Row>(
-    `SELECT t.id AS ticket_id,d.fixture_id,d.market_key,d.votes_for,d.validation,d.created_at,s.payload,
+    `SELECT t.id AS ticket_id,d.fixture_id,d.market_key,d.votes_for,d.validation,d.created_at,
+       (SELECT snap.payload FROM fixture_snapshots snap WHERE snap.job_id=d.job_id AND snap.fixture_id=d.fixture_id ORDER BY snap.id DESC LIMIT 1) AS payload,
        f.home_team,f.away_team,COALESCE(l.name,f.league_id) AS league,f.status,f.kickoff_utc,
        f.home_score,f.away_score,f.ht_home,f.ht_away,f.corners_home,f.corners_away
      FROM tickets t JOIN final_decisions d ON d.job_id=t.job_id AND d.outcome='QUALIFIED' AND d.market_key IS NOT NULL
      JOIN fixtures f ON f.id=d.fixture_id LEFT JOIN leagues l ON l.id=f.league_id
-     LEFT JOIN LATERAL (SELECT snap.payload FROM fixture_snapshots snap WHERE snap.job_id=d.job_id AND snap.fixture_id=d.fixture_id ORDER BY snap.id DESC LIMIT 1) s ON true
-     WHERE t.id=ANY($1::uuid[]) AND t.generation_status='INCOMPLETE'
+     WHERE ${dialect('t.id=ANY($1::uuid[])', 't.id IN (SELECT value FROM json_each($1))')} AND t.generation_status='INCOMPLETE'
      ORDER BY t.id,f.kickoff_utc,d.id`, [ticketIds]);
   for (const r of rows) {
     const list = grouped.get(r.ticket_id) ?? [];

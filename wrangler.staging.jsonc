@@ -1,0 +1,16 @@
+{
+  "$schema":"node_modules/wrangler/config-schema.json",
+  "name":"primul11-staging",
+  "main":"cloudflare/staging-worker.ts",
+  "compatibility_date":"2026-10-25",
+  "compatibility_flags":["nodejs_compat","global_fetch_strictly_public"],
+  "workers_dev":false,
+  "preview_urls":false,
+  "assets":{"directory":".open-next/assets","binding":"ASSETS"},
+  "d1_databases":[{"binding":"DB","database_name":"primul11-staging","database_id":"bbd70eca-6c37-4915-9cdd-95ac477019e9","migrations_dir":"cloudflare/d1/migrations"}],
+  "workflows":[{"binding":"SETTLEMENT","name":"primul11-staging-settlement","class_name":"SettlementWorkflow"}],
+  // Deliberately disabled until the production data and source credentials are recovered.
+  "triggers":{"crons":[]},
+  "observability":{"enabled":true,"head_sampling_rate":0.1},
+  "vars":{"BETMIND_RUNTIME":"cloudflare-staging","BETMIND_DATABASE":"d1","BETMIND_DISABLE_WORKER":"1","APP_TIMEZONE":"Europe/Bucharest"}
+}

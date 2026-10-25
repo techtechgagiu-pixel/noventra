@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { config } from '../config';
-import { many, query } from '../db';
+import { many, query, dialect, SQL_NOW, timeCompare, isD1 } from '../db';
 import { aiUsageToday, recordProviderUsage } from '../usage';
 import { OPENROUTER_PRICE } from './openrouter-models';
 import { NEW_AI_PROFILES } from './new-agent-profiles';
@@ -86,6 +86,14 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
     body.reasoning = effort ? { effort, exclude: true } : { enabled: false };
     body.max_completion_tokens = Math.min(8000, Math.max(Number(body.max_completion_tokens) || 0, 4000));
   }
+  let reservation:string|null=null;
+  if(ref.provider==='openrouter'&&isD1()&&!ref.model.endsWith(':free')){
+    const {reservePaidCall,paidCallUpperEstimate}=await import('../d1/ai-budget');
+    const amount=paidCallUpperEstimate(ref.model,input);
+    if(amount===null)throw new ProviderUnavailableError('openrouter','Prețul modelului nu este configurat în catalogul de buget.');
+    reservation=await reservePaidCall(ref.model,amount,config.openRouterDailyUsd);
+    if(!reservation)throw new BudgetExceededError('Plafonul zilnic OpenRouter este rezervat de apelurile în desfășurare.');
+  }
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -99,6 +107,11 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
   if (res.status === 404 || res.status === 400 && /model/i.test(text) && /not (found|exist)|decommissioned/i.test(text)) throw new ProviderUnavailableError(ref.provider, `Model indisponibil: ${ref.model}`);
   if (!res.ok) throw new ProviderUnavailableError(ref.provider, `${ref.provider} ${res.status}: ${text.slice(0, 300)}`);
   const json = JSON.parse(text) as { model?: string; choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+  if(reservation){
+    const {recordPaidCall,paidCallActual}=await import('../d1/ai-budget');
+    const actual=paidCallActual(ref.model,json.usage?.prompt_tokens??null,json.usage?.completion_tokens??null);
+    if(actual!==null)await recordPaidCall(reservation,actual);
+  }
   return { text: json.choices?.[0]?.message?.content ?? '', inputTokens: json.usage?.prompt_tokens ?? null, outputTokens: json.usage?.completion_tokens ?? null, resolvedModel: json.model || ref.model };
 }
 
@@ -233,6 +246,7 @@ export async function structuredCall<T>(opts: {
         continue;
       }
       if (transient(error)) { exhausted.set(key, Date.now() + 60_000); shortestWait = Math.min(shortestWait, 30_000); continue; }
+      if(error instanceof BudgetExceededError&&ref.provider==='openrouter'){lastError=new ProviderUnavailableError('openrouter',error.message);continue;}
       if (error instanceof ProviderUnavailableError || error instanceof SchemaError) continue;
       throw error;
     }
@@ -256,7 +270,7 @@ export async function openRouterSpendToday(): Promise<number> {
   if (spendCache && Date.now() - spendCache.at < 20_000) return spendCache.usd;
   const rows = await many<{ model: string; i: string | null; o: string | null }>(
     `SELECT requested_model_id AS model, sum(input_tokens) AS i, sum(output_tokens) AS o FROM model_usage_logs
-     WHERE provider='openrouter' AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' GROUP BY 1`).catch(() => []);
+     WHERE provider='openrouter' AND ${timeCompare('created_at','>=',dialect("date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'", "strftime('%Y-%m-%dT00:00:00Z','now')"))} GROUP BY 1`).catch(() => []);
   const usd = rows.reduce((sum, r) => { const p = OPENROUTER_PRICE.get(r.model) ?? { inPerM: 1, outPerM: 3 }; return sum + (Number(r.i ?? 0) * p.inPerM + Number(r.o ?? 0) * p.outPerM) / 1e6; }, 0);
   spendCache = { at: Date.now(), usd };
   return usd;
@@ -288,8 +302,8 @@ function isPacificDst(d: Date) {
 function markExhausted(key: string, until: number, reason: string) {
   exhaustedModels().set(key, until);
   if (ag.__bmFakeAi) return; // tests: in-memory only
-  void query(`INSERT INTO model_health(model_key, exhausted_until, reason, updated_at) VALUES ($1, to_timestamp($2/1000.0), $3, now())
-              ON CONFLICT (model_key) DO UPDATE SET exhausted_until=EXCLUDED.exhausted_until, reason=EXCLUDED.reason, updated_at=now()`, [key, until, reason]).catch(() => {});
+  void query(`INSERT INTO model_health(model_key, exhausted_until, reason, updated_at) VALUES ($1, ${dialect('to_timestamp($2/1000.0)',"strftime('%Y-%m-%dT%H:%M:%fZ',$2/1000.0,'unixepoch')")}, $3, ${SQL_NOW()})
+              ON CONFLICT (model_key) DO UPDATE SET exhausted_until=EXCLUDED.exhausted_until, reason=EXCLUDED.reason, updated_at=${SQL_NOW()}`, [key, until, reason]).catch(() => {});
 }
 
 let healthLoadedAt = 0;
@@ -298,7 +312,7 @@ async function loadPersistedExhaustion() {
   if (ag.__bmFakeAi || Date.now() - healthLoadedAt < 30_000) return;
   healthLoadedAt = Date.now();
   try {
-    const rows = await many<{ model_key: string; until: string }>('SELECT model_key, extract(epoch from exhausted_until)*1000 AS until FROM model_health WHERE exhausted_until > now()');
+    const rows = await many<{ model_key: string; until: string }>(`SELECT model_key, ${dialect('extract(epoch from exhausted_until)*1000',"(julianday(exhausted_until)-2440587.5)*86400000")} AS until FROM model_health WHERE ${timeCompare('exhausted_until','>',SQL_NOW())}`);
     const m = exhaustedModels();
     for (const r of rows) m.set(r.model_key, Math.max(m.get(r.model_key) ?? 0, Number(r.until)));
   } catch { /* table missing or DB hiccup: in-memory state still applies */ }

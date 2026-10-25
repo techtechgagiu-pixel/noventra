@@ -153,8 +153,10 @@ def convert(source, output):
         (output / 'schema.sql').write_text(sql)
         # Deferred FKs allow cycles (sessions -> invitation_codes -> users).
         # Foreign keys are checked explicitly before any import is marked ready.
-        with (output / 'import.sql').open('w') as dump:
+        with (output / 'import.sql').open('w') as dump, (output / 'data-only.sql').open('w') as data_dump:
             os.chmod(output / 'import.sql', 0o600)
+            os.chmod(output / 'data-only.sql', 0o600)
+            data_dump.write('PRAGMA defer_foreign_keys=ON;\n')
             dump.write('PRAGMA defer_foreign_keys=ON;\n' + sql)
             for table, entry, data in zip(catalog['tables'], manifest['tables'], checked):
                 prefix = 'INSERT INTO ' + qi(table['name']) + ' (' + ','.join(qi(c['name']) for c in table['columns']) + ') VALUES ('
@@ -175,6 +177,7 @@ def convert(source, output):
                         raise ValueError('D1 import limit exceeded in ' + table['name'] + '; split payload before migration')
                     connection.execute(placeholders, values)
                     dump.write(statement)
+                    data_dump.write(statement)
                     count += 1
                 if count != entry['rows']:
                     raise ValueError('Row count mismatch: ' + table['name'])
@@ -185,6 +188,7 @@ def convert(source, output):
             for reset in resets:
                 connection.execute(reset)
                 dump.write(reset + '\n')
+                data_dump.write(reset + '\n')
         violations = connection.execute('PRAGMA foreign_key_check').fetchall()
         if violations:
             raise ValueError('Foreign key violations: ' + str(len(violations)))
@@ -217,6 +221,8 @@ def convert(source, output):
         report = {'format': 1, 'status': 'converted-not-deployed', 'sourceCatalogSha256': manifest['catalogSha256'],
                   'tables': imported, 'sqliteBytes': size, 'foreignKeyViolations': 0,
                   'leasesReset': True, 'allRowsCompared': True, 'applicationD1Ready': False}
+        report['schemaSha256'] = hashlib.sha256((output / 'schema.sql').read_bytes()).hexdigest()
+        report['dataImportSha256'] = hashlib.sha256((output / 'data-only.sql').read_bytes()).hexdigest()
         report['importSha256'] = hashlib.sha256((output / 'import.sql').read_bytes()).hexdigest()
         (output / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
         return report

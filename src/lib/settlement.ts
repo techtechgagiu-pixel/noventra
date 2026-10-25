@@ -1,4 +1,4 @@
-import { many, query } from './db';
+import { many, query, dialect, isD1, SQL_NOW, SQL_AGO, timeCompare } from './db';
 import { espnLeagueDay, espnSummary } from './sports/espn';
 import { getLeagues, persistFixtures } from './sports/fixtures';
 import { localDate, yyyymmdd } from './time';
@@ -51,16 +51,18 @@ const factsOf = (r: FactRow): MatchFacts => ({
 });
 
 /** Reads half-time score and corners from the finished match's summary, once, for fixtures whose markets need them. */
+const factMarket = (column: string) => dialect(`${column} ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):'`, `substr(${column},1,instr(${column},':')-1) IN ('HT1X2','H21X2','HTTOT','WBH','CORN','TCORN')`);
+
 async function loadMatchFacts() {
   let failures = 0;
   const rows = await many<{ id: string; provider_id: string; provider_key: string }>(
     `SELECT DISTINCT f.id, f.provider_id, l.provider_key, f.facts_checked_at FROM fixtures f JOIN leagues l ON l.id=f.league_id
      WHERE f.status='post' AND f.provider='espn' AND (f.ht_home IS NULL OR f.corners_home IS NULL)
-       AND (f.facts_checked_at IS NULL OR f.facts_checked_at < now() - interval '15 minutes')
-       AND (EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):')
-         OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):')
-         OR EXISTS (SELECT 1 FROM final_decisions d JOIN tickets t ON t.job_id=d.job_id WHERE d.fixture_id=f.id AND d.outcome='QUALIFIED' AND t.generation_status='INCOMPLETE' AND f.kickoff_utc>now()-interval '72 hours' AND d.market_key ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):'))
-     ORDER BY f.facts_checked_at NULLS FIRST, f.id LIMIT 40`);
+       AND (f.facts_checked_at IS NULL OR ${timeCompare('f.facts_checked_at','<',SQL_AGO(15,'minutes'))})
+       AND (EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND ${factMarket('s.market_key')})
+         OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND ${factMarket('p.market_key')})
+         OR EXISTS (SELECT 1 FROM final_decisions d JOIN tickets t ON t.job_id=d.job_id WHERE d.fixture_id=f.id AND d.outcome='QUALIFIED' AND t.generation_status='INCOMPLETE' AND ${timeCompare('f.kickoff_utc','>',SQL_AGO(72,'hours'))} AND ${factMarket('d.market_key')}))
+     ORDER BY f.facts_checked_at NULLS FIRST, f.id LIMIT ${isD1() ? 2 : 40}`);
   for (const r of rows) {
     try {
       const sm = await espnSummary(r.provider_key, r.provider_id, 30 * 60_000) as Record<string, any>;
@@ -69,11 +71,11 @@ async function loadMatchFacts() {
       const teams = (sm.boxscore?.teams ?? []) as Array<{ homeAway?: string; team?: { id?: string }; statistics?: Array<{ name: string; displayValue?: string }> }>;
       const homeId = (sm.header?.competitions?.[0]?.competitors ?? []).find((x: { homeAway: string }) => x.homeAway === 'home')?.team?.id;
       const cornersOf = (home: boolean) => { const t = teams.find((x) => (x.homeAway ? x.homeAway === (home ? 'home' : 'away') : (x.team?.id === homeId) === home)); const v = Number(t?.statistics?.find((st) => st.name === 'wonCorners')?.displayValue); return Number.isFinite(v) ? v : null; };
-      await query('UPDATE fixtures SET ht_home=COALESCE($2,ht_home), ht_away=COALESCE($3,ht_away), corners_home=COALESCE($4,corners_home), corners_away=COALESCE($5,corners_away), facts_checked_at=now() WHERE id=$1',
+      await query(`UPDATE fixtures SET ht_home=COALESCE($2,ht_home), ht_away=COALESCE($3,ht_away), corners_home=COALESCE($4,corners_home), corners_away=COALESCE($5,corners_away), facts_checked_at=${SQL_NOW()} WHERE id=$1`,
         [r.id, half('home'), half('away'), cornersOf(true), cornersOf(false)]);
-    } catch { failures++; await query('UPDATE fixtures SET facts_checked_at=now() WHERE id=$1', [r.id]); }
+    } catch { failures++; await query(`UPDATE fixtures SET facts_checked_at=${SQL_NOW()} WHERE id=$1`, [r.id]); }
   }
-  return failures;
+  return {failures,checked:rows.length};
 }
 
 /** A finished leg whose extra facts never arrive (≥ 3 days) is voided rather than guessed. */
@@ -94,9 +96,18 @@ export async function settleAgentPredictions() {
      FROM agent_predictions p JOIN fixtures f ON f.id=p.fixture_id
      WHERE p.decision='BET_CANDIDATE' AND p.market_key IS NOT NULL AND f.status IN ('post','cancelled','postponed') ORDER BY p.id`);
   const changed = rows.flatMap((r) => { const outcome=resolvedOutcome(r,r.market_key); return outcome!==r.outcome ? [{id:String(r.id),outcome}] : []; });
-  for (let i=0;i<changed.length;i+=500) await query(`UPDATE agent_predictions p SET outcome=u.outcome,settled_at=CASE WHEN u.outcome IS NULL THEN NULL ELSE now() END
-    FROM jsonb_to_recordset($1::jsonb) AS u(id bigint,outcome text) WHERE p.id=u.id`, [JSON.stringify(changed.slice(i,i+500))]);
+  await updateOutcomes('agent_predictions',changed);
   return changed.length;
+}
+
+async function updateOutcomes(table: 'agent_predictions' | 'ticket_selections' | 'tickets', changed: Array<{ id: string; outcome: string | null }>) {
+  const column = table === 'tickets' ? 'outcome_status' : 'outcome';
+  const pending = table === 'agent_predictions' ? 'u.outcome IS NULL' : "u.outcome='PENDING'";
+  const sqlitePending = table === 'agent_predictions' ? "json_extract(u.value,'$.outcome') IS NULL" : "json_extract(u.value,'$.outcome')='PENDING'";
+  for (let i=0;i<changed.length;i+=500) await query(dialect(
+    `UPDATE ${table} t SET ${column}=u.outcome,settled_at=CASE WHEN ${pending} THEN NULL ELSE now() END FROM jsonb_to_recordset($1::jsonb) AS u(id ${table === 'tickets' ? 'uuid' : 'bigint'},outcome text) WHERE t.id=u.id`,
+    `UPDATE ${table} AS t SET ${column}=json_extract(u.value,'$.outcome'),settled_at=CASE WHEN ${sqlitePending} THEN NULL ELSE ${SQL_NOW()} END FROM json_each($1) AS u WHERE t.id=json_extract(u.value,'$.id')`,
+  ), [JSON.stringify(changed.slice(i,i+500))]);
 }
 
 // Next bundles may load this module more than once; scheduling and the guard belong to the process.
@@ -106,6 +117,9 @@ export const SETTLEMENT_INTERVAL_MS = 5 * 60_000;
 
 /** Check immediately on boot/wake, then periodically while the server is running. */
 export function startSettlement() {
+  // In the hybrid deployment Cloudflare schedules settlement independently of
+  // the sleeping Render analysis runner.
+  if(isD1())return;
   if (process.env.BETMIND_DISABLE_WORKER === '1' || state.timer) return;
   void settlePending();
   state.timer = setInterval(() => void settlePending(), SETTLEMENT_INTERVAL_MS);
@@ -121,13 +135,13 @@ export async function settlePending() {
     let sourceErrors = 0;
     const due = await many<{ fixture_id: string; kickoff_utc: Date; league_id: string; status: string }>(
       `SELECT DISTINCT f.id AS fixture_id, f.kickoff_utc, f.league_id, f.status, f.results_checked_at FROM fixtures f
-       WHERE f.kickoff_utc <= now() AND f.provider='espn'
-       AND ((f.status NOT IN ('post','cancelled') AND (f.results_checked_at IS NULL OR f.results_checked_at<now()-interval '5 minutes')) OR (f.status='post' AND f.kickoff_utc>now()-interval '48 hours' AND (f.results_checked_at IS NULL OR f.results_checked_at<now()-interval '30 minutes'))) AND (
-         EXISTS (SELECT 1 FROM final_decisions d JOIN tickets t ON t.job_id=d.job_id WHERE d.fixture_id=f.id AND d.outcome='QUALIFIED' AND t.generation_status='INCOMPLETE' AND (f.status<>'postponed' OR f.kickoff_utc>now()-interval '48 hours')) OR
+       WHERE ${timeCompare('f.kickoff_utc','<=',SQL_NOW())} AND f.provider='espn'
+       AND ((f.status NOT IN ('post','cancelled') AND (f.results_checked_at IS NULL OR ${timeCompare('f.results_checked_at','<',SQL_AGO(5,'minutes'))})) OR (f.status='post' AND ${timeCompare('f.kickoff_utc','>',SQL_AGO(48,'hours'))} AND (f.results_checked_at IS NULL OR ${timeCompare('f.results_checked_at','<',SQL_AGO(30,'minutes'))}))) AND (
+         EXISTS (SELECT 1 FROM final_decisions d JOIN tickets t ON t.job_id=d.job_id WHERE d.fixture_id=f.id AND d.outcome='QUALIFIED' AND t.generation_status='INCOMPLETE' AND (f.status<>'postponed' OR ${timeCompare('f.kickoff_utc','>',SQL_AGO(48,'hours'))})) OR
          EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING') OR
          EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.outcome IS NULL) OR
          (f.status='post' AND (EXISTS(SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id) OR EXISTS(SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE'))))
-       ORDER BY f.results_checked_at NULLS FIRST, f.kickoff_utc, f.id LIMIT 60`,
+       ORDER BY f.results_checked_at NULLS FIRST, f.kickoff_utc, f.id LIMIT ${isD1() ? 2 : 60}`,
     );
     if (due.length) {
     const leagues = await getLeagues({ top10Only: false, includeDisabled: true });
@@ -144,27 +158,27 @@ export async function settlePending() {
       const league = leagues.find((l) => l.id === leagueId);
       if (!league) continue;
       const fixtures = await espnLeagueDay(league, yyyymmdd(date), SETTLEMENT_INTERVAL_MS).catch((error) => { sourceErrors++; console.warn(JSON.stringify({ event: 'results_source_failed', league: leagueId, date, message: (error as Error).message })); return []; });
-      await persistFixtures(fixtures.map((f) => ({ ...f, odds: null })));
+      const relevant = isD1() ? fixtures.filter(f=>due.some(d=>d.fixture_id===f.id)) : fixtures;
+      await persistFixtures(relevant.map((f) => ({ ...f, odds: null })));
     }
-    await query('UPDATE fixtures SET results_checked_at=now() WHERE id=ANY($1)', [due.map((d) => d.fixture_id)]);
+    await query(`UPDATE fixtures SET results_checked_at=${SQL_NOW()} WHERE ${dialect('id=ANY($1)','id IN (SELECT value FROM json_each($1))')}`, [due.map((d) => d.fixture_id)]);
     }
-    sourceErrors += await loadMatchFacts();
+    const facts=await loadMatchFacts();
+    sourceErrors += facts.failures;
     const predictionsChanged = await settleAgentPredictions();
     const rows = await many<FactRow & { id: string; ticket_id: string; market_key: string; outcome: string }>(
       `SELECT s.id,s.ticket_id,s.market_key,s.outcome,f.status,f.home_score,f.away_score,f.kickoff_utc,f.ht_home,f.ht_away,f.corners_home,f.corners_away
        FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE f.status IN ('post','cancelled','postponed')`);
     const changed = rows.flatMap((r) => { const outcome=resolvedOutcome(r,r.market_key) ?? 'PENDING'; return outcome!==r.outcome ? [{id:String(r.id),outcome,ticket:r.ticket_id}] : []; });
-    for (let i=0;i<changed.length;i+=500) await query(`UPDATE ticket_selections s SET outcome=u.outcome,settled_at=CASE WHEN u.outcome='PENDING' THEN NULL ELSE now() END
-      FROM jsonb_to_recordset($1::jsonb) AS u(id bigint,outcome text) WHERE s.id=u.id`, [JSON.stringify(changed.slice(i,i+500))]);
+    await updateOutcomes('ticket_selections',changed);
     // Recompute every completed ticket aggregate, including previously stale totals with already-correct legs.
     const tickets = await many<{ id: string; outcome_status: string; outcomes: string[] }>(
-      `SELECT t.id,t.outcome_status,array_agg(s.outcome) AS outcomes FROM tickets t JOIN ticket_selections s ON s.ticket_id=t.id
-       WHERE t.generation_status='COMPLETED' GROUP BY t.id`);
+      `SELECT t.id,t.outcome_status,${dialect('array_agg','json_group_array')}(s.outcome) AS outcomes FROM tickets t JOIN ticket_selections s ON s.ticket_id=t.id
+       WHERE t.generation_status='COMPLETED' GROUP BY t.id,t.outcome_status`);
     const ticketChanges = tickets.flatMap((t) => { const outcome=ticketOutcome(t.outcomes); return outcome!==t.outcome_status ? [{id:t.id,outcome}] : []; });
-    if (ticketChanges.length) await query(`UPDATE tickets t SET outcome_status=u.outcome,settled_at=CASE WHEN u.outcome='PENDING' THEN NULL ELSE now() END
-      FROM jsonb_to_recordset($1::jsonb) AS u(id uuid,outcome text) WHERE t.id=u.id`, [JSON.stringify(ticketChanges)]);
+    await updateOutcomes('tickets',ticketChanges);
     const touched = new Set([...changed.map((x) => x.ticket), ...ticketChanges.map((x) => x.id)]);
-    return { checkedFixtures: due.length, sourceErrors, ticketsChecked: touched.size, predictionsChanged, selectionsChanged: changed.length, ticketsChanged: ticketChanges.length };
+    return { checkedFixtures: due.length, factsChecked:facts.checked, moreWork:isD1() && (due.length===2 || facts.checked===2), sourceErrors, ticketsChecked: touched.size, predictionsChanged, selectionsChanged: changed.length, ticketsChanged: ticketChanges.length };
     });
   } catch (error) {
     console.warn(JSON.stringify({ event: 'settlement_failed', message: (error as Error).message }));

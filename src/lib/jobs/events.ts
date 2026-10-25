@@ -1,5 +1,5 @@
 import { cleanPayload } from '../agent-names';
-import { one, type Db, pool } from '../db';
+import { one, type Db, pool, isD1, atomic, SQL_NOW } from '../db';
 
 export type EventType =
   | 'JOB_CREATED' | 'TARGET_SELECTED' | 'SEED_GENERATED' | 'POOL_BUILT' | 'CANDIDATE_SELECTED' | 'CANDIDATE_REJECTED' | 'BATCH_STARTED'
@@ -13,6 +13,13 @@ export type JobEvent = { seq: number; type: EventType; stage: string; fixtureId:
 
 /** Appends a meaningful workflow event with a gap-free per-job sequence number. */
 export async function recordEvent(jobId: string, e: { type: EventType; stage: string; fixtureId?: string | null; agentId?: string | null; payload?: Record<string, unknown> }, db: Db = pool()) {
+  if (isD1()) {
+    const result = await atomic([
+      { text: `UPDATE ticket_generation_jobs SET last_event_seq=last_event_seq+1,updated_at=${SQL_NOW()} WHERE id=$1`, params: [jobId] },
+      { text: 'INSERT INTO analysis_events(job_id,seq,type,stage,fixture_id,agent_id,payload) SELECT id,last_event_seq,$2,$3,$4,$5,$6 FROM ticket_generation_jobs WHERE id=$1 RETURNING seq', params: [jobId,e.type,e.stage,e.fixtureId ?? null,e.agentId ?? null,JSON.stringify(e.payload ?? {})] },
+    ]);
+    return Number(result[1].rows[0]?.seq ?? 0);
+  }
   const row = await one<{ seq: number }>(
     `WITH bumped AS (UPDATE ticket_generation_jobs SET last_event_seq = last_event_seq + 1, updated_at = now() WHERE id = $1 RETURNING last_event_seq)
      INSERT INTO analysis_events (job_id, seq, type, stage, fixture_id, agent_id, payload)

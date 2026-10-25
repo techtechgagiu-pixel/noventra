@@ -26,13 +26,16 @@ async function scan(directory) {
 }
 const hits = await scan(path.join(root, 'src'));
 console.log(JSON.stringify({
-  format: 1, phase: 'preparation', productionReady: false,
-  currentDatabase: 'PostgreSQL', targetDatabase: 'Cloudflare D1 (SQLite)',
+  format: 2, phase: 'hybrid-staging', productionReady: false,
+  currentProduction: 'Render + Neon (unchanged)',
+  target: { site: 'Cloudflare Workers / OpenNext', database: 'Cloudflare D1', longAiJobs: 'existing Render web service on demand', settlement: 'Cloudflare Workflow every 5 minutes after cutover' },
+  implemented: ['native D1 repositories and atomic job mutations', 'HMAC Render-to-D1 bridge with replay protection', 'bounded settlement Workflow and idempotent scheduled dispatch', 'D1 cached fixture offer', 'shared paid-model budget reservations'],
   blockers: [
-    { id: 'production-snapshot', detail: 'Export the complete source after Neon connections are restored; local DEMO is not production data.' },
-    { id: 'd1-runtime', detail: 'Port the SQL repositories/transactions and implement atomic job claims and budget reservations in D1.' },
-    { id: 'background-runtime', detail: 'Replace persistent Node intervals with bounded Workflows/Cron handlers; keep explicit user authorization for AI jobs.' },
-    { id: 'staging-verification', detail: 'Verify login, data parity, new/completed/resumed jobs, settlement and Free-plan CPU/operation limits.' },
+    { id: 'production-snapshot', detail: 'Neon source unavailable under its monthly quota; recover and export complete production data, never substitute local DEMO.' },
+    { id: 'production-data-parity', detail: 'Verify real schema, every row, history/statistics/auth identity parity and D1 size/row limits on a fresh isolated target.' },
+    { id: 'remote-runtime-validation', detail: 'Validate remote staging OAuth, source credentials, runner wake/recovery and provider quotas within existing limits. No remote Worker is deployed yet.' },
+    { id: 'free-resource-measurement', detail: 'Measure actual Workers CPU, subrequests and D1 reads/writes at realistic volume; local HTTP durations do not prove Free CPU compatibility.' },
+    { id: 'controlled-cutover', detail: 'Freeze old writers, export final snapshot, configure secrets/runner and activate scheduling, then change routes; reconcile new D1 writes before rollback.' },
   ],
   sourceIndicators: hits,
   // These are inventory hints, not a SQL parser or an estimate of engineering hours.

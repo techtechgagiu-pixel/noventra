@@ -21,7 +21,11 @@
     "cf:test-conversion": "python3 tests/cloudflare_conversion_test.py",
     "cf:typecheck": "tsc -p cloudflare/tsconfig.json",
     "cf:deploy": "node scripts/cloudflare/audit.mjs --require-ready && wrangler deploy",
-    "cf:smoke": "node scripts/cloudflare/smoke-preview.mjs"
+    "cf:smoke": "node scripts/cloudflare/smoke-preview.mjs",
+    "cf:build:staging": "node scripts/cloudflare/build.mjs --staging",
+    "cf:preview:staging": "wrangler dev --config wrangler.staging.jsonc --port 8788 --test-scheduled",
+    "cf:types:staging": "wrangler types cloudflare/staging-configuration.d.ts --config wrangler.staging.jsonc --env-interface Primul11Env --include-runtime=false",
+    "cf:typecheck:staging": "tsc -p cloudflare/tsconfig.staging.json"
   },
   "dependencies": {
     "lucide-react": "0.468.0",

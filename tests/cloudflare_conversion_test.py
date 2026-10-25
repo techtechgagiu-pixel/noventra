@@ -58,6 +58,14 @@ class ConversionTests(unittest.TestCase):
             copy.executescript((output / 'import.sql').read_text())
             self.assertEqual(copy.execute('SELECT name FROM users').fetchone()[0], row[0])
             copy.close()
+            data_copy=sqlite3.connect(':memory:')
+            data_copy.executescript((output / 'schema.sql').read_text())
+            data_copy.executescript((output / 'data-only.sql').read_text())
+            self.assertEqual(data_copy.execute('SELECT name FROM users').fetchone()[0],row[0])
+            with self.assertRaises(sqlite3.IntegrityError):
+                data_copy.executescript((output / 'data-only.sql').read_text())
+            self.assertEqual(report['dataImportSha256'],hashlib.sha256((output/'data-only.sql').read_bytes()).hexdigest())
+            data_copy.close()
             db.close()
 
     def test_rejects_corruption_before_creating_target(self):

@@ -37,9 +37,13 @@ test('archive filters, agent history and every statistics view use the same save
   const performance=await(await page.request.get('/api/performance')).json();
   expect(performance.tickets.total).toBe(allTickets.length);
   const summary=page.getByRole('region',{name:'Performanța biletelor afișate'});
-  await expect(summary.getByText('Bilete afișate',{exact:true}).locator('..')).toContainText(String(allTickets.length));
+  // The archive intentionally hides empty/NO_BET and tickets with multiple red legs.
+  // Its summary must match the visible creator-filter count; the API retains the full history.
+  const count=async(label:RegExp)=>Number((await page.getByRole('option',{name:label}).textContent())!.match(/\((\d+)\)/)![1]);
+  const visible=await count(/^toată lumea/);expect(visible).toBeLessThanOrEqual(allTickets.length);
+  await expect(summary.getByText('Bilete afișate',{exact:true}).locator('..')).toContainText(String(visible));
   await page.getByLabel('Creat de').selectOption('mine');
-  await expect(summary.getByText('Bilete afișate',{exact:true}).locator('..')).toContainText(String(allTickets.filter((t:any)=>t.creator.mine).length));
+  await expect(summary.getByText('Bilete afișate',{exact:true}).locator('..')).toContainText(String(await count(/^mine/)));
   const after=await(await page.request.get('/api/test/stats')).json();expect(after.aiCalls).toBe(before.aiCalls);
  }finally{await db.end();}
 });

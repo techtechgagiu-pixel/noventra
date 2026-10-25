@@ -1,4 +1,4 @@
-import { many, query, tx } from '../db';
+import { many, query, tx, atomic, isD1 } from '../db';
 import { AGENTS, PROMPT_VERSION, systemPrompt } from './agents';
 import type { ModelRef, Provider } from './router';
 import { config } from '../config';
@@ -15,6 +15,9 @@ function codeDefault(a: (typeof AGENTS)[number]): { primary: ModelRef; fallback:
 }
 
 export async function ensureAgentConfig() {
+  // D1 setup is an explicit deployment migration, never 100+ writes in a page
+  // request (Free Workers allow only a bounded number of subrequests).
+  if (isD1()) return;
   if (seeded) return;
   for (const a of AGENTS) {
     const d = codeDefault(a);
@@ -41,6 +44,7 @@ export async function ensureAgentConfig() {
 export async function activeAssignments(): Promise<Map<string, Assignment>> {
   await ensureAgentConfig();
   let rows = await loadRows();
+  if (isD1() && rows.length < AGENTS.length) throw new Error('D1 agent configuration is incomplete; apply bootstrap migration');
   if (rows.length < AGENTS.length) { seeded = false; await ensureAgentConfig(); rows = await loadRows(); }
   return toMap(rows);
 }
@@ -60,6 +64,14 @@ function toMap(rows: Awaited<ReturnType<typeof loadRows>>) {
 
 /** Versioned change: the previous assignment is deactivated, never edited. */
 export async function updateAssignment(agentId: string, primary: ModelRef, fallback: ModelRef | null, userId: string, reason: string) {
+  if (isD1()) {
+    await atomic([
+      { text: 'UPDATE agent_model_assignments SET active=false WHERE agent_id=$1 AND active', params: [agentId] },
+      { text: 'INSERT INTO agent_model_assignments(agent_id,provider,model_id,fallback_provider,fallback_model_id,active,reason,created_by) VALUES($1,$2,$3,$4,$5,true,$6,$7)', params: [agentId, primary.provider, primary.model, fallback?.provider ?? null, fallback?.model ?? null, reason, userId] },
+      { text: "INSERT INTO audit_logs(user_id,action,detail) VALUES($1,'model_assignment_changed',$2)", params: [userId, JSON.stringify({ agentId, primary, fallback, reason })] },
+    ]);
+    return;
+  }
   await tx(async (c) => {
     await c.query('UPDATE agent_model_assignments SET active=false WHERE agent_id=$1 AND active', [agentId]);
     await c.query(
