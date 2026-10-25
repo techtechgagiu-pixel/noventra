@@ -47,6 +47,19 @@ describe('atomic custom batches', () => {
     await createCustomJob(user, input); // existing single-ticket caller remains supported
     await expect(createCustomJob(user, input)).rejects.toThrow(/Mai poți crea 0/);
   });
+  it('admits concurrent batches with a one-connection pool without acquiring a nested connection', async () => {
+    const user = await makeUser();
+    await closePool();
+    const previous = process.env.DB_POOL_MAX;
+    process.env.DB_POOL_MAX = '1';
+    try {
+      const results = await Promise.all(Array.from({ length: 3 }, () => createCustomJob(user, { ...input, count: 2 })));
+      expect(results.flatMap((r) => r.jobIds)).toHaveLength(6);
+    } finally {
+      await closePool();
+      if (previous === undefined) delete process.env.DB_POOL_MAX; else process.env.DB_POOL_MAX = previous;
+    }
+  });
   it('accepts a full lot of 20 and resets the allowance on the next Bucharest day', async () => {
     const user = await makeUser();
     const first = await createCustomJob(user, { ...input, count: 20 }, new Date('2026-10-24T12:00:00Z'));
