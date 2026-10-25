@@ -122,7 +122,7 @@ test('your own ticket: build from real prices → agents review it live → verd
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/review-builder.png`, fullPage: true });
   await page.getByRole('button', { name: /TRIMITE LA ANALIZĂ/ }).click();
   await expect(page).toHaveURL(/tab=verifica&job=[0-9a-f-]{36}/, { timeout: 30_000 });
-  await expect(page.getByRole('region', { name: 'Verdictul echipei' })).toContainText('Mircea Lucescu', { timeout: 90_000 });
+  await expect(page.getByRole('region', { name: 'Verdictul echipei' })).toContainText('GPT-6 Luna Pro', { timeout: 90_000 });
   await expect(page.getByRole('link', { name: 'VEZI BILETUL' })).toBeVisible({ timeout: 30_000 });
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/review-live.png`, fullPage: true });
   await page.getByRole('link', { name: 'VEZI BILETUL' }).click();

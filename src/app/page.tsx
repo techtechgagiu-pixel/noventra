@@ -1,3 +1,4 @@
+import { describeModel } from '@/lib/model-identities';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Activity, BarChart3, ClipboardCheck, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
@@ -96,7 +97,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
-        {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} identity={sp.vedere} />}
+        {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} />}
       </main>
       <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-8 text-xs text-muted"><p>Rezultatele se actualizează automat după confirmarea scorului final.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
@@ -181,7 +182,7 @@ async function agentCards(): Promise<AgentCard[]> {
   const records = new Map((await allTrackRecords(VOTING_AGENTS.map((x) => x.id)).catch(() => [])).map((r) => [r.id, r.record]));
   return VOTING_AGENTS.map((x) => {
     const r = records.get(x.id);
-    return { id: x.id, name: x.name, title: x.title, specialty: x.specialty, risk: x.risk, maxOdds: x.maxOdds, minProbability: x.minProbability, model: a.get(x.id)?.primary?.model ?? null, record: r && r.decided >= 3 ? `${r.won}/${r.decided} verzi` : null };
+    return { id: x.id, name: describeModel(a.get(x.id)?.primary?.model).modelName, title: x.title, specialty: x.specialty, risk: x.risk, maxOdds: x.maxOdds, minProbability: x.minProbability, model: a.get(x.id)?.primary?.model ?? null, record: r && r.decided >= 3 ? `${r.won}/${r.decided} verzi` : null };
   });
 }
 
@@ -245,7 +246,7 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
     <div className="space-y-6 pb-16 lg:pb-0">
       <div>
         <h1 className="font-display text-2xl font-bold">Vino cu biletul tău la analiză</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Îți faci biletul din meciurile cu cote reale, le lași tacticienilor sfaturile tale și îl trimiți la analiză. Agenții echipei îl dezbat live pe hartă, îți spun ce meci e solid, riscant sau slab, ce să înlocuiești, iar Mircea Lucescu îți dă verdictul final. Biletul rămâne salvat și îl urmărim verde/roșu până la final.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Îți faci biletul din meciurile cu cote reale, le lași tacticienilor sfaturile tale și îl trimiți la analiză. Agenții echipei îl dezbat live pe hartă, îți spun ce meci e solid, riscant sau slab, ce să înlocuiești, iar GPT-6 Luna Pro îți dă verdictul final. Biletul rămâne salvat și îl urmărim verde/roșu până la final.</p>
       </div>
       <ReviewBuilder />
       {recent.length > 0 && (
@@ -272,11 +273,11 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
   );
 }
 
-async function StatisticiTab({ userId, admin, month, scope, identity }: { userId: string; admin: boolean; month?: string; scope?: string; identity?: string }) {
+async function StatisticiTab({ userId, admin, month, scope }: { userId: string; admin: boolean; month?: string; scope?: string }) {
   const m = month === 'all' || /^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ? month! : currentMonth();
   const selected = scope === 'mine' ? 'mine' : 'all';
   const { agents, totals } = await agentStats(userId, admin, m, selected);
-  return <div className="space-y-6">{admin && <AutomationPanel initial={plain(await automationHealth())} />}<StatsView agents={plain(agents)} totals={totals} month={m} scope={selected} identity={identity === 'modele' ? 'models' : 'characters'} /></div>;
+  return <div className="space-y-6">{admin && <AutomationPanel initial={plain(await automationHealth())} />}<StatsView agents={plain(agents)} totals={totals} month={m} scope={selected} /></div>;
 }
 
 async function IstoricTab({ userId, ticket, fresh }: { userId: string; ticket?: string; fresh: boolean }) {

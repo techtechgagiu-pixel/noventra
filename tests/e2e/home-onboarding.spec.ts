@@ -13,7 +13,7 @@ test('first visit explains AI debate and reaches a compact Custom form without s
   await expect(page.getByRole('region', { name: 'Fragment real din dezbatere' })).toBeVisible();
   await expect(page.getByText('mercury-3', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Contradicție', exact: true }).click();
-  await expect(page.getByText(/Ilie Dumitrescu, Cristi Chivu și Adrian Porumboiu resping analiza/)).toBeVisible();
+  await expect(page.getByText(/Mistral Medium 3.1, Qwen 3.8 Flash și Solar Pro 4 resping analiza/)).toBeVisible();
   await page.getByRole('button', { name: 'Decizie', exact: true }).click();
   await expect(page.getByText(/Consens 4\/7\. Intră pe bilet/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

@@ -25,21 +25,24 @@ test('archive filters, agent history and every statistics view use the same save
   expect(personal).toMatchObject({bets:17,won:12,lost:4,pending:1,avgOdds:1.5});
   expect(personal.avgEstimated).toBeCloseTo(0.7,8);
   await page.goto('/?tab=statistici&luna=all&scope=all');
-  const card=page.getByRole('region',{name:'Agenții'}).locator('article').filter({hasText:'Mircea Lucescu'});
+  const card=page.locator('#agent-robert');
   await card.getByText(/Pronosticuri și rezultate/).click();
-  await card.getByLabel('Rezultate Mircea Lucescu').selectOption('WON');
+  await card.getByLabel(/^Rezultate .* · Managerul de risc/).selectOption('WON');
   await expect(card.getByRole('option',{name:`Verzi (${a.won})`,exact:true})).toHaveCount(1);
   await expect(card.locator('li')).toHaveCount(Math.min(a.won,8));
-  await card.getByRole('button',{name:'Pagina următoare Mircea Lucescu'}).click();
+  await card.getByRole('button',{name:/^Pagina următoare .* · Managerul de risc$/}).click();
   await expect(card).toContainText(`9–${Math.min(a.won,16)} din ${a.won}`);
   await page.goto('/?tab=istoric');
   const allTickets=(await(await page.request.get('/api/tickets')).json()).tickets;
   const performance=await(await page.request.get('/api/performance')).json();
   expect(performance.tickets.total).toBe(allTickets.length);
   const summary=page.getByRole('region',{name:'Performanța biletelor afișate'});
-  await expect(summary.getByText('Bilete afișate',{exact:true}).locator('..')).toContainText(String(allTickets.length));
+  // The archive hides NO_BET/empty and multiple-loss tickets; API history remains complete.
+  const count=async(label:RegExp)=>Number((await page.getByRole('option',{name:label}).textContent())!.match(/\((\d+)\)/)![1]);
+  const visible=await count(/^toată lumea/);expect(visible).toBeLessThanOrEqual(allTickets.length);
+  await expect(summary.getByText('Bilete afișate',{exact:true}).locator('..')).toContainText(String(visible));
   await page.getByLabel('Creat de').selectOption('mine');
-  await expect(summary.getByText('Bilete afișate',{exact:true}).locator('..')).toContainText(String(allTickets.filter((t:any)=>t.creator.mine).length));
+  await expect(summary.getByText('Bilete afișate',{exact:true}).locator('..')).toContainText(String(await count(/^mine/)));
   const after=await(await page.request.get('/api/test/stats')).json();expect(after.aiCalls).toBe(before.aiCalls);
  }finally{await db.end();}
 });

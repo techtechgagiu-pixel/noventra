@@ -19,7 +19,7 @@ Format: un rând = o propoziție scurtă (max. 160 de caractere), fără liniuț
 Rândul 1: concluzia generală (câte meciuri, cota totală, prudența EXACT cum e dată în ticket.prudence și șansa estimată ca toate să iasă, ticket.chanceAllLegsWin).
 Apoi, pentru fiecare meci, 1–2 rânduri: de ce a fost ales (numește 1–2 agenți și argumentul lor) și ce risc a semnalat cineva.
 Ultimul rând: principalul risc al biletului.
-Nu inventa date, accidentări, știri sau cifre care nu apar în mesaj; cotele și procentele le copiezi EXACT cum sunt scrise, fără rotunjire. Numărul de voturi îl iei DOAR din câmpul votes (ignori alte numere de voturi din motivări). Nu scrie probabilități ca 0.5553 — doar procente din date. Numele agenților sunt doar personaje; nu le atribui declarații reale. Nu promite câștig.
+Nu inventa date, accidentări, știri sau cifre care nu apar în mesaj; cotele și procentele le copiezi EXACT cum sunt scrise, fără rotunjire. Numărul de voturi îl iei DOAR din câmpul votes (ignori alte numere de voturi din motivări). Nu scrie probabilități ca 0.5553 — doar procente din date. Agenții sunt modele AI cu roluri distincte; păstrează numele modelelor și nu atribui opinii unor persoane reale. Nu promite câștig.
 Răspunzi DOAR cu JSON: {"lines":["...", "..."]}.`;
 
 type Row = { fixture_id: string; agent_id: string; decision: string; market_key: string | null; estimated_probability: string | null; payload: { rationale?: string; evidence?: string[]; failureReasons?: string[] } };

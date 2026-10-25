@@ -31,7 +31,7 @@ it('registers ten distinct new voters, model prices and portraits across every p
 
 it('tracks new agents in the live/replay reducer using their actual identities', () => {
   const next=applyEvent(initialState(),{seq:1,type:'AGENT_STARTED',stage:'ANALYSIS',agentId:'nova',fixtureId:null,payload:{round:0,model:NEW_AI_PROFILES[0].model,provider:'openrouter',fixtures:['demo:0']},createdAt:new Date().toISOString()});
-  expect(next.participants).toContain('nova');expect(next.agents.nova.status).toBe('ANALYZING');expect(next.log.at(-1)?.text).toContain('Nova');
+  expect(next.participants).toContain('nova');expect(next.agents.nova.status).toBe('ANALYZING');expect(next.log.at(-1)?.text).toContain('MiniMax M3.1 Flash');
 });
 
 it('gives Atlas dated sourced news together with statistics, without changing the news-only role',()=>{

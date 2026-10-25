@@ -83,7 +83,7 @@ export function HomeStage({ events, title, finishedAt, target }: { events: Nexus
     <section aria-label="Reluare dintr-o analiză reală" className="grid items-center gap-6 lg:grid-cols-[minmax(320px,0.8fr)_1.7fr] lg:gap-10">
       <div className="min-w-0 space-y-5">
         {words}
-        <p className="max-w-md text-[15px] leading-relaxed text-muted">Douăzeci și doi de agenți citesc cotele reale, istoricul și știrile, se contrazic în dezbatere, iar Mircea Lucescu alege pronosticul care intră pe bilet.</p>
+        <p className="max-w-md text-[15px] leading-relaxed text-muted">Modelele AI citesc cotele reale, istoricul și știrile, se contrazic în dezbatere, iar GPT-6 Luna Pro alege pronosticul care intră pe bilet.</p>
         <div className="hidden lg:block">{lower}</div>
       </div>
       <div className="min-w-0">

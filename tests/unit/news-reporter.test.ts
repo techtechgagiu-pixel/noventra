@@ -4,10 +4,10 @@ import { AGENTS, VOTING_AGENTS, systemPrompt } from '@/lib/ai/agents';
 import { cleanAgentText } from '@/lib/agent-names';
 
 it('keeps Ștucan historical identity and adds Corina as a non-voting sports reporter', () => {
-  expect(AGENTS.find((a) => a.id === 'hantu')!.name).toBe('Ștucan');
-  expect(cleanAgentText('Hanțu citează presa.')).toBe('Ștucan citează presa.');
+  expect(AGENTS.find((a) => a.id === 'hantu')!.name).toBe('Nemotron 3.5 Super VL');
+  expect(cleanAgentText('Hanțu citează presa.')).toBe('Nemotron 3.5 Super VL citează presa.');
   const corina = AGENTS.find((a) => a.id === 'corina')!;
-  expect(corina.name).toBe('Corina Caragea');
+  expect(corina.name).toBe('Claude Haiku 5.5');
   expect(VOTING_AGENTS.some((a) => a.id === 'corina')).toBe(false);
   expect(systemPrompt(corina)).not.toContain('BET_CANDIDATE');
 });

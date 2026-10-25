@@ -1,3 +1,4 @@
+import { describeModel } from '@/lib/model-identities';
 import { many } from './db';
 import { config } from './config';
 import { AGENTS } from './ai/agents';
@@ -65,7 +66,7 @@ export async function agentStats(userId: string, admin = false, month = currentM
     const madeWithOwn = own ? mine.filter((p) => p.model_id === own || p.model_id.startsWith(own)).length : 0;
     const latW = u.filter((r) => r.lat !== null);
     return {
-      id: a.id, name: a.name, title: a.title, ownModel: own, ownModelShare: own && mine.length ? madeWithOwn / mine.length : null, model: u.sort((x, y) => Number(y.calls) - Number(x.calls))[0]?.requested_model_id ?? null,
+      id: a.id, name: describeModel(own).modelName, title: a.title, ownModel: own, ownModelShare: own && mine.length ? madeWithOwn / mine.length : null, model: u.sort((x, y) => Number(y.calls) - Number(x.calls))[0]?.requested_model_id ?? null,
       bets: bets.length, won, lost, voided: bets.filter((p) => p.outcome === 'VOID').length, pending: bets.filter((p) => !p.outcome).length, noBet: mine.length - bets.length,
       upcoming: bets.filter((p) => !p.outcome && p.status === 'pre' && p.kickoff_utc.getTime() > Date.now()).length,
       live: bets.filter((p) => !p.outcome && p.status === 'in').length,
