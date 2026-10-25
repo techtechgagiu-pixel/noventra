@@ -1,4 +1,7 @@
 export async function register() {
+  // A request-scoped Worker cannot own the Node service's interval loops.
+  // Cloudflare preparation must never resume production jobs accidentally.
+  if (process.env.BETMIND_RUNTIME?.startsWith('cloudflare')) return;
   if (process.env.NEXT_RUNTIME !== 'nodejs' || !process.env.DATABASE_URL) return;
   const { ensureAgentConfig } = await import('./lib/ai/assignments');
   const { startWorker } = await import('./lib/jobs/worker');

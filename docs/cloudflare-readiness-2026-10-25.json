@@ -1,0 +1,614 @@
+{
+  "format": 1,
+  "phase": "preparation",
+  "productionReady": false,
+  "currentDatabase": "PostgreSQL",
+  "targetDatabase": "Cloudflare D1 (SQLite)",
+  "blockers": [
+    {
+      "id": "production-snapshot",
+      "detail": "Export the complete source after Neon connections are restored; local DEMO is not production data."
+    },
+    {
+      "id": "d1-runtime",
+      "detail": "Port the SQL repositories/transactions and implement atomic job claims and budget reservations in D1."
+    },
+    {
+      "id": "background-runtime",
+      "detail": "Replace persistent Node intervals with bounded Workflows/Cron handlers; keep explicit user authorization for AI jobs."
+    },
+    {
+      "id": "staging-verification",
+      "detail": "Verify login, data parity, new/completed/resumed jobs, settlement and Free-plan CPU/operation limits."
+    }
+  ],
+  "sourceIndicators": [
+    {
+      "file": "src/app/(app)/admin/evaluation/page.tsx",
+      "line": 10,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/app/(app)/admin/evaluation/page.tsx",
+      "line": 11,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/app/(app)/admin/evaluation/page.tsx",
+      "line": 14,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/app/(app)/admin/models/page.tsx",
+      "line": 14,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/app/(app)/admin/models/page.tsx",
+      "line": 15,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/app/(app)/admin/usage/page.tsx",
+      "line": 10,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/app/api/admin/models/route.ts",
+      "line": 15,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/app/api/admin/models/route.ts",
+      "line": 17,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/app/api/admin/models/route.ts",
+      "line": 21,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/app/api/admin/usage/route.ts",
+      "line": 11,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/components/custom/agent-map.tsx",
+      "line": 38,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/components/custom/agent-map.tsx",
+      "line": 41,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/components/home/home-threads.tsx",
+      "line": 19,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/components/job-queue.tsx",
+      "line": 21,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/components/job-queue.tsx",
+      "line": 23,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/components/slot-cards.tsx",
+      "line": 26,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/components/use-job-events.ts",
+      "line": 22,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/lib/accounts.ts",
+      "line": 5,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 32,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 38,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 39,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 40,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 41,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 42,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 42,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 43,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 43,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 44,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 45,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 51,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/agent-stats.ts",
+      "line": 51,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/ai/assignments.ts",
+      "line": 31,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/auth.ts",
+      "line": 74,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 8,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 9,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 12,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 12,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 17,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 33,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 34,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 35,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 36,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 36,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 38,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 39,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 39,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/automation.ts",
+      "line": 40,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/catalog.ts",
+      "line": 51,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/catalog.ts",
+      "line": 52,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/catalog.ts",
+      "line": 57,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/catalog.ts",
+      "line": 57,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/catalog.ts",
+      "line": 63,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/catalog.ts",
+      "line": 63,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/catalog.ts",
+      "line": 64,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/catalog.ts",
+      "line": 64,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/catalog.ts",
+      "line": 68,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/db.ts",
+      "line": 1,
+      "rule": "pg-driver"
+    },
+    {
+      "file": "src/lib/db.ts",
+      "line": 3,
+      "rule": "pg-driver"
+    },
+    {
+      "file": "src/lib/db.ts",
+      "line": 5,
+      "rule": "pg-driver"
+    },
+    {
+      "file": "src/lib/db.ts",
+      "line": 10,
+      "rule": "pg-driver"
+    },
+    {
+      "file": "src/lib/db.ts",
+      "line": 21,
+      "rule": "pg-driver"
+    },
+    {
+      "file": "src/lib/db.ts",
+      "line": 39,
+      "rule": "pg-driver"
+    },
+    {
+      "file": "src/lib/digest.ts",
+      "line": 34,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/digest.ts",
+      "line": 35,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/digest.ts",
+      "line": 86,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/final-agent-picks.ts",
+      "line": 7,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/final-agent-picks.ts",
+      "line": 9,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/final-agent-picks.ts",
+      "line": 12,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/home-reel.ts",
+      "line": 57,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/home-reel.ts",
+      "line": 58,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/incomplete-ticket-picks.ts",
+      "line": 32,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/incomplete-ticket-picks.ts",
+      "line": 33,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/incomplete-ticket-picks.ts",
+      "line": 33,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/jobs/pipeline.ts",
+      "line": 157,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/jobs/pipeline.ts",
+      "line": 243,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/jobs/pipeline.ts",
+      "line": 324,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/jobs/pipeline.ts",
+      "line": 443,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/jobs/pipeline.ts",
+      "line": 444,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/jobs/service.ts",
+      "line": 35,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/jobs/service.ts",
+      "line": 35,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/jobs/service.ts",
+      "line": 151,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/jobs/service.ts",
+      "line": 152,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/jobs/service.ts",
+      "line": 192,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/jobs/service.ts",
+      "line": 194,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/jobs/service.ts",
+      "line": 237,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/jobs/service.ts",
+      "line": 281,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/jobs/service.ts",
+      "line": 312,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/jobs/worker.ts",
+      "line": 20,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/jobs/worker.ts",
+      "line": 21,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/jobs/worker.ts",
+      "line": 36,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/jobs/worker.ts",
+      "line": 36,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/lib/jobs/worker.ts",
+      "line": 56,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/jobs/worker.ts",
+      "line": 69,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/jobs/worker.ts",
+      "line": 99,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 59,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 62,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 98,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 111,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 125,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 126,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 149,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 158,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 161,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/settlement.ts",
+      "line": 165,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/sports/the-odds-catalog.ts",
+      "line": 49,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/sports/the-odds-catalog.ts",
+      "line": 50,
+      "rule": "leases-and-locks"
+    },
+    {
+      "file": "src/lib/track-record.ts",
+      "line": 76,
+      "rule": "postgres-query"
+    },
+    {
+      "file": "src/lib/usage.ts",
+      "line": 1,
+      "rule": "pg-driver"
+    },
+    {
+      "file": "src/lib/usage.ts",
+      "line": 29,
+      "rule": "pg-driver"
+    },
+    {
+      "file": "src/lib/use-visible-refresh.ts",
+      "line": 16,
+      "rule": "persistent-loop"
+    },
+    {
+      "file": "src/lib/views.ts",
+      "line": 26,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/views.ts",
+      "line": 27,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/views.ts",
+      "line": 28,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/views.ts",
+      "line": 58,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/views.ts",
+      "line": 59,
+      "rule": "jsonb-and-casts"
+    },
+    {
+      "file": "src/lib/views.ts",
+      "line": 85,
+      "rule": "postgres-query"
+    }
+  ],
+  "indicatorCounts": {
+    "pg-driver": 8,
+    "jsonb-and-casts": 44,
+    "postgres-query": 31,
+    "leases-and-locks": 21,
+    "persistent-loop": 12
+  }
+}

@@ -8,3 +8,8 @@ playwright-report/
 *.tsbuildinfo
 .DS_Store
 scripts/dev/*.log
+.open-next/
+.wrangler/
+.dev.vars*
+migration-private/
+__pycache__/
