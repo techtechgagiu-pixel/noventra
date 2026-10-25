@@ -160,7 +160,7 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
     const n = Number((await c.query("SELECT count(*) AS n FROM ticket_generation_jobs WHERE user_id=$1 AND period_key=$2 AND slot LIKE 'CUSTOM\\_%'", [userId, key])).rows[0].n);
     const remaining = CUSTOM_LIMIT_PER_DAY - n;
     if (count > remaining) throw new SlotError(`Mai poți crea ${remaining} bilete custom azi din ${CUSTOM_LIMIT_PER_DAY}. Ai cerut ${count}.`, 429);
-    const usage = await aiUsageToday();
+    const usage = await aiUsageToday(c);
     if (usage.requests + 20 * count > config.limits.aiDailyCalls) throw new SlotError(`Cota AI zilnică este aproape epuizată (${usage.requests}/${config.limits.aiDailyCalls} apeluri). Redu numărul de bilete.`, 503);
     const jobIds: string[] = [];
     for (let i = 0; i < count; i++) {
