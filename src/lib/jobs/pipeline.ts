@@ -24,7 +24,7 @@ import type { CandidateEntry, Checkpoint, FixtureSnapshot, LegReview, Stage } fr
 
 export type JobRow = {
   id: string; user_id: string; slot: string; period_key: string; target_odds: string; required_legs: number | null; seed: string;
-  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; custom?: CustomConfig; review?: ReviewConfig };
+  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number } };
   status: string; stage: Stage; checkpoint: Checkpoint; candidate_order: CandidateEntry[] | null; eligible_count: number | null; attempt_count: number;
   created_at?: Date | string;
 };
@@ -59,11 +59,12 @@ async function discover(job: JobRow) {
   if (job.config.review) return discoverReview(job, loaded.fixtures, errors);
   // Custom tickets may be limited to the leagues the user ticked.
   const only = job.config.custom?.leagues?.length ? new Set(job.config.custom.leagues) : null;
-  const fixtures = only ? loaded.fixtures.filter((f) => only.has(f.leagueId)) : loaded.fixtures;
+  const seen = job.config.completion ? new Set((await many<{ fixture_id: string }>('SELECT fixture_id FROM final_decisions WHERE job_id=$1', [job.id])).map((r) => r.fixture_id)) : new Set<string>();
+  const fixtures = loaded.fixtures.filter((f) => (!only || only.has(f.leagueId)) && !seen.has(f.id));
   const now = Date.now();
   const pol = jobPolicy(job);
   // Daily tickets use a rolling window measured from the job's creation: start ≥ minLeadHours, ≤ maxAheadHours.
-  const createdAt = job.created_at ? new Date(job.created_at).getTime() : now;
+  const createdAt = job.config.completion ? Date.parse(job.config.completion.requestedAt) : job.created_at ? new Date(job.created_at).getTime() : now;
   const leadMs = pol.minLeadHours ? pol.minLeadHours * 3600_000 : MIN_LEAD_MS;
   const aheadMs = pol.maxAheadHours ? pol.maxAheadHours * 3600_000 : Number.POSITIVE_INFINITY;
   const entries: CandidateEntry[] = fixtures.map((f) => {
@@ -101,7 +102,9 @@ async function discover(job: JobRow) {
   if (thin.length) await recordEvent(job.id, { type: 'MARKETS_CHECKED', stage: 'SELECTING', payload: { minimum: config.limits.minMarkets, accepted: prioritized.length, rejected: thin.length, items: thin.slice(0, 40) } });
   const batches: string[][] = [];
   for (let i = 0; i < prioritized.length; i += job.config.batchSize) batches.push(prioritized.slice(i, i + job.config.batchSize).map((e) => e.fixtureId));
-  const order = [...prioritized, ...entries.filter((e) => !e.eligible)];
+  const freshOrder = [...prioritized, ...entries.filter((e) => !e.eligible)];
+  const previous = job.config.completion ? job.candidate_order ?? [] : [];
+  const order = [...previous, ...freshOrder.filter((e) => !previous.some((p) => p.fixtureId === e.fixtureId))];
   await query('UPDATE ticket_generation_jobs SET candidate_order=$2, eligible_count=$3 WHERE id=$1', [job.id, JSON.stringify(order), eligible.length]);
   job.candidate_order = order;
   await recordEvent(job.id, { type: 'POOL_BUILT', stage: 'SELECTING', payload: { totalFixtures: fixtures.length, eligible: eligible.length, sourceErrors: errors.slice(0, 10), window: { start: job.config.windowStart, days: job.config.windowDays }, leagues: only ? `${only.size} ${only.size === 1 ? 'ligă aleasă' : 'ligi alese'}` : job.config.top10Only ? 'TOP 10' : 'toate ligile disponibile' } });
@@ -608,18 +611,40 @@ async function stepVote(job: JobRow, ids: string[]) {
   await save(job);
 }
 
-async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { marketKey: string; label: string; observedAt: string; probability: number | null; riskLabel: string; snapshot: FixtureSnapshot }>> {
+async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { marketKey: string; label: string; observedAt: string; probability: number | null; riskLabel: string; votesFor: number; snapshot: FixtureSnapshot }>> {
   const rows = await many<{ fixture_id: string; market_key: string; votes_for: number; validation: { currentOdds: number; observedAt: string; bookmaker: string } }>(
     "SELECT fixture_id, market_key, votes_for, validation FROM final_decisions WHERE job_id=$1 AND outcome='QUALIFIED'", [job.id]);
   const snaps = await batchSnapshots(job, rows.map((r) => r.fixture_id));
-  return rows.flatMap((r) => {
+  // Completion never promotes old scores or expired quotes into a new finalized ticket.
+  const current = job.config.completion ? new Map((await loadFixtures(job.config.windowStart, job.config.windowDays, {top10Only:job.config.top10Only})).fixtures.map((f) => [f.id, f])) : null;
+  return (await Promise.all(rows.map(async (r) => {
     const s = snaps.find((x) => x.fixture.id === r.fixture_id);
     if (!s) return [];
-    const est = s.model.markets.find((m) => m.key === r.market_key)!;
+    const est = s.model.markets.find((m) => m.key === r.market_key);
+    if (!est) return [];
+    let odds = r.validation.currentOdds, bookmaker = r.validation.bookmaker, observedAt = r.validation.observedAt, votesFor = r.votes_for;
+    if (current) {
+      const base = current.get(r.fixture_id);
+      const fresh = base ? await freshFixture(base).catch(() => null) : null;
+      const quote = fresh?.odds?.markets.find((m) => m.key === r.market_key);
+      const age = Date.now() - Date.parse(fresh?.odds?.observedAt ?? '');
+      const policy = jobPolicy(job);
+      if (!fresh || fresh.status !== 'pre' || Date.parse(fresh.kickoff) <= Date.now() + MIN_LEAD_MS || !quote ||
+        !Number.isFinite(age) || age < -120_000 || age > config.limits.oddsMaxAgeMinutes * 60_000 ||
+        !Number.isFinite(quote.odds) || quote.odds < policy.minOdds || quote.odds > policy.maxOdds ||
+        est.estimatedProbability === null || est.estimatedProbability * quote.odds - 1 < -0.12) return [];
+      odds = quote.odds; bookmaker = quote.bookmaker ?? fresh.odds!.bookmaker; observedAt = fresh.odds!.observedAt;
+      if (!bookmaker) return [];
+      const repriced = { ...s, model: { ...s.model, markets: s.model.markets.map((m) => m.key === r.market_key ? { ...m, odds } : m) } };
+      const { counted, keys } = guardPositions(job, repriced, await latestPositions(job.id, r.fixture_id));
+      const valid = consensus(counted, jobThreshold(job), jobAgents(job).length, keys, policy.pick).shortlist.find((m) => m.key === r.market_key);
+      if (!valid) return [];
+      votesFor = valid.supporters.length;
+    }
     const risk = riskClass(est.estimatedProbability, s.model.uncertainty);
-    const quality = (r.votes_for / jobAgents(job).length) * (s.model.uncertainty === 'scăzută' ? 1 : s.model.uncertainty === 'medie' ? 0.85 : 0.65) * (est.estimatedProbability ?? 0.3);
-    return [{ fixtureId: r.fixture_id, teams: [s.fixture.home, s.fixture.away], odds: r.validation.currentOdds, bookmaker: r.validation.bookmaker, quality, risk, family: r.market_key.split(':')[0], marketKey: r.market_key, label: est.label, observedAt: r.validation.observedAt, probability: est.estimatedProbability, riskLabel: risk, snapshot: s }];
-  });
+    const quality = (votesFor / jobAgents(job).length) * (s.model.uncertainty === 'scăzută' ? 1 : s.model.uncertainty === 'medie' ? 0.85 : 0.65) * (est.estimatedProbability ?? 0.3);
+    return [{ fixtureId: r.fixture_id, teams: [s.fixture.home, s.fixture.away], odds, bookmaker, quality, risk, family: r.market_key.split(':')[0], marketKey: r.market_key, label: est.label, observedAt, probability: est.estimatedProbability, riskLabel: risk, votesFor, snapshot: s }];
+  }))).flat();
 }
 
 async function tryOptimize(job: JobRow) {
@@ -638,10 +663,11 @@ async function build(job: JobRow) {
     closest: result.closest ? { totalOdds: result.closest.totalOdds, legs: result.closest.legs.map((l) => l.fixtureId) } : null,
     steps: (result.legs.length ? result.legs : result.closest?.legs ?? []).reduce<Array<{ fixtureId: string; odds: number; running: number }>>((acc, l) => { const prev = acc.at(-1)?.running ?? 1; acc.push({ fixtureId: l.fixtureId, odds: l.odds, running: Math.round(prev * l.odds * 1000) / 1000 }); return acc; }, []),
   } });
-  const generation = result.status === 'COMPLETED' ? 'COMPLETED' : cands.length === 0 ? 'NO_BET' : 'INCOMPLETE';
+  const generation = result.status === 'COMPLETED' ? 'COMPLETED' : job.config.completion ? 'INCOMPLETE' : cands.length === 0 ? 'NO_BET' : 'INCOMPLETE';
   const chosen = result.status === 'COMPLETED' ? result.legs : [];
   const byId = new Map(cands.map((c) => [c.fixtureId, c]));
   const summary = {
+    ...(job.config.completion ? { completion: job.config.completion } : {}),
     analyzed, qualified: cands.length, eligible: job.eligible_count, agents: jobAgents(job).length, agentIds: jobAgents(job).map((a) => a.id), threshold: jobThreshold(job), reason: generation === 'NO_BET' ? `Niciun meci analizat nu a primit consens validat (${analyzed} meciuri analizate).` : result.reason,
     closest: result.closest ? { totalOdds: result.closest.totalOdds, legs: result.closest.legs.map((l) => ({ fixtureId: l.fixtureId, match: byId.get(l.fixtureId)?.teams.join(' – '), label: byId.get(l.fixtureId)?.label, odds: l.odds })) } : null,
     mixedBookmakers: result.mixedBookmakers,
@@ -649,7 +675,7 @@ async function build(job: JobRow) {
   await tx(async (c) => {
     const t = await c.query(
       `INSERT INTO tickets (job_id, user_id, slot, period_key, target_odds, actual_odds, leg_count, generation_status, outcome_status, mixed_bookmakers, summary)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (job_id) DO UPDATE SET job_id=EXCLUDED.job_id RETURNING id`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (job_id) DO UPDATE SET ${job.config.completion ? 'actual_odds=EXCLUDED.actual_odds,leg_count=EXCLUDED.leg_count,generation_status=EXCLUDED.generation_status,outcome_status=EXCLUDED.outcome_status,mixed_bookmakers=EXCLUDED.mixed_bookmakers,summary=EXCLUDED.summary' : 'job_id=EXCLUDED.job_id'} RETURNING id`,
       [job.id, job.user_id, job.slot, job.period_key, job.target_odds, chosen.length ? result.totalOdds : null, chosen.length, generation, generation === 'COMPLETED' ? 'PENDING' : 'NOT_APPLICABLE', result.mixedBookmakers, JSON.stringify(summary)],
     );
     const ticketId = t.rows[0].id as string;
@@ -659,7 +685,7 @@ async function build(job: JobRow) {
       await c.query(
         `INSERT INTO ticket_selections (ticket_id, fixture_id, position, market_key, market_label, odds, bookmaker, quote_observed_at, votes_for, model_probability, risk, snapshot)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (ticket_id, fixture_id) DO NOTHING`,
-        [ticketId, leg.fixtureId, pos++, cd.marketKey, cd.label, leg.odds, leg.bookmaker, cd.observedAt, Math.round(cd.quality > 0 ? (await c.query('SELECT votes_for FROM final_decisions WHERE job_id=$1 AND fixture_id=$2', [job.id, leg.fixtureId])).rows[0].votes_for : 0), cd.probability, cd.riskLabel,
+        [ticketId, leg.fixtureId, pos++, cd.marketKey, cd.label, leg.odds, leg.bookmaker, cd.observedAt, cd.votesFor, cd.probability, cd.riskLabel,
           JSON.stringify({ match: `${cd.snapshot.fixture.home} – ${cd.snapshot.fixture.away}`, home: cd.snapshot.fixture.home, away: cd.snapshot.fixture.away, league: cd.snapshot.fixture.league, kickoff: cd.snapshot.fixture.kickoff, source: cd.snapshot.odds.source })],
       );
     }

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { fmtDateTime, odds } from '@/lib/format';
 import { SLOTS_UI } from '@/lib/slots-ui';
+import { FinishIncompleteTicket } from './finish-incomplete-ticket';
 import { TicketPerformance } from './ticket-performance';
 import type { IncompletePick } from '@/lib/incomplete-ticket-picks';
 import type { Creator } from '@/lib/views';
@@ -82,6 +83,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                   </ul>
                 )}
               </Link>
+              {t.generation_status === 'INCOMPLETE' && t.creator?.mine && <FinishIncompleteTicket ticketId={t.id} compact />}
             </li>
           ); })}
         </ul>
