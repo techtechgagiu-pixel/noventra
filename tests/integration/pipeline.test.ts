@@ -1,3 +1,4 @@
+import { VOTER_IDS } from '@/lib/agent-roster';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { one, many } from '@/lib/db';
 import { createCustomJob, createReviewJob, createOrGetJob, resumeJob, slotStates } from '@/lib/jobs/service';
@@ -60,9 +61,9 @@ describe('daily ticket end-to-end (DEMO data, fake AI transport)', () => {
     const dg = await one<{ d: { lines: string[]; source: string } | null }>("SELECT summary->'digest' AS d FROM tickets WHERE id=$1", [ticket!.id]);
     expect(dg!.d!.lines.length).toBeGreaterThan(0);
     expect(dg!.d!.lines.length).toBeLessThanOrEqual(10);
-    // Independent initial predictions exist for all ten agents.
+    // Independent initial predictions exist for the full saved voting roster.
     const agents = await many<{ agent_id: string }>('SELECT DISTINCT agent_id FROM agent_predictions WHERE job_id=$1 AND round=0', [jobId]);
-    expect(agents.map((a) => a.agent_id).sort()).toEqual(['alex', 'andrei', 'becali', 'cosmin', 'diana', 'dragusin', 'elena', 'hantu', 'ianis', 'ilie', 'ioana', 'man', 'mihai', 'petrescu', 'porumboiu', 'prunea', 'radu', 'robert', 'stoica', 'sumudica', 'tamas', 'victor']);
+    expect(agents.map((a) => a.agent_id).sort()).toEqual([...VOTER_IDS].sort());
     // Locked for the day: a second click returns the same job, no new AI.
     const callsAfter = aiCallCount();
     const again = await createOrGetJob(u, 'FIVE_A');

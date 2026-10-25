@@ -1,14 +1,15 @@
 'use client';
+import { VOTER_IDS } from '@/lib/agent-roster';
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, CircleSlash, Database, Loader2, Search, X } from 'lucide-react';
 import { AGENT_META, fmtTime, odds } from '@/lib/format';
 import { STAGE_ORDER, progress, type AgentView, type NexusState } from '@/lib/nexus-state';
 
-const STAGE_LABELS: Record<string, string> = { SELECTING: 'Alegerea meciurilor', SCOUT: 'Cercetarea SCOUT', STATS: 'Calculele statistice', ANALYSIS: 'Analiza celor douăzeci și doi de agenți', DEBATE: 'Dezbaterea', VOTING: 'Votarea și validarea', BUILDING: 'Construirea biletului' };
+const STAGE_LABELS: Record<string, string> = { SELECTING: 'Alegerea meciurilor', SCOUT: 'Cercetarea SCOUT', STATS: 'Calculele statistice', ANALYSIS: 'Analiza echipei de agenți', DEBATE: 'Dezbaterea', VOTING: 'Votarea și validarea', BUILDING: 'Construirea biletului' };
 const STATUS_LABEL: Record<string, string> = { IDLE: 'În așteptare', ANALYZING: 'Analizează', DEBATING: 'Dezbate', DONE: 'Gata', FAILED: 'Abținere (eroare)', WAITING: 'Așteaptă limita' };
-const ORDER = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin', 'hantu', 'becali', 'ilie', 'sumudica', 'petrescu', 'stoica', 'prunea', 'porumboiu', 'ianis', 'dragusin', 'man', 'tamas'];
-const shown = (s: NexusState) => (s.participants.length >= 6 && s.participants.length < ORDER.length && !!s.final ? ORDER.filter((id) => s.participants.includes(id)) : ORDER);
+const ORDER = VOTER_IDS;
+const shown = (s: NexusState) => (s.participants.length > 0 && s.participants.length < ORDER.length && !!s.final ? ORDER.filter((id) => s.participants.includes(id)) : ORDER);
 
 export type AgentDetail = { agentId: string; items: Array<{ fixture: string; round: number; provider: string; model: string; decision: string; market: string | null; probability: number | null; confidence: number; rationale: string; evidence: string[]; failureReasons: string[]; objection?: string; response?: string }> };
 

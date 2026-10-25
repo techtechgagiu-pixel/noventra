@@ -1,4 +1,5 @@
 'use client';
+import { NEW_AI_PROFILES } from '@/lib/ai/new-agent-profiles';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Minus, Plus, Sparkles, Trophy } from 'lucide-react';
@@ -12,14 +13,15 @@ const TARGETS = [2, 3, 5, 10, 20, 50, 100];
 const pick = (...ids: string[]) => (a: AgentCard[]) => a.filter((x) => ids.includes(x.id)).map((x) => x.id);
 /** Ready-made teams: by risk profile, by story (generations, roles) and by method. The user can still tick freely. */
 const GROUPS: Array<{ label: string; hint: string; ids: (a: AgentCard[]) => string[] }> = [
+  { label: 'Noua echipă AI (10)', hint: 'Cele zece modele noi, fiecare cu un rol distinct', ids: pick(...NEW_AI_PROFILES.map((a) => a.id)) },
   { label: 'Toți', hint: 'Toată echipa, toate opiniile', ids: (a) => a.map((x) => x.id) },
   { label: 'Prudenții', hint: 'Cote mici, probabilitate mare', ids: (a) => a.filter((x) => x.maxOdds <= 1.7).map((x) => x.id) },
   { label: 'Echilibrații', hint: 'Cote medii, risc moderat', ids: (a) => a.filter((x) => x.maxOdds > 1.7 && x.maxOdds < 2).map((x) => x.id) },
   { label: 'Vânătorii de cote', hint: 'Acceptă cote mari', ids: (a) => a.filter((x) => x.maxOdds >= 2).map((x) => x.id) },
-  { label: 'Generația de Aur ’94', hint: 'Hagi, Popescu, Dumitrescu, Prunea, Petrescu, Iordănescu', ids: pick('andrei', 'mihai', 'ilie', 'prunea', 'petrescu', 'cosmin') },
-  { label: 'Banca tehnică', hint: 'Antrenorii', ids: pick('robert', 'radu', 'cosmin', 'ioana', 'petrescu', 'sumudica', 'alex') },
-  { label: 'Patronii și oficialii', hint: 'Sandu, Dragomir, Becali, Stoica, Porumboiu', ids: pick('victor', 'elena', 'becali', 'stoica', 'porumboiu') },
-  { label: 'Generația nouă', hint: 'Ianis, Drăgușin, Man, Raț, Tamaș', ids: pick('ianis', 'dragusin', 'man', 'diana', 'tamas') },
+  { label: 'Context și tactică (6)', hint: 'Context, tactică și verificarea pieței', ids: pick('andrei', 'mihai', 'ilie', 'prunea', 'petrescu', 'cosmin') },
+  { label: 'Tacticienii', hint: 'Scenarii și ritmul jocului', ids: pick('robert', 'radu', 'cosmin', 'ioana', 'petrescu', 'sumudica', 'alex') },
+  { label: 'Strategie și audit', hint: 'Strategie, scepticism și verificarea dovezilor', ids: pick('victor', 'elena', 'becali', 'stoica', 'porumboiu') },
+  { label: 'Dinamica jocului', hint: 'Ocazii, dueluri și scenarii adverse', ids: pick('ianis', 'dragusin', 'man', 'diana', 'tamas') },
   { label: 'Apărarea', hint: 'Gândesc din spate: goluri primite, portari, dueluri', ids: pick('dragusin', 'prunea', 'petrescu', 'tamas', 'diana', 'mihai') },
   { label: 'Atacul', hint: 'Goluri, ocazii, flancuri', ids: pick('alex', 'man', 'ianis', 'andrei', 'ioana', 'sumudica') },
   { label: 'Oamenii cifrelor', hint: 'Statistică, piață, risc, verificare', ids: pick('andrei', 'elena', 'cosmin', 'robert', 'porumboiu', 'stoica') },
@@ -214,7 +216,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
       </section>
       <div className="custom-submit">
         <p className="text-sm text-muted md:flex-1">
-          {count} {count === 1 ? 'bilet' : 'bilete'} · fiecare cu cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> voturi pentru o selecție. Mircea Lucescu dă verdictul final.
+          {count} {count === 1 ? 'bilet' : 'bilete'} · fiecare cu cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> voturi pentru o selecție. GPT-6 Luna Pro dă verdictul final.
         </p>
         {!chosen.length && <p className="text-sm text-gold">Alege cel puțin un agent din „Echipa de agenți”.</p>}
         {error && <p className="text-sm text-rose" role="alert">{error}</p>}

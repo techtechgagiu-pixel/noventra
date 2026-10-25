@@ -29,7 +29,7 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
   };
 }
 
-/** ȘTUCAN's facts: only real headlines (indexed), prices in his band and standings — no statistics. */
+/** Nemotron 3.5 Super VL's facts: only real headlines (indexed), prices in his band and standings — no statistics. */
 export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
   const n = s.news ?? { home: [], away: [], errors: [] };
   let i = 0;
@@ -43,6 +43,13 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
     news: { [s.fixture.home]: n.home.map(fmt), [s.fixture.away]: n.away.map(fmt), note: n.home.length + n.away.length === 0 ? 'Nicio știre relevantă găsită în ultimele zile.' : undefined },
     markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, label: m.label, odds: m.odds, fair: m.fairMarketProbability })),
   };
+}
+
+/** Atlas cross-checks sourced news with statistics; Nemotron 3.5 Super VL keeps his news-only role. */
+export function factsForAgent(id: string, s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
+  if (id === 'hantu') return newsFacts(s, band);
+  const facts = agentFacts(s, band);
+  return id === 'atlas' ? { ...facts, news: newsFacts(s, band).news } : facts;
 }
 
 export type FinalPosition = { agentId: string; decision: 'BET_CANDIDATE' | 'NO_BET'; marketKey: string | null; estimatedProbability: number | null; confidence: number; risk: string; round: number; rationale: string; provider: string; model: string;

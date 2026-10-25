@@ -122,7 +122,7 @@ test('your own ticket: build from real prices → agents review it live → verd
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/review-builder.png`, fullPage: true });
   await page.getByRole('button', { name: /TRIMITE LA ANALIZĂ/ }).click();
   await expect(page).toHaveURL(/tab=verifica&job=[0-9a-f-]{36}/, { timeout: 30_000 });
-  await expect(page.getByRole('region', { name: 'Verdictul echipei' })).toContainText('Mircea Lucescu', { timeout: 90_000 });
+  await expect(page.getByRole('region', { name: 'Verdictul echipei' })).toContainText('GPT-6 Luna Pro', { timeout: 90_000 });
   await expect(page.getByRole('link', { name: 'VEZI BILETUL' })).toBeVisible({ timeout: 30_000 });
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/review-live.png`, fullPage: true });
   await page.getByRole('link', { name: 'VEZI BILETUL' }).click();
@@ -135,7 +135,7 @@ test('statistics tab: per-agent record and consumption', async ({ page }) => {
   await page.goto('/auth/test-login?email=e2e@test.local');
   await page.goto('/?tab=statistici');
   await expect(page.getByRole('heading', { name: 'Statistici' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Agenții' }).locator('article')).toHaveCount(24);
+  await expect(page.getByRole('region', { name: 'Agenții' }).locator('article')).toHaveCount(34);
   await expect(page.getByText('Consum azi', { exact: false })).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/stats.png`, fullPage: true });
   await page.goto('/?tab=istoric');

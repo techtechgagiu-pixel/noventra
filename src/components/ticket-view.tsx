@@ -128,7 +128,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
           <p className="text-sm leading-relaxed">{t.summary.review.overall}</p>
           {t.summary.review.advice.length > 0 && <ul className="mt-3 space-y-1.5 text-sm">{t.summary.review.advice.map((a, i) => <li key={i} className="flex gap-2"><span className="text-gold">→</span><span>{a}</span></li>)}</ul>}
           {t.summary.review.userAdvice && <p className="mt-4 rounded-xl border border-line bg-ink/40 p-3 text-xs text-muted">Sfaturile tale pentru tacticieni: <span className="text-text">„{t.summary.review.userAdvice}”</span></p>}
-          <p className="mt-3 text-xs text-muted">Mircea Lucescu (creierul){t.summary.review.model ? ` · ${t.summary.review.model}` : ' · compus din voturile echipei'}. Analiza nu garantează rezultatul.</p>
+          <p className="mt-3 text-xs text-muted">GPT-6 Luna Pro (creierul){t.summary.review.model ? ` · ${t.summary.review.model}` : ' · compus din voturile echipei'}. Analiza nu garantează rezultatul.</p>
         </div>
       )}
       {completed && !t.summary.review && (

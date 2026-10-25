@@ -18,15 +18,22 @@ describe('cosmetic agent career progression', () => {
     expect(agentProgression({ won: 12, lost: 3 })!.rank.name).toBe('Super');
     expect(agentProgression({ won: 59, lost: 16 })!.rank.name).toBe('Elite');
   });
-  it('gives the requested top records Super while retaining a minimum confirmed sample', () => {
-    expect(agentProgression({ won: 27, lost: 2 })!.rank.name).toBe('Super');
-    expect(agentProgression({ won: 14, lost: 3 })!.rank.name).toBe('Super');
+  it('gives the requested top records Diamond Super while retaining a minimum confirmed sample', () => {
+    expect(agentProgression({ won: 27, lost: 2 })!.rank.name).toBe('Diamond Super');
+    expect(agentProgression({ won: 14, lost: 3 })!.rank.name).toBe('Diamond Super');
     expect(agentProgression({ won: 14, lost: 0 })!.rank.name).toBe('Unic');
+  });
+  it('uses an exact >80% boundary and recalculates after red results without rounded percentages', () => {
+    expect(agentProgression({won:12,lost:3})!.rank.name).toBe('Super');
+    expect(agentProgression({won:13,lost:3})!.rank.name).toBe('Diamond Super');
+    expect(agentProgression({won:13,lost:4})!.rank.name).toBe('Elite');
+    expect(agentProgression({won:161,lost:39})!.rank.name).toBe('Diamond Super');
   });
   it('recalculates rank and level after a corrected or red result', () => {
     const before = agentProgression({ won: 21, lost: 9 })!, after = agentProgression({ won: 20, lost: 10 })!;
     expect(after.rank.name).toBe('Unic');
     expect(after.xp).toBe(before.xp - 45);
-    expect(agentProgression({ won: 60, lost: 15 })!.nextRank).toBeNull();
+    expect(agentProgression({ won: 60, lost: 15 })!.nextRank!.name).toBe('Diamond Super');
+    expect(agentProgression({ won: 61, lost: 14 })!.nextRank).toBeNull();
   });
 });

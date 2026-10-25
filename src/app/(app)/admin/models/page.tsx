@@ -1,3 +1,5 @@
+import { describeModel } from '@/lib/model-identities';
+import { cleanAgentText } from '@/lib/agent-names';
 import { requireAdminPage } from '@/lib/admin-guard';
 import { AGENTS } from '@/lib/ai/agents';
 import { activeAssignments } from '@/lib/ai/assignments';
@@ -22,12 +24,12 @@ export default async function AdminModels() {
         <table className="w-full min-w-[820px] text-sm">
           <thead className="text-left text-muted"><tr><th className="py-2">Agent</th><th>Furnizor / model</th><th>Rezervă</th><th>Prompt</th><th>Disponibil</th><th>Latență medie</th><th>Cereri</th><th>Tokeni</th><th>Erori</th><th>Cost estimat</th></tr></thead>
           <tbody>{AGENTS.map((ag) => { const as = a.get(ag.id); const st = stats.find((s) => s.agent_id === ag.id); return (
-            <tr key={ag.id} className="border-t border-line"><td className="py-2 font-semibold" style={{ color: ag.accent }}>{ag.name}</td><td>{as?.primary.provider}/{as?.primary.model}</td><td className="text-muted">{as?.fallback ? `${as.fallback.provider}/${as.fallback.model}` : '—'}</td><td>{as?.promptVersion}</td>
+            <tr key={ag.id} className="border-t border-line"><td className="py-2 font-semibold" style={{ color: ag.accent }}>{describeModel(as?.primary.model).modelName}<span className="block text-xs text-muted">{ag.title}</span></td><td>{as?.primary.provider}/{as?.primary.model}</td><td className="text-muted">{as?.fallback ? `${as.fallback.provider}/${as.fallback.model}` : '—'}</td><td>{as?.promptVersion}</td>
               <td>{as && providerConfigured(as.primary.provider) ? <span className="text-emerald">cheie OK</span> : <span className="text-rose">lipsă</span>}</td><td className="tabular">{st?.avg_latency ? `${(st.avg_latency / 1000).toFixed(1)} s` : '—'}</td><td className="tabular">{st?.requests ?? 0}</td><td className="tabular">{st?.tokens?.toLocaleString('ro-RO') ?? 0}</td><td className="tabular">{st?.error_rate != null ? `${Math.round(st.error_rate * 100)}%` : '—'}</td><td>0 USD (plan gratuit)</td></tr>); })}</tbody>
         </table>
       </div>
-      <ModelForm agents={AGENTS.map((x) => ({ id: x.id, name: x.name }))} />
-      <div className="card p-4"><h2 className="mb-2 font-display font-bold">Istoric versiuni</h2><ul className="space-y-1 text-xs text-muted">{history.map((h, i) => <li key={i}>{h.created_at.toISOString().slice(0, 16).replace('T', ' ')} · {h.agent_id} → {h.provider}/{h.model_id} {h.active ? '(activ)' : ''} · {h.reason}</li>)}</ul></div>
+      <ModelForm agents={AGENTS.map((x) => ({ id: x.id, name: describeModel(a.get(x.id)?.primary.model).modelName, title: x.title }))} />
+      <div className="card p-4"><h2 className="mb-2 font-display font-bold">Istoric versiuni</h2><ul className="space-y-1 text-xs text-muted">{history.map((h, i) => <li key={i}>{h.created_at.toISOString().slice(0, 16).replace('T', ' ')} · {AGENTS.find((ag) => ag.id === h.agent_id)?.title ?? 'Rol AI'} → {h.provider}/{h.model_id} {h.active ? '(activ)' : ''} · {cleanAgentText(h.reason)}</li>)}</ul></div>
     </div>
   );
 }

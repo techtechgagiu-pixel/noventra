@@ -1,6 +1,7 @@
 import { reportNewsBatch } from '../news-reporter';
 import { createHash } from 'node:crypto';
 import { config } from '../config';
+import { LEGACY_VOTER_IDS } from '../agent-roster';
 import { many, one, query, tx } from '../db';
 import { type Prediction, type Revision, AGENTS, BRAIN_AGENT_ID, BRAIN_SCHEMA_TEXT, BRAIN_SYSTEM, BrainOutputSchema, DEBATE_SCHEMA_TEXT, DebateOutputSchema, INITIAL_SCHEMA_TEXT, InitialOutputSchema, SCOUT_SCHEMA_TEXT, ScoutOutputSchema, VOTING_AGENTS, agentById, systemPrompt, type AgentDefinition } from '../ai/agents';
 import { activeAssignments } from '../ai/assignments';
@@ -15,7 +16,7 @@ import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sp
 import type { Fixture } from '../sports/types';
 import { modelFixture, selectionImplies } from '../stats/engine';
 import { localDate, yyyymmdd } from '../time';
-import { agentFacts, characterViolation, isBannedMarket, newsFacts, consensus, contested, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
+import { agentFacts, characterViolation, isBannedMarket, factsForAgent, consensus, contested, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
 import { agentTrackRecord, trackRecordText } from '../track-record';
 import { teamNews } from '../news/google-news';
 import { buildDigest } from '../digest';
@@ -24,7 +25,7 @@ import type { CandidateEntry, Checkpoint, FixtureSnapshot, LegReview, Stage } fr
 
 export type JobRow = {
   id: string; user_id: string; slot: string; period_key: string; target_odds: string; required_legs: number | null; seed: string;
-  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number } };
+  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; votingAgentIds?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number } };
   status: string; stage: Stage; checkpoint: Checkpoint; candidate_order: CandidateEntry[] | null; eligible_count: number | null; attempt_count: number;
   created_at?: Date | string;
 };
@@ -304,7 +305,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
   const policy = jobPolicy(job);
   const band = { minOdds: policy.minOdds, maxOdds: Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds) };
   const facts: Array<{ fixtureId: string; match: string; markets: Array<{ key: string; odds: number; est?: number | null; ev?: number | null }> }> =
-    agent.id === 'hantu' ? snaps.map((s) => newsFacts(s, band)) : snaps.map((s) => agentFacts(s, band));
+    snaps.map((s) => factsForAgent(agent.id, s, band));
   const review = job.config.review;
   if (review) for (const f of facts as Array<Record<string, unknown> & { fixtureId: string; markets: Array<{ key: string; odds: number; est?: number | null; ev?: number | null }> }>) {
     const leg = review.legs.find((l) => l.fixtureId === f.fixtureId); const snap = snaps.find((x) => x.fixture.id === f.fixtureId);
@@ -330,7 +331,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       others: prior.filter((p) => p.fixture_id === f.fixtureId && p.agent_id !== agent.id).map((p) => `${agentById(p.agent_id)?.name}: ${summarize(p)}`),
       leadingCandidate: (() => { const t: Record<string, number> = {}; for (const p of prior.filter((x) => x.fixture_id === f.fixtureId && x.decision === 'BET_CANDIDATE' && x.market_key)) t[p.market_key!] = (t[p.market_key!] ?? 0) + 1; const top = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; return top ? `${top[0]} (${top[1]}/${jobAgents(job).length} voturi)` : 'niciunul'; })(),
     }));
-    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Spune explicit dacă poți susține „leadingCandidate” (selecția cu cele mai multe voturi); o selecție intră pe bilet cu minimum ${jobThreshold(job)}/${jobAgents(job).length} voturi (5 dacă Mircea Sandu și Mircea Lucescu o refuză amândoi; un vot pentru o selecție mai strictă o susține și pe cea mai largă, iar câștigă selecția susținută de cei mai mulți). Rămâi în limitele tale de cotă și probabilitate, dar nu vota împotriva propriei analize doar pentru consens. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
+    user = `Runda ${round} de dezbatere. Ai văzut pozițiile celorlalți agenți. Contestă argumentele slabe, apără-ți poziția sau schimb-o DOAR dacă un argument are suport în date. Spune explicit dacă poți susține „leadingCandidate” (selecția cu cele mai multe voturi); o selecție intră pe bilet cu minimum ${jobThreshold(job)}/${jobAgents(job).length} voturi (5 dacă Claude Haiku 5.5 și GPT-6 Luna Pro o refuză amândoi; un vot pentru o selecție mai strictă o susține și pe cea mai largă, iar câștigă selecția susținută de cei mai mulți). Rămâi în limitele tale de cotă și probabilitate, dar nu vota împotriva propriei analize doar pentru consens. Schema răspunsului: ${DEBATE_SCHEMA_TEXT}\nMeciuri în dezbatere:\n${JSON.stringify(debateFacts)}`;
   }
   try {
     const res = round === 0
@@ -353,7 +354,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       if (!item) { await recordEvent(job.id, { type: 'AGENT_FAILED', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { round, error: 'Agentul nu a răspuns pentru acest meci (abținere).' } }); continue; }
       let pos = toPosition(agent.id, item, round, res.provider, res.model, validKeys.get(s.fixture.id)!);
       if (agent.id === 'hantu' && pos.decision === 'BET_CANDIDATE' && !(('evidence' in item ? item.evidence : []) as string[]).some((x) => /\[H\d+\]/.test(x))) {
-        await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { marketKey: pos.marketKey, marketLabel: s.model.markets.find((m) => m.key === pos.marketKey)?.label ?? null, reason: 'Ștucan lucrează doar din știri, dar nu a citat niciun titlu — votul devine NO BET' } });
+        await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { marketKey: pos.marketKey, marketLabel: s.model.markets.find((m) => m.key === pos.marketKey)?.label ?? null, reason: 'Nemotron 3.5 Super VL lucrează doar din știri, dar nu a citat niciun titlu — votul devine NO BET' } });
         pos = { ...pos, decision: 'NO_BET', marketKey: null, alternatives: [] };
       }
       const market = s.model.markets.find((m) => m.key === pos.marketKey) ?? null;
@@ -386,12 +387,11 @@ function jobPolicy(job: JobRow): LegPolicy {
   return job.config.custom ? customPolicy(job.config.custom) : policyFor(job.slot, Number(job.target_odds));
 }
 
-/** Agents voting on this job: all 11, or the subset the user chose for a custom ticket. */
+/** Pin the voting roster so adding agents never changes an already-created analysis. */
 export function jobAgents(job: Pick<JobRow, 'config'>): AgentDefinition[] {
-  const chosen = job.config.custom?.agents;
-  if (!chosen?.length) return VOTING_AGENTS;
+  const chosen: readonly string[] = job.config.custom?.agents?.length ? job.config.custom.agents : job.config.votingAgentIds ?? LEGACY_VOTER_IDS;
   const list = VOTING_AGENTS.filter((a) => chosen.includes(a.id));
-  return list.length ? list : VOTING_AGENTS;
+  return list.length ? list : VOTING_AGENTS.filter((a) => (LEGACY_VOTER_IDS as readonly string[]).includes(a.id));
 }
 
 /** Votes needed for a selection: the global threshold for the full team, ~30% of a smaller custom team (min 1). */
@@ -484,7 +484,7 @@ async function chooseDebate(job: JobRow, ids: string[], round: number) {
 }
 
 /**
- * The team's brain (Mircea Lucescu) picks the ideal selection from each fixture's shortlist — the selections backed by at
+ * The team's brain (GPT-6 Luna Pro) picks the ideal selection from each fixture's shortlist — the selections backed by at
  * least the required number of agents — balancing winning chance and ticket variety. One call per batch. If the brain is
  * unavailable, the deterministic rule decides instead (never a guess).
  */
@@ -557,13 +557,13 @@ async function stepVote(job: JobRow, ids: string[]) {
     if (brain && c.shortlist.length) {
       if (brain.key) {
         const pickItem = c.shortlist.find((x) => x.key === brain.key);
-        if (pickItem) { Object.assign(c, { outcome: 'QUALIFIED', marketKey: pickItem.key, votesFor: pickItem.supporters.length, directVotes: pickItem.direct, supporters: pickItem.supporters }); brainNote = ` Ales de creier (Mircea Lucescu): ${brain.reason}`; }
+        if (pickItem) { Object.assign(c, { outcome: 'QUALIFIED', marketKey: pickItem.key, votesFor: pickItem.supporters.length, directVotes: pickItem.direct, supporters: pickItem.supporters }); brainNote = ` Ales de creier (GPT-6 Luna Pro): ${brain.reason}`; }
       } else Object.assign(c, { outcome: 'NO_BET', marketKey: null }), (brainNote = ` Creierul a respins lista scurtă: ${brain.reason}`);
     }
     await recordEvent(job.id, { type: 'CONSENSUS_CALCULATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { match: `${s.fixture.home} – ${s.fixture.away}`, ...c, threshold: c.requiredVotes, total: N, setAside: setAside.length } });
     const validation: Record<string, unknown> = {};
     let outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET' | 'REJECTED' = c.outcome;
-    let reason = c.outcome === 'QUALIFIED' ? '' : c.outcome === 'NO_BET' ? (brainNote ? brainNote.trim() : `${c.noBetVotes}/${N} agenți au recomandat NO BET.`) : `Consens insuficient: maximum ${c.votesFor}/${N} voturi pentru aceeași selecție în limitele de prudență (prag ${c.requiredVotes}/${N}${c.cautiousVeto ? ', ridicat pentru că Mircea Sandu și Mircea Lucescu au refuzat' : ''}${setAside.length ? `; ${setAside.length} voturi nenumărate pentru că erau în afara caracterului` : ''}).`;
+    let reason = c.outcome === 'QUALIFIED' ? '' : c.outcome === 'NO_BET' ? (brainNote ? brainNote.trim() : `${c.noBetVotes}/${N} agenți au recomandat NO BET.`) : `Consens insuficient: maximum ${c.votesFor}/${N} voturi pentru aceeași selecție în limitele de prudență (prag ${c.requiredVotes}/${N}${c.cautiousVeto ? ', ridicat pentru că Claude Haiku 5.5 și GPT-6 Luna Pro au refuzat' : ''}${setAside.length ? `; ${setAside.length} voturi nenumărate pentru că erau în afara caracterului` : ''}).`;
     if (c.outcome === 'QUALIFIED' && c.marketKey) {
       // The brain's backup is tried when its first choice fails validation (e.g. the price moved).
       const backup = brain?.backup && brain.backup !== c.marketKey ? c.shortlist.find((x) => x.key === brain.backup) ?? null : null;
@@ -691,8 +691,8 @@ async function build(job: JobRow) {
     }
     await c.query(`UPDATE ticket_generation_jobs SET status=$2, stage='DONE', finished_at=now(), result=$3, lease_owner=NULL, lease_expires_at=NULL, checkpoint=$4 WHERE id=$1`,
       [job.id, generation, JSON.stringify({ ticketId, generation, totalOdds: chosen.length ? result.totalOdds : null }), JSON.stringify({ ...job.checkpoint, phase: 'DONE' })]);
+    await recordEvent(job.id, { type: 'TICKET_FINALIZED', stage: 'DONE', payload: { generation, totalOdds: chosen.length ? result.totalOdds : null, legs: chosen.length, target: Number(job.target_odds), reason: summary.reason, mixedBookmakers: result.mixedBookmakers } }, c);
   });
-  await recordEvent(job.id, { type: 'TICKET_FINALIZED', stage: 'DONE', payload: { generation, totalOdds: chosen.length ? result.totalOdds : null, legs: chosen.length, target: Number(job.target_odds), reason: summary.reason, mixedBookmakers: result.mixedBookmakers } });
   job.status = generation;
   if (chosen.length) {
     const tid = await one<{ id: string }>('SELECT id FROM tickets WHERE job_id=$1', [job.id]);
@@ -870,8 +870,8 @@ async function buildReview(job: JobRow) {
     }
     await c.query(`UPDATE ticket_generation_jobs SET status='COMPLETED', stage='DONE', finished_at=now(), result=$2, lease_owner=NULL, lease_expires_at=NULL, checkpoint=$3 WHERE id=$1`,
       [job.id, JSON.stringify({ ticketId, generation: 'COMPLETED', totalOdds }), JSON.stringify({ ...cp, phase: 'DONE' })]);
+    await recordEvent(job.id, { type: 'TICKET_FINALIZED', stage: 'DONE', payload: { generation: 'COMPLETED', totalOdds, legs: legs.length, target: Number(job.target_odds), reason: overall, review: true } }, c);
   });
-  await recordEvent(job.id, { type: 'TICKET_FINALIZED', stage: 'DONE', payload: { generation: 'COMPLETED', totalOdds, legs: legs.length, target: Number(job.target_odds), reason: overall, review: true } });
   job.status = 'COMPLETED';
 }
 

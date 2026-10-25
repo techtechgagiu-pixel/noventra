@@ -12,7 +12,7 @@ export const STAGES: { id: Stage; label: string }[] = [
   { id: 'SELECTING', label: 'Alegerea meciurilor' },
   { id: 'SCOUT', label: 'Cercetarea SCOUT' },
   { id: 'STATS', label: 'Calculele statistice' },
-  { id: 'ANALYSIS', label: 'Analiza celor douăzeci și doi de agenți' },
+  { id: 'ANALYSIS', label: 'Analiza echipei de agenți' },
   { id: 'DEBATE', label: 'Dezbaterea' },
   { id: 'VOTING', label: 'Votarea și validarea' },
   { id: 'BUILDING', label: 'Construirea biletului' },
@@ -44,7 +44,7 @@ export type FixtureSnapshot = {
   model: FixtureModel;
   dossier: ScoutDossier;
   dataQuality: { historyHome: number; historyAway: number; shotsAvailable: boolean; standings: boolean; oddsObservedAt: string };
-  /** Real dated headlines for ȘTUCAN (Google News); absent for older snapshots and demo data. */
+  /** Real dated headlines for Nemotron 3.5 Super VL (Google News); absent for older snapshots and demo data. */
   news?: { home: NewsItem[]; away: NewsItem[]; errors: string[] };
 };
 

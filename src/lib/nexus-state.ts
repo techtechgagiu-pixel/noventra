@@ -1,3 +1,6 @@
+import { VOTER_IDS } from './agent-roster';
+import { AGENT_META } from './format';
+
 // Client-safe reducer: turns persisted backend events into the NEXUS view state.
 // The SAME reducer drives LIVE execution and HISTORICAL REPLAY, so the replay shows exactly what was recorded.
 
@@ -30,8 +33,9 @@ export type NexusState = {
   seed: string | null;
 };
 
-const VOTERS = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin', 'hantu', 'becali', 'ilie', 'sumudica', 'petrescu', 'stoica', 'prunea', 'porumboiu', 'ianis', 'dragusin', 'man', 'tamas'];
-const NAMES: Record<string, string> = { victor: 'Mircea Sandu', andrei: 'Gheorghe Hagi', mihai: 'Gică Popescu', alex: 'Adrian Mutu', diana: 'Răzvan Raț', robert: 'Mircea Lucescu', ioana: 'Cristi Chivu', radu: 'Răzvan Lucescu', elena: 'Dumitru Dragomir', cosmin: 'Anghel Iordănescu', hantu: 'Ștucan', becali: 'Gigi Becali', ilie: 'Ilie Dumitrescu', sumudica: 'Marius Șumudică', petrescu: 'Dan Petrescu', stoica: 'Mihai Stoica', prunea: 'Florin Prunea', porumboiu: 'Adrian Porumboiu', ianis: 'Ianis Hagi', dragusin: 'Radu Drăgușin', man: 'Dennis Man', tamas: 'Gabriel Tamaș', scout: 'SCOUT' };
+const VOTERS = VOTER_IDS;
+const NAMES: Record<string, string> = Object.fromEntries(Object.entries(AGENT_META).map(([id, a]) => [id, a.name]));
+
 
 export function initialState(): NexusState {
   return {
@@ -72,12 +76,12 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
       log(`Ordine aleatoare de explorare salvată: ${s.order.length} meciuri în ${s.batches} loturi.`);
       break;
     case 'BATCH_STARTED': s.batchIndex = (p.batch ?? 1) - 1; s.batchFraction = 0; for (const id of (Array.isArray(p.fixtures) ? p.fixtures : [])) setFx(id, { state: 'RESEARCH' }); log(`Lotul ${p.batch}/${p.of} intră în analiză.`); break;
-    case 'NEWS_COMMENTARY': log(`Corina Caragea: ${short(p.commentary, 240)}`); break;
+    case 'NEWS_COMMENTARY': log(`Claude Haiku 5.5: ${short(p.commentary, 240)}`); break;
     case 'SCOUT_STARTED': s.scout = { ...s.scout, status: 'RESEARCHING', message: p.message }; log(p.message); break;
     case 'MARKETS_CHECKED': log(`Filtru: ${p.accepted} meciuri au minimum ${p.minimum} pronosticuri cu cotă reală; ${p.rejected} au avut prea puține și au fost lăsate deoparte.`); break;
-    case 'BRAIN_STARTED': log(`🧠 Creierul echipei (Mircea Lucescu) alege pronosticul ideal pentru ${p.fixtures} meciuri — ${p.model}.`); break;
+    case 'BRAIN_STARTED': log(`🧠 Creierul echipei (GPT-6 Luna Pro) alege pronosticul ideal pentru ${p.fixtures} meciuri — ${p.model}.`); break;
     case 'BRAIN_DECISION': log(`🧠 ${p.match}: ${p.choice ? `alege „${p.label}” @ ${p.odds}` : 'respinge lista scurtă'} — ${short(p.reason, 140)}`, p.choice ? 'good' : 'info'); break;
-    case 'NEWS_COLLECTED': log(`Ștucan: ${p.home + p.away} știri despre ${p.match}${p.headlines?.[0] ? ` — „${short(p.headlines[0].title, 90)}” (${p.headlines[0].source ?? 'presă'})` : ''}.`); break;
+    case 'NEWS_COLLECTED': log(`Nemotron 3.5 Super VL: ${p.home + p.away} știri despre ${p.match}${p.headlines?.[0] ? ` — „${short(p.headlines[0].title, 90)}” (${p.headlines[0].source ?? 'presă'})` : ''}.`); break;
     case 'SCOUT_COMPLETED': s.scout = { ...s.scout, status: 'DONE', message: p.message, model: p.model ?? s.scout.model, dossiers: s.scout.dossiers + 1 }; s.batchFraction = Math.max(s.batchFraction, 0.15); log(`SCOUT: dosar istoric pentru ${p.match} (${p.homeSample}+${p.awaySample} meciuri).`); break;
     case 'STATS_COMPLETED': s.batchFraction = Math.max(s.batchFraction, 0.25); log(`Model statistic: ${p.match} — λ ${p.lambdaHome}–${p.lambdaAway}, incertitudine ${p.uncertainty}.`); break;
     case 'AGENT_STARTED': {
@@ -113,7 +117,7 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
     case 'JOB_RESUMED': log(p.note, 'warn'); break;
     case 'VOTE_SET_ASIDE': log(`${NAMES[e.agentId ?? ''] ?? 'Agent'}: vot nenumărat (${p.marketLabel ?? p.marketKey}) — ${short(p.reason, 140)}.`, 'warn'); break;
     case 'LEG_REVIEWED': if (e.fixtureId) setFx(e.fixtureId, { state: p.verdict === 'SLAB' ? 'REJECTED' : 'ACCEPTED', marketLabel: p.label, odds: p.odds, votesFor: p.supporters?.length ?? 0, reason: p.note }); log(`${p.verdict === 'SOLID' ? '✓ SOLID' : p.verdict === 'RISCANT' ? '⚠ RISCANT' : '✗ SLAB'}: ${p.match} — ${p.label} @ ${p.odds}. ${short(p.note, 140)}`, p.verdict === 'SOLID' ? 'good' : p.verdict === 'RISCANT' ? 'warn' : 'bad'); break;
-    case 'REVIEW_ADVICE': log(`🧠 Mircea Lucescu: ${short(p.overall, 200)}`, 'info'); break;
+    case 'REVIEW_ADVICE': log(`🧠 GPT-6 Luna Pro: ${short(p.overall, 200)}`, 'info'); break;
     case 'ODDS_VALIDATED': break;
   }
   return s;

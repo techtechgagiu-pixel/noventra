@@ -16,7 +16,7 @@ test('open archive and ticket receive green/red results without reload, retain f
     await page.clock.install();
     await page.goto('/?tab=istoric');
     await expect(page.getByText('DEMO Refresh Home – DEMO Refresh Away')).toBeVisible();
-    const filter = page.getByRole('button', { name: 'Complete', exact: true });
+    const filter = page.getByRole('button', { name: 'Azi', exact: true });
     await filter.click();
     const before = await (await page.request.get('/api/test/stats')).json();
     await db.query(`UPDATE ticket_selections SET outcome='WON' WHERE ticket_id=$1`, [ticket]);

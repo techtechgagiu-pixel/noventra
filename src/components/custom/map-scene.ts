@@ -3,6 +3,8 @@
  * Pure rendering: it only visualises recorded job events (never invents activity). React owns the events;
  * the scene consumes them through a small queue so bursts of events play out as a fluent flow.
  */
+import { LEGACY_VOTER_IDS } from '@/lib/agent-roster';
+import { NEW_AI_PROFILES } from '@/lib/ai/new-agent-profiles';
 import { AGENT_META } from '@/lib/format';
 import type { NexusEvent } from '@/lib/nexus-state';
 
@@ -28,6 +30,7 @@ type Layout = {
 
 /** Two teams on one pitch: PRIMUL 11 (left, attacking right) and the second team (right, attacking left). */
 export const FORMATION: Array<{ id: string; u: number; v: number; line: string }> = [
+  ...NEW_AI_PROFILES.map((a, i) => ({ id: a.id, u: .1 + (i % 5) * .2, v: i < 5 ? -.12 : 1.12, line: a.title.split(' · ')[0] })),
   { id: 'robert', u: 0.04, v: 0.5, line: 'Portar · creierul' },
   { id: 'victor', u: 0.14, v: 0.12, line: 'Apărare' }, { id: 'mihai', u: 0.14, v: 0.37, line: 'Apărare' },
   { id: 'radu', u: 0.14, v: 0.63, line: 'Apărare' }, { id: 'elena', u: 0.14, v: 0.88, line: 'Apărare' },
@@ -173,7 +176,7 @@ export class MapScene {
     const F = (id: string): Ref => ({ k: 'fx', id });
     const go = anim;
     switch (e.type) {
-      case 'JOB_CREATED': if (Array.isArray(p.custom?.agents) && p.custom.agents.length) this.activeAgents = new Set(p.custom.agents as string[]); break;
+      case 'JOB_CREATED': this.activeAgents = new Set(Array.isArray(p.custom?.agents) && p.custom.agents.length ? p.custom.agents as string[] : Array.isArray(p.agentIds) ? p.agentIds as string[] : LEGACY_VOTER_IDS); break;
       case 'TARGET_SELECTED': this.target = Number(p.target) || this.target; break;
       case 'STAGE_CHANGED': this.stage = e.stage; this.banner = null; break;
       case 'CANDIDATE_SELECTED': {
@@ -540,7 +543,8 @@ export class MapScene {
       if (f.id === BRAIN && on && L.mode === 'wide') { ctx.font = `700 9px ${this.font}`; ctx.fillStyle = C.gold; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('CREIER', p.x, p.y - r - 6); }
       // Name
       ctx.font = `600 ${r < 24 ? 10 : 11}px ${this.font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = on ? C.text : C.muted; ctx.fillText(on ? (f.id === BRAIN && L.mode === 'tall' ? `🧠 ${NAME(f.id)}` : NAME(f.id)) : `${NAME(f.id)} · bancă`, p.x, p.y + r + 6);
+      const label = on ? (f.id === BRAIN && L.mode === 'tall' ? `🧠 ${NAME(f.id)}` : NAME(f.id)) : `${NAME(f.id)} · bancă`;
+      ctx.fillStyle = on ? C.text : C.muted; ctx.fillText(fit(ctx, label, L.mode === 'wide' ? 120 : 86), p.x, p.y + r + 6);
       ctx.restore();
     }
     // Speech bubbles on top of everything (newest few only, so the map stays readable on a phone)
@@ -655,7 +659,7 @@ function layout(w: number, h: number): Layout {
     const active = { x: ax, y: queue.y + queue.h + 10, w: arenaW, h: tray.y - (queue.y + queue.h + 10) - 10 };
     const r = clamp(Math.min(pitch.w / 30, pitch.h / 13), 13, 24);
     const agents: Record<string, Vec> = {};
-    for (const f of FORMATION) agents[f.id] = { x: pitch.x + 30 + f.u * (pitch.w - 60), y: pitch.y + 34 + f.v * (pitch.h - 78) };
+    for (const f of FORMATION) agents[f.id] = { x: pitch.x + 30 + f.u * (pitch.w - 60), y: pitch.y + 75 + f.v * (pitch.h - 160) };
     return { mode: 'wide', w, h, r, pitch, agents, src: { x: pitch.x + pitch.w - 120, y: pitch.y + 18 }, news: { x: pitch.x + 22, y: pitch.y + 18 }, discard: { x: ax + arenaW + 40, y: active.y + active.h / 2 }, queue, active, tray };
   }
   const queue = { x: 10, y: 10, w: w - 20, h: 48 };
@@ -665,7 +669,7 @@ function layout(w: number, h: number): Layout {
   const pitch = { x: 10, y: active.y + active.h + 10, w: w - 20, h: tray.y - (active.y + active.h + 10) - 10 };
   const r = clamp(Math.min(pitch.w / 13, pitch.h / 30), 12, 20);
   const agents: Record<string, Vec> = {};
-  for (const f of FORMATION) agents[f.id] = { x: pitch.x + 26 + f.v * (pitch.w - 52), y: pitch.y + pitch.h - 30 - f.u * (pitch.h - 76) };
+  for (const f of FORMATION) agents[f.id] = { x: pitch.x + 54 + f.v * (pitch.w - 108), y: pitch.y + pitch.h - 30 - f.u * (pitch.h - 76) };
   return { mode: 'tall', w, h, r, pitch, agents, src: { x: pitch.x + 14, y: pitch.y + 14 }, news: { x: pitch.x + pitch.w - 54, y: pitch.y + 14 }, discard: { x: w / 2, y: -40 }, queue, active, tray };
 }
 

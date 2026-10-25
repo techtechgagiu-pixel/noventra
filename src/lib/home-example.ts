@@ -21,7 +21,7 @@ export const HOME_EXAMPLE: Thread = {
       "seq": 725,
       "agentId": "hantu",
       "kind": "objection",
-      "text": "Ilie Dumitrescu, Cristi Chivu și Adrian Porumboiu resping analiza datorită lipsei datelor despre șuturi pe poartă, considerând modelul invalid."
+      "text": "Mistral Medium 3.1, Qwen 3.8 Flash și Solar Pro 4 resping analiza datorită lipsei datelor despre șuturi pe poartă, considerând modelul invalid."
     },
     {
       "seq": 750,
