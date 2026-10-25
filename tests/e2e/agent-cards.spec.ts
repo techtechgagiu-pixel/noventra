@@ -74,3 +74,28 @@ test('confirmed outcomes automatically change level and rank on an open card wit
     expect((await (await page.request.get('/api/test/stats')).json()).aiCalls).toBe(before.aiCalls);
   } finally { await db.end(); }
 });
+
+test('AI identity view preserves agent records, character and period/scope filters', async ({ page }) => {
+  await page.goto('/auth/test-login?email=ai-cards@test.local');
+  await page.goto('/?tab=statistici&luna=all&scope=mine');
+  const original = page.locator('#agent-robert');
+  const results = await original.locator('.player-card-results').textContent();
+  const career = await original.locator('.player-card-level').textContent();
+  const rarity = await original.getAttribute('data-rarity');
+  await page.getByRole('link', { name: 'Modele AI', exact: true }).click();
+  await expect(page).toHaveURL(/luna=all&scope=mine&vedere=modele/);
+  await expect(original.locator('.player-card-results')).toHaveText(results!);
+  await expect(original.locator('.player-card-level')).toHaveText(career!);
+  await expect(original).toHaveAttribute('data-rarity', rarity!);
+  await expect(original).toContainText('Personaj: Mircea Lucescu');
+  await expect(original).toContainText('Managerul de risc');
+  await expect(original.locator('img')).toHaveAttribute('src', '/ai-portraits/robert-v1.webp');
+  await expect(original.locator('.player-ai-character')).toContainText('Risc');
+  await expect(page.locator('#agent-corina')).toContainText('Editorial');
+  await expect(page.locator('#agent-corina').getByRole('progressbar')).toHaveCount(0);
+  await page.getByRole('link', { name: 'septembrie 2026', exact: true }).click();
+  await expect(page).toHaveURL(/luna=2026-09&scope=mine&vedere=modele/);
+  await expect(original.locator('.player-card-level')).toHaveText(career!);
+  await page.getByRole('link', { name: 'Toată comunitatea', exact: true }).click();
+  await expect(page).toHaveURL(/luna=2026-09&scope=all&vedere=modele/);
+});

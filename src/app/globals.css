@@ -56,6 +56,25 @@ body {
 @media (prefers-reduced-motion: reduce) { [class*='lowerthird'] { animation: none !important; } }
 
 /* Compact football collection cards: the portrait shares the face with actual results. */
+/* Alternate identity view: the same compact player card reveals the assigned AI. */
+.stats-identity-tabs { display: inline-flex; gap: 4px; margin-top: 18px; padding: 4px; border: 1px solid #34405a; border-radius: 12px; background: #0a1020; }
+.stats-identity-tabs a { padding: 9px 18px; border-radius: 8px; color: #b6c1d5; font-size: 14px; font-weight: 600; }
+.stats-identity-tabs a[aria-current='page'] { background: #24334b; color: #eef4ff; box-shadow: inset 0 0 0 1px #536880; }
+.stats-identity-tabs a:focus-visible { outline: 2px solid #80e1c5; outline-offset: 3px; }
+.stats-ai-note { max-width: 76ch; margin-top: 12px; font-size: 12px; line-height: 1.65; color: #b6c1d5; }
+.player-card-ai .player-card-portrait-row { grid-template-columns: minmax(0,1fr) 96px minmax(0,1fr); }
+.player-card-ai .player-card-portrait { width: 96px; height: 100px; mask-image: linear-gradient(#000 88%, transparent); }
+.player-card-ai .player-card-portrait img { object-position: center 30%; }
+.player-ai-provider { margin: 4px 0 2px; color: #b6c1d5; font-size: 9px; }
+.player-card-ai .player-card-face h2 { display: flex; justify-content: center; align-items: center; min-height: 38px; font-size: 16px; overflow-wrap: anywhere; }
+.player-card-ai .player-card-specialty { font-size: 10px; }
+.player-card-ai .player-card-model { color: #d1daea; font-size: 10px; }
+.player-ai-character { margin-bottom: 9px; padding-bottom: 9px; border-bottom: 1px solid #23304b; }
+.player-ai-character > p { min-height: 30px; font-size: 10px; line-height: 1.5; color: #b6c1d5; }
+.player-ai-character dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; margin-top: 6px; text-align: center; font-size: 9px; }
+.player-ai-character dt { color: #8494b0; }
+.player-ai-character dd { color: #d1daea; font-variant-numeric: tabular-nums; }
+
 .agent-player-grid { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 1rem; }
 @media (min-width: 600px) { .agent-player-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 900px) { .agent-player-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
