@@ -52,7 +52,7 @@ export function eventsToMessages(events: NexusEvent[]): { messages: Msg[]; match
       case 'TICKET_FINALIZED': if (p.review) { sys(`🎟️ Analiza biletului tău e gata: cota ${Number(p.totalOdds).toFixed(2)} din ${p.legs} meciuri.`, 'good'); break; } sys(p.generation === 'COMPLETED' ? `🎟️ Bilet gata: cota ${Number(p.totalOdds).toFixed(2)} din ${p.legs} meciuri.` : p.generation === 'NO_BET' ? 'Rezultat: NO BET — niciun meci nu a trecut de agenți.' : `Bilet incomplet: ${p.reason ?? ''}`, p.generation === 'COMPLETED' ? 'good' : 'warn'); break;
       case 'JOB_WAITING': sys(`Așteptare ${p.retryInSeconds}s: ${p.reason}`, 'warn'); break;
       case 'JOB_PAUSED': sys(`Pauză: ${p.reason}`, 'bad'); break;
-      case 'JOB_RESUMED': sys('Analiza continuă de unde a rămas.', 'warn'); break;
+      case 'JOB_RESUMED': sys(p.note ?? 'Analiza continuă de unde a rămas.', 'warn'); break;
     }
   }
   return { messages: out, matches };

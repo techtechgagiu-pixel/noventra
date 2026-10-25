@@ -261,6 +261,34 @@ export async function reviewJobs(userId: string, limit = 12) {
      WHERE j.user_id=$1 AND j.slot LIKE 'REVIEW\\_%' ORDER BY j.created_at DESC LIMIT $2`, [userId, limit]);
 }
 
+/** Continues the same incomplete ticket, preserving its analysis and looking for additional fixtures. */
+export async function completeIncompleteTicket(userId: string, ticketId: string, at = new Date()) {
+  const result = await tx(async (c) => {
+    // Lock the job only: the worker finalizes ticket then job, so locking both here could deadlock.
+    const row = (await c.query(`SELECT j.* FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id
+      WHERE t.id=$1 AND t.user_id=$2 AND j.user_id=$2 FOR UPDATE OF j`, [ticketId, userId])).rows[0];
+    if (!row) throw new SlotError('Biletul nu există sau nu îți aparține.', 404);
+    const ticket = (await c.query('SELECT generation_status FROM tickets WHERE id=$1', [ticketId])).rows[0];
+    if (ticket.generation_status !== 'INCOMPLETE' || row.config.review) throw new SlotError('Doar un bilet incomplet poate fi finalizat.', 409);
+    if (['QUEUED', 'RUNNING', 'WAITING'].includes(row.status)) return { jobId: row.id as string, ticketId, resumed: false };
+    const usage = await aiUsageToday(c);
+    if (usage.requests + 20 > config.limits.aiDailyCalls) throw new SlotError('Limita AI zilnică este aproape epuizată. Reîncearcă după resetare.', 503);
+    const continuing = !!row.config.completion && ['PAUSED', 'FAILED'].includes(row.status);
+    const completion = continuing ? row.config.completion : { requestedAt: at.toISOString(), attempt: (row.config.completion?.attempt ?? 0) + 1 };
+    const cfg = { ...row.config, windowStart: localDate(at), completion };
+    const checkpoint = continuing ? row.checkpoint : { ...row.checkpoint, phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [] };
+    await c.query(`UPDATE ticket_generation_jobs SET status='QUEUED',stage='QUEUED',config=$2,checkpoint=$3,next_run_at=now(),
+      finished_at=NULL,started_at=CASE WHEN $4::boolean THEN started_at ELSE NULL END,last_error=NULL,attempt_count=0,lease_owner=NULL,lease_expires_at=NULL WHERE id=$1`, [row.id, JSON.stringify(cfg), JSON.stringify(checkpoint), continuing]);
+    await recordEvent(row.id, { type: 'JOB_RESUMED', stage: 'QUEUED', payload: { by: 'user', completion: true, attempt: completion.attempt,
+      note: 'Finalizarea biletului incomplet: păstrăm analiza salvată, reverificăm selecțiile și căutăm meciuri noi cu aceeași țintă și echipă.' } }, c);
+    await c.query("INSERT INTO audit_logs(user_id,action,detail) VALUES($1,'ticket_completion_requested',$2)", [userId, JSON.stringify({ticketId, jobId:row.id, attempt:completion.attempt})]);
+    return { jobId: row.id as string, ticketId, resumed: true };
+  });
+  if (result.resumed) resetModelExhaustion();
+  kickWorker();
+  return result;
+}
+
 /** Resumes the SAME job (same seed, same candidate order). Never creates a new draw. */
 export async function resumeJob(userId: string, jobId: string) {
   const job = await one<{ status: string }>('SELECT status FROM ticket_generation_jobs WHERE id=$1 AND user_id=$2', [jobId, userId]);

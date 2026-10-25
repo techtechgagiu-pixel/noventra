@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AlertTriangle, Check, ClipboardCopy, Download, History, ListChecks, PlayCircle, Sparkles } from 'lucide-react';
 import { AGENT_META, OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
 import { superbetPick } from '@/lib/superbet-format';
+import { FinishIncompleteTicket } from './finish-incomplete-ticket';
 import { CreatorBadge } from '@/components/ticket-archive';
 import type { IncompletePick } from '@/lib/incomplete-ticket-picks';
 import type { Creator } from '@/lib/views';
@@ -11,7 +12,7 @@ import type { Creator } from '@/lib/views';
 type Sel = { position: number; fixture_id: string; market_key: string; market_label: string; odds: number; bookmaker: string; quote_observed_at: string; votes_for: number; model_probability: number | null; risk: string; snapshot: { match: string; home: string; away: string; league: string; kickoff: string; source: string }; outcome: string; home_score: number | null; away_score: number | null };
 export type TicketData = {
   id: string; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string; creator?: Creator; mine?: boolean;
-  summary: { review?: { legs: Array<{ fixtureId: string; match: string; label: string; odds: number; verdict: 'SOLID' | 'RISCANT' | 'SLAB' | 'NEANALIZAT'; supporters: string[]; responded: number; engineProbability: number | null; suggestion: { label: string; odds: number; supporters: number } | null; note: string }>; overall: string; advice: string[]; chance: number | null; model: string | null; userAdvice: string | null; solid: number; risky: number; weak: number }; digest?: { lines: string[]; source: 'ai' | 'data'; model: string | null; createdAt: string }; agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
+  summary: { completion?: { requestedAt: string; attempt: number }; review?: { legs: Array<{ fixtureId: string; match: string; label: string; odds: number; verdict: 'SOLID' | 'RISCANT' | 'SLAB' | 'NEANALIZAT'; supporters: string[]; responded: number; engineProbability: number | null; suggestion: { label: string; odds: number; supporters: number } | null; note: string }>; overall: string; advice: string[]; chance: number | null; model: string | null; userAdvice: string | null; solid: number; risky: number; weak: number }; digest?: { lines: string[]; source: 'ai' | 'data'; model: string | null; createdAt: string }; agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
   selections: Sel[]; partialSelections?: IncompletePick[];
   predictions?: Array<{ id: string; fixture_id: string; agent_id: string; round: number; model_id: string; decision: string; market_key: string | null; outcome: string | null; current_in_stats: boolean; payload: { marketLabel?: string | null } }>;
   decisions: Array<{ fixture_id: string; outcome: string; market_key: string | null; votes_for: number; votes: Array<{ agentId: string; decision: string; marketKey: string | null; model: string; provider: string }>; reason: string }>;
@@ -65,6 +66,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
   const names = Object.fromEntries(t.fixtures.map((f) => [f.fixtureId, `${f.fixture.home} – ${f.fixture.away}`]));
   return (
     <div className="space-y-6">
+      {t.generationStatus === 'INCOMPLETE' && t.mine !== false && !t.summary.review && <FinishIncompleteTicket ticketId={t.id} />}
       {fresh && <p className="chip text-emerald"><Check size={13} aria-hidden /> Analiza s-a încheiat și a fost salvată automat.</p>}
       <div className={`card overflow-hidden ${t.outcomeStatus === 'WON' || t.outcomeStatus === 'PARTIAL_VOID' ? 'border-emerald ring-2 ring-emerald/40' : t.outcomeStatus === 'LOST' ? 'border-rose ring-2 ring-rose/40' : ''}`}>
         {completed && (t.outcomeStatus === 'WON' || t.outcomeStatus === 'LOST' || t.outcomeStatus === 'PARTIAL_VOID') && (
@@ -76,6 +78,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
             <h1 className="font-display text-3xl font-bold">{t.title}</h1>
             <p className="text-sm text-muted">Creat {fmtDateTime(t.createdAt)} · {t.summary.analyzed ?? 0} meciuri analizate</p>
             <div className="mt-1"><CreatorBadge c={t.creator} /></div>
+            {t.summary.completion && <p className="mt-1 text-xs text-muted">Finalizare cerută {fmtDateTime(t.summary.completion.requestedAt)} · încercarea {t.summary.completion.attempt}</p>}
           </div>
           <div className="flex gap-6 text-right">
             {!t.summary.review && <div><p className="text-xs text-muted">Țintă</p><p className="font-display text-2xl font-bold tabular">{t.target}</p></div>}

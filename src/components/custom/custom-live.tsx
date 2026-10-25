@@ -1,4 +1,5 @@
 'use client';
+import { FinishIncompleteTicket } from '../finish-incomplete-ticket';
 import { CustomBatch } from './custom-batch';
 import { CreatorBadge } from '@/components/ticket-archive';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -64,6 +65,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
           <Link href={`/?tab=istoric&ticket=${meta.ticketId}`} className="btn btn-primary px-5 py-3">VEZI BILETUL</Link>
         </div>
       )}
+      {meta.status === 'INCOMPLETE' && meta.ticketId && meta.mine !== false && <FinishIncompleteTicket ticketId={meta.ticketId} />}
       <ReviewVerdict events={events} upTo={upTo} />
       <DebateChat events={events} upTo={upTo} live={live} />
     </div>

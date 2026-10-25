@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Activity, BarChart3, CalendarDays, ClipboardCheck, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
+import { Activity, BarChart3, ClipboardCheck, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
 import { MatchesView } from '@/components/matches/matches-view';
 import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
@@ -33,7 +33,7 @@ import { topSixAgentIds } from '@/lib/agent-ranking';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'acasa' | 'custom' | 'verifica' | 'analiza' | 'azi' | 'istoric' | 'statistici' | 'meciuri';
+type Tab = 'acasa' | 'custom' | 'verifica' | 'analiza' | 'istoric' | 'statistici' | 'meciuri';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -46,7 +46,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     return <PublicHome google={googleConfigured()} />;
   }
   // Old daily-ticket URLs remain readable through the shared archive.
-  const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'statistici' || sp.tab === 'azi' || sp.tab === 'meciuri' ? sp.tab : 'istoric';
+  const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric';
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
@@ -56,14 +56,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     { id: 'custom', label: 'Custom', icon: SlidersHorizontal, badge: running.some((j) => j.slot.startsWith('CUSTOM_')) },
     { id: 'verifica', label: 'Biletul tău', icon: ClipboardCheck, badge: running.some((j) => j.slot.startsWith('REVIEW_')) },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
-    { id: 'azi', label: 'Azi', icon: CalendarDays },
     { id: 'meciuri', label: 'Meciuri', icon: ListOrdered },
     { id: 'statistici', label: 'Statistici', icon: BarChart3 },
   ];
 
   return (
     <>
-      {['acasa', 'azi', 'istoric', 'statistici'].includes(tab) && <ResultsRefresh />}
+      {['acasa', 'istoric', 'statistici'].includes(tab) && <ResultsRefresh />}
       <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
           <Link href="/" aria-label="Acasă" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
@@ -91,7 +90,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
-        {tab === 'azi' && <AziTab userId={user.id} ticket={sp.ticket} />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} identity={sp.vedere} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} />}
       </main>
@@ -266,12 +264,6 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
       )}
     </div>
   );
-}
-
-async function AziTab({ userId, ticket }: { userId: string; ticket?: string }) {
-  if (ticket) return <TicketPanel userId={userId} id={ticket} fresh={false} back="/?tab=azi" />;
-  const tickets = await listTickets(userId);
-  return <TicketArchive tickets={JSON.parse(JSON.stringify(tickets))} initialFilter="today" title="Bilete create azi" />;
 }
 
 async function StatisticiTab({ userId, admin, month, scope, identity }: { userId: string; admin: boolean; month?: string; scope?: string; identity?: string }) {
