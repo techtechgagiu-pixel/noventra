@@ -16,14 +16,29 @@
     "D1 cached fixture offer",
     "shared paid-model budget reservations"
   ],
+  "productionSnapshot": {
+    "recovered": true,
+    "tables": 26,
+    "rows": 82933,
+    "nativePostgresArchiveVerified": true,
+    "allRowsConvertedAndCompared": true,
+    "localD1ImportVerified": true
+  },
+  "isolatedImport": {
+    "database": "primul11-migration-20261025",
+    "rows": 12499,
+    "remainingRows": 70434,
+    "importedRowsCompared": true,
+    "complete": false
+  },
   "blockers": [
     {
-      "id": "production-snapshot",
-      "detail": "Neon source unavailable under its monthly quota; recover and export complete production data, never substitute local DEMO."
+      "id": "remote-import-completion",
+      "detail": "Complete the remaining 70,434 rows on the isolated D1 target within the account-wide Free daily write budget. The first 12,499 remote rows match; do not replay completed phases or activate a paid plan automatically."
     },
     {
       "id": "production-data-parity",
-      "detail": "Verify real schema, every row, history/statistics/auth identity parity and D1 size/row limits on a fresh isolated target."
+      "detail": "Verify the entire completed remote snapshot, history/statistics/auth identity parity and runtime migrations. Local real-data conversion/import passed, but remote staging is still partial."
     },
     {
       "id": "remote-runtime-validation",

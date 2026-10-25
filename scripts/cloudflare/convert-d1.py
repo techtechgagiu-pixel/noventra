@@ -71,6 +71,13 @@ def schema_sql(catalog):
                 definition += ' CHECK (' + qi(name) + ' IS NULL OR json_valid(' + qi(name) + '))'
             definitions.append(definition)
         for constraint in table['constraints']:
+            if constraint['type'] == 'n':
+                # PostgreSQL18 also records NOT NULL in pg_constraint. The
+                # column definition already enforces it; require exact agreement.
+                column = next((c for c in table['columns'] if constraint['definition'] in ('NOT NULL ' + c['name'], 'NOT NULL ' + qi(c['name']))), None)
+                if column is None or column['nullable']:
+                    raise ValueError('Inconsistent PostgreSQL NOT NULL constraint')
+                continue
             if constraint['type'] == 'p' and serials:
                 continue
             if constraint['type'] not in ('p', 'u', 'c', 'f'):
@@ -114,6 +121,35 @@ def literal(value):
     return "'" + value.replace("'", "''") + "'"
 
 
+IMPORT_PARTS_TABLE = '_p11_import_parts'
+IMPORT_PARTS_SCHEMA = 'CREATE TABLE "_p11_import_parts"(record INTEGER NOT NULL,column_no INTEGER NOT NULL,part_no INTEGER NOT NULL,chunk TEXT NOT NULL,PRIMARY KEY(record,column_no,part_no));\n'
+
+
+def bounded_row_sql(prefix, values, record):
+    statement = prefix + ','.join(literal(v) for v in values) + ');\n'
+    if len(statement.encode()) <= SQL_LIMIT:
+        return [statement], False
+    statements, expressions = [], []
+    for column_no, value in enumerate(values):
+        if not isinstance(value, str):
+            expressions.append(literal(value))
+            continue
+        raw, offset, part = value.encode(), 0, 0
+        while offset < len(raw) or part == 0:
+            end = min(offset + 32_000, len(raw))
+            while end < len(raw) and raw[end] & 0xc0 == 0x80:
+                end -= 1
+            chunk = raw[offset:end]
+            statements.append('INSERT INTO "_p11_import_parts" VALUES (' + str(record) + ',' + str(column_no) + ',' + str(part) + ",CAST(X'" + chunk.hex() + "' AS TEXT));\n")
+            offset, part = end, part + 1
+        expressions.append('(SELECT group_concat(chunk,\'\') FROM (SELECT chunk FROM "_p11_import_parts" WHERE record=' + str(record) + ' AND column_no=' + str(column_no) + ' ORDER BY part_no))')
+    statements.append(prefix + ','.join(expressions) + ');\n')
+    statements.append('DELETE FROM "_p11_import_parts" WHERE record=' + str(record) + ';\n')
+    if any(len(sql.encode()) > SQL_LIMIT for sql in statements):
+        raise ValueError('D1 import statement still exceeds limit')
+    return statements, True
+
+
 def read_checked(root, entry):
     target = (root / entry['file']).resolve()
     if target.parent != root.resolve():
@@ -142,16 +178,20 @@ def convert(source, output):
     if [t['name'] for t in catalog['tables']] != [t['name'] for t in manifest['tables']]:
         raise ValueError('Table inventory mismatch')
     checked = [read_checked(source, entry) for entry in manifest['tables']]
+    if any(t['name'] == IMPORT_PARTS_TABLE for t in catalog['tables']):
+        raise ValueError('Snapshot contains reserved import table')
     sql = schema_sql(catalog)
     output.mkdir(mode=0o700)
     db_path = output / 'database.sqlite'
     connection = sqlite3.connect(db_path)
     os.chmod(db_path, 0o600)
     imported = []
+    parts_used, split_rows, record = False, 0, 0
     try:
         connection.executescript(sql)
         (output / 'schema.sql').write_text(sql)
-        # Deferred FKs allow cycles (sessions -> invitation_codes -> users).
+        # Deferred FKs allow the catalog's alphabetical table order, including
+        # children inserted before parents (sessions -> invitation_codes -> users).
         # Foreign keys are checked explicitly before any import is marked ready.
         with (output / 'import.sql').open('w') as dump, (output / 'data-only.sql').open('w') as data_dump:
             os.chmod(output / 'import.sql', 0o600)
@@ -170,18 +210,26 @@ def convert(source, output):
                     values = [cell(v, c) for v, c in zip(raw, table['columns'])]
                     row_bytes = sum(len(str(v).encode()) for v in values if v is not None)
                     max_row = max(max_row, row_bytes)
-                    statement = prefix + ','.join(literal(v) for v in values) + ');\n'
-                    # A >100KB statement cannot be imported through D1 execute.
-                    # Do not truncate checkpoints; report and block migration.
-                    if row_bytes > ROW_LIMIT or len(statement.encode()) > SQL_LIMIT:
-                        raise ValueError('D1 import limit exceeded in ' + table['name'] + '; split payload before migration')
+                    if row_bytes > ROW_LIMIT:
+                        raise ValueError('D1 import row limit exceeded in ' + table['name'])
+                    statements, split = bounded_row_sql(prefix, values, record)
+                    record += 1
+                    if split and not parts_used:
+                        dump.write(IMPORT_PARTS_SCHEMA)
+                        data_dump.write(IMPORT_PARTS_SCHEMA)
+                        parts_used = True
+                    split_rows += int(split)
                     connection.execute(placeholders, values)
-                    dump.write(statement)
-                    data_dump.write(statement)
+                    for statement in statements:
+                        dump.write(statement)
+                        data_dump.write(statement)
                     count += 1
                 if count != entry['rows']:
                     raise ValueError('Row count mismatch: ' + table['name'])
                 imported.append({'name': table['name'], 'rows': count, 'maxRowBytes': max_row})
+            if parts_used:
+                dump.write('DROP TABLE "_p11_import_parts";\n')
+                data_dump.write('DROP TABLE "_p11_import_parts";\n')
             # Reset only transient leases, never jobs/history/budgets or user data.
             resets = ["UPDATE ticket_generation_jobs SET lease_owner=NULL,lease_expires_at=NULL;",
                       "UPDATE automation_runs SET lease_owner=NULL,lease_until=NULL;"]
@@ -220,7 +268,7 @@ def convert(source, output):
             raise ValueError('Database exceeds D1 Free 500 MB limit')
         report = {'format': 1, 'status': 'converted-not-deployed', 'sourceCatalogSha256': manifest['catalogSha256'],
                   'tables': imported, 'sqliteBytes': size, 'foreignKeyViolations': 0,
-                  'leasesReset': True, 'allRowsCompared': True, 'applicationD1Ready': False}
+                  'leasesReset': True, 'allRowsCompared': True, 'oversizedRowsSplit': split_rows, 'applicationD1Ready': False}
         report['schemaSha256'] = hashlib.sha256((output / 'schema.sql').read_bytes()).hexdigest()
         report['dataImportSha256'] = hashlib.sha256((output / 'data-only.sql').read_bytes()).hexdigest()
         report['importSha256'] = hashlib.sha256((output / 'import.sql').read_bytes()).hexdigest()

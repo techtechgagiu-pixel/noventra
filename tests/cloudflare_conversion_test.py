@@ -68,6 +68,25 @@ class ConversionTests(unittest.TestCase):
             data_copy.close()
             db.close()
 
+    def test_postgresql18_named_not_null_is_enforced(self):
+        col = column('id')
+        col['nullable'] = False
+        position = column('position', 'int4')
+        position['nullable'] = False
+        meta = table('pg18', [col,position], [{'name': 'pg18_id_not_null', 'type': 'n', 'definition': 'NOT NULL id'}, {'name': 'pg18_position_not_null', 'type': 'n', 'definition': 'NOT NULL "position"'}])
+        db = sqlite3.connect(':memory:')
+        db.executescript(converter.schema_sql({'tables': [meta]}))
+        with self.assertRaises(sqlite3.IntegrityError):
+            db.execute('INSERT INTO pg18(id,position) VALUES(NULL,1)')
+        with self.assertRaises(sqlite3.IntegrityError):
+            db.execute("INSERT INTO pg18(id,position) VALUES('valid',NULL)")
+        db.close()
+
+    def test_rejects_inconsistent_postgresql18_not_null_metadata(self):
+        meta = table('pg18', [column('id')], [{'name': 'pg18_id_not_null', 'type': 'n', 'definition': 'NOT NULL id'}])
+        with self.assertRaisesRegex(ValueError, 'Inconsistent PostgreSQL NOT NULL'):
+            converter.schema_sql({'tables': [meta]})
+
     def test_rejects_corruption_before_creating_target(self):
         with tempfile.TemporaryDirectory() as temp:
             source, output = Path(temp) / 'source', Path(temp) / 'target'
@@ -85,11 +104,27 @@ class ConversionTests(unittest.TestCase):
                 converter.convert(source, output)
             self.assertFalse((output / 'verification.json').exists())
 
-    def test_rejects_oversized_d1_statements_without_truncation(self):
+    def test_splits_large_d1_statements_without_truncation(self):
         with tempfile.TemporaryDirectory() as temp:
             source, output = Path(temp) / 'source', Path(temp) / 'target'
-            snapshot(source, payload=json.dumps({'large': 'x' * 100_001}))
-            with self.assertRaisesRegex(ValueError, 'D1 import limit'):
+            payload = json.dumps({'large': "Ștucan's \u0000 🏆" * 10_000}, ensure_ascii=False)
+            snapshot(source, payload=payload)
+            result = converter.convert(source, output)
+            self.assertEqual(result['oversizedRowsSplit'], 1)
+            statements, split = converter.bounded_row_sql('INSERT INTO example VALUES (', [payload], 1)
+            self.assertTrue(split)
+            self.assertTrue(all(len(sql.encode()) <= converter.SQL_LIMIT for sql in statements))
+            db = sqlite3.connect(':memory:')
+            db.executescript((output/'import.sql').read_text())
+            self.assertEqual(db.execute('SELECT payload FROM users').fetchone()[0], payload)
+            self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='_p11_import_parts'").fetchone())
+            db.close()
+
+    def test_rejects_rows_above_d1_limit_without_truncation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source, output = Path(temp) / 'source', Path(temp) / 'target'
+            snapshot(source, payload=json.dumps({'large': 'x' * 2_000_001}))
+            with self.assertRaisesRegex(ValueError, 'D1 import row limit'):
                 converter.convert(source, output)
             self.assertFalse((output / 'verification.json').exists())
 

@@ -1,6 +1,6 @@
 # PRIMUL 11 — mutare Cloudflare, staging hibrid
 
-Stare 25 octombrie 2026: adaptorul D1 și legătura cu Render sunt implementate și testate local. **Producția nu este mutată.** DNS-ul și configurația Render/Neon rămân neschimbate. Nu s-a activat niciun abonament și nu s-au executat apeluri AI reale.
+Stare 25 octombrie 2026: adaptorul D1 și legătura cu Render sunt implementate și testate local; datele reale Neon au fost recuperate și importul izolat D1 a început. **Producția nu este mutată.** DNS-ul și configurația Render rămân neschimbate. Utilizatorul a activat separat Neon Launch; agentul nu a activat abonamente și nu a inițiat apeluri AI reale.
 
 ## Arhitectura pregătită
 
@@ -19,13 +19,15 @@ Rezumatele explicite ale biletelor folosesc și ruta existentă de rezumat; acea
 
 D1 **primul11-staging**, ID `bbd70eca-6c37-4915-9cdd-95ac477019e9`, jurisdicție UE / EEUR. Migrările 0001–0006 sunt aplicate. Conține configurația publică a **34 agenți și 77 ligi**, **zero utilizatori și zero bilete**; FK verificate. Nu conține date din Neon sau DEMO.
 
+Ținta separată pentru date reale este **primul11-migration-20261025**, ID `1db26a07-ef43-4406-9387-46385f476571`, UE / EEUR. Baseline 0001 este aplicat și înregistrat de Wrangler. Sunt importate **12.499 de rânduri** din 23 de tabele, inclusiv cele 14 conturi și 82 de bilete. Un export remote recitit confirmă fiecare rând importat, zero FK rupte și integritate `ok`. Cele trei tabele voluminoase `agent_predictions`, `analysis_events`, `model_usage_logs` sunt încă goale: **70.434 de rânduri rămân de importat**. Migrările 0002–0006 nu sunt încă aplicate pe această țintă. Nu o conecta la site/runner și nu o prezenta drept migrare completă.
+
 Verificările locale acoperă autentificarea și revocarea invitațiilor, exact 7 zile de valabilitate, Google fără drepturi admin, ultima rundă/analiză și luna românească în statistici, istoric incomplet, evenimente concurente fără goluri, limita de 20 Custom, retry stabil peste miezul nopții, continuarea atomică, finalizarea biletelor, maximum două lease-uri de job și o analiză completă prin HTTP Render–D1 cu furnizori simulați. Bugetul comun este verificat cu rezervări simultane și reglare idempotentă.
 
 Proba OpenNext în workerd verifică 15 pagini/API-uri, refuzul accesului admin pentru o sesiune locală de tip Google, refuzul accesului nesemnat la bridge și persistența unei execuții programate. Este o sesiune sintetică locală, nu o conectare OAuth reală la Google.
 
 Buildul și dry-run-ul nu demonstrează respectarea limitei CPU Free. Mai trebuie măsurate SSR, proxy-ul Node (suport experimental în OpenNext), pașii de settlement cu date reale, D1 reads/writes și volumul de istoric. Un pas are I/O limitat, dar reconcilierea rezultatelor citește și istoricul existent; poate necesita împărțire suplimentară la volume mari. Nu se activează automat un plan plătit dacă nu încape.
 
-Verificare finală: **197 teste unitare/integrare, 17 teste browser, 8 teste de conversie**, typecheck aplicație/Worker, build OpenNext, dry-run și proba HTTP locală trecute. Nu s-au folosit furnizori AI reali. Corecția jurnalului include salvarea atomică a mesajului final împreună cu starea biletului și golirea tuturor evenimentelor restante înainte de închiderea stream-ului.
+Verificare: **197 teste unitare/integrare, 17 teste browser, 11 teste de conversie**, typecheck aplicație/Worker, build OpenNext, dry-run și proba HTTP locală trecute. După recuperarea Neon, importul întregului snapshot real în D1 local a trecut: 26 de tabele / 82.933 de rânduri, fiecare rând comparat, FK zero și integritate `ok`. Nu s-au folosit furnizori AI reali. Corecția jurnalului include salvarea atomică a mesajului final împreună cu starea biletului și golirea tuturor evenimentelor restante înainte de închiderea stream-ului.
 
 ## Comenzi
 
@@ -56,9 +58,11 @@ Pe serviciul Render existent: `BETMIND_DATABASE=d1-http`, `D1_BRIDGE_URL=https:/
 
 Păstrează aceleași hash-uri/ID-uri/secrete de autentificare la transfer. Callback-ul Google rămâne `https://primul11.noventra.ro/auth/callback` când domeniul este mutat. OAuth și cookie-urile trebuie verificate efectiv în staging cu o origine separată, fără reutilizarea sesiunilor de producție.
 
-## Export și import, după restabilirea accesului Neon
+## Export și import — date reale recuperate
 
-Neon este blocat de cota lunară; nu există un snapshot complet al producției. Exportul local anterior de 26 tabele / 765 rânduri este **DEMO**, nu backup de producție. Nu îl importa ca înlocuitor.
+Neon este accesibil după schimbarea făcută de utilizator la Launch; SQL și health au confirmat recuperarea. Snapshotul real conține **26 de tabele / 82.933 de rânduri**. Există și arhivă PostgreSQL nativă, citită integral cu `pg_restore` 18.6, SHA256 `0c060f0fe5bfda30758caae72d8106fe4c4dace62c7e786df0e7223e2a03d35c`. Copiile private sunt în `/Users/cristiangagiu/Desktop/PRIMUL11-backup-productie-2026-10-25/`, în afara Git, cu directoare 0700 și fișiere 0600. Nu publica arhivele, exporturile SQL sau JSONL; conțin autentificare și date de cont.
+
+Backupurile sunt copii coerente individual, realizate în momente apropiate, fără oprirea scrierilor live. Nu sunt snapshotul final de cutover. Exportul local anterior de 26 tabele / 765 rânduri este **DEMO** și nu se folosește în locul producției.
 
 ```sh
 # MIGRATION_DATABASE_URL se încarcă privat în mediu, niciodată în argumente sau jurnale.
@@ -68,7 +72,13 @@ python3 scripts/cloudflare/convert-d1.py /private/path/primul11-snapshot /privat
 
 Exportul este REPEATABLE READ READ ONLY cu cursor 100, JSONL, directoare 0700 și fișiere 0600. Manifestul complet se scrie după COMMIT. Conversia produce `database.sqlite`, `schema.sql`, `import.sql`, `data-only.sql`, `verification.json`; verifică fiecare rând după PK, FK, integritate, SHA256, tipuri, UTC, JSON și BIGINT. NUMERIC SQLite poate fi reprezentat double, asemenea calculelor JS. Golirea lease-urilor temporare este singura schimbare de stare intenționată.
 
-Se blochează importul pentru tip/expresie necunoscută, date corupte, FK rupte, rând >2 MB, SQL >100 KB sau bază >500 MB. Checkpointurile nu se trunchiază. Nu putem confirma compatibilitatea datelor reale înainte de acest control.
+Se blochează importul pentru tip/expresie necunoscută, date corupte, FK rupte, rând >2 MB sau bază >500 MB. PostgreSQL 18 înregistrează și constrângeri NOT NULL în `pg_constraint`: converterul verifică acordul lor cu coloanele și păstrează NOT NULL în D1. Schema reală generată este identică, octet cu octet, cu baseline 0001.
+
+Pentru un rând valid al cărui INSERT depășește 100 KB, textul este împărțit în fragmente UTF-8 într-un tabel temporar de import obișnuit, `_p11_import_parts`, apoi reconstruit integral la INSERT; fiecare comandă rămâne sub limită. Tabelul auxiliar este eliminat la final, iar JSON/unicode/NUL/ghilimelele sunt verificate fără trunchiere. Două rânduri reale au necesitat această împărțire. SQLite rezultat are **162.193.408 bytes**; importul complet în workerd/D1 local reproduce exact toate valorile convertite.
+
+**Limita de import Free:** contul este Workers Free, cu 100.000 de scrieri D1/zi pentru întreg contul, inclusiv indexuri, importuri și operații de schemă. Indexurile singure fac imposibil importul integral într-o singură zi; schema curentă sugerează peste 226.000 de scrieri, înainte de unele operații interne. Prima etapă a consumat efectiv **34.934** de scrieri; înaintea ei panoul arăta aproximativ 8.360 deja folosite de cont. Nu presupune că estimările sunt plafoane exacte și nu consuma restul cotei fără a verifica utilizarea celorlalte aplicații. Resetarea este la 00:00 UTC.
+
+În backupul privat, `remote-phases/manifest.json` descrie **13 faze** (schema + 12 loturi), cu hashuri și ordine FK; toate au fost reluate local cu FK active și comparate integral. `progress.json` marchează schema și `01-core.sql` ca deja aplicate. Următorul lot este `02-agent_predictions-1.sql`. Nu reexecuta fazele complete și nu importa `data-only.sql` peste ținta parțială. Nu există continuare programată automat. Înaintea fiecărei continuări verifică inventarul țintei, hashurile și cota zilnică disponibilă; un rezultat de rețea incert cere inspecție, nu retry orb.
 
 **Nu importa peste staging-ul deja populat cu configurații.** Pregătește o țintă nouă, goală. Compară schema generată cu baseline-ul 0001 și rezolvă explicit orice diferență. Aplică doar baseline-ul 0001 folosind temporar un director de migrări care conține numai acel fișier; importă apoi `data-only.sql`, care nu creează/șterge tabele și nu face upsert peste date. Verifică din nou fiecare rând și FK, apoi aplică migrările 0002–0006 din directorul normal. Bootstrap-ul agenților păstrează asignările/prompturile existente și adaugă doar lipsurile. Nu aplica migrarea 0001 peste o bază creată deja cu `import.sql`.
 
@@ -76,7 +86,7 @@ Se blochează importul pentru tip/expresie necunoscută, date corupte, FK rupte,
 
 ## Ordinea mutării și rollback
 
-1. Restabilește accesul Neon, exportă datele reale și păstrează și backup PostgreSQL nativ.
+1. Accesul Neon și backupurile reale sunt recuperate; continuă importul izolat în limitele Free, fără a înlocui datele cu DEMO.
 2. Verifică integral importul izolat, login/OAuth, statistici per agent, istoricele, permisiunile și reluarea. Configurează bridge-ul și runnerul în staging separat de producție.
 3. Verifică latența la trezirea Render și limitele reale Free. O analiză reală se pornește numai la cererea explicită a utilizatorului, în plafoanele existente.
 4. Oprește temporar scrierile și runnerul vechi, fă snapshotul final coerent și importul final verificat. Păstrează datele sursă.
@@ -91,3 +101,4 @@ Se blochează importul pentru tip/expresie necunoscută, date corupte, FK rupte,
 - [Workflows API](https://developers.cloudflare.com/workflows/build/workers-api/)
 - [Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/)
+- [D1 pricing și cota zilnică, inclusiv indexuri/importuri](https://developers.cloudflare.com/d1/platform/pricing/)
