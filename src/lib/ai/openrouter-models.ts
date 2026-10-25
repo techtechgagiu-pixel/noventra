@@ -1,11 +1,13 @@
 import type { ModelRef } from './router';
+import { NEW_AI_PROFILES } from './new-agent-profiles';
 
 /**
- * One model per agent, twelve different vendors, all verified on OpenRouter (2026-10-21) to support JSON output.
+ * One model per agent; original roster verified 2026-10-21, ten AI profiles added 2026-10-25.
  * Active only when OPENROUTER_API_KEY is set; the agent's free Gemini/Groq model then becomes its fallback.
  * Prices: USD per million tokens (input / output) from the OpenRouter catalogue, used for the daily spend cap.
  */
 export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; outPerM: number }> = {
+  ...Object.fromEntries(NEW_AI_PROFILES.map((a) => [a.id, { model: a.model, inPerM: a.inPerM, outPerM: a.outPerM }])),
   // Corina: sourced sports reporting; catalogue checked 2026-10-22.
   corina: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },
   victor: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },

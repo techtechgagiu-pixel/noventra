@@ -1,0 +1,72 @@
+[
+  {
+    "id": "nova",
+    "model": "minimax/minimax-m3.1-flash",
+    "name": "Nova",
+    "subject": "A sly amber-eyed synthetic female intelligence, bronze ceramic face and angular copper fins, one asymmetrical brow, quiet confident challenge; warm amber highlights",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Nova, artistic interpretation of a role, not a real person or official brand mascot. Subject: A sly amber-eyed synthetic female intelligence, bronze ceramic face and angular copper fins, one asymmetrical brow, quiet confident challenge; warm amber highlights. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  },
+  {
+    "id": "sigma",
+    "model": "z-ai/glm-5.3",
+    "name": "Sigma",
+    "subject": "A precise androgynous synthetic statistician, alabaster geometric face, transparent cobalt glass temples with tiny embedded nonverbal dot patterns, balanced calm expression",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Sigma, artistic interpretation of a role, not a real person or official brand mascot. Subject: A precise androgynous synthetic statistician, alabaster geometric face, transparent cobalt glass temples with tiny embedded nonverbal dot patterns, balanced calm expression. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  },
+  {
+    "id": "atlas",
+    "model": "google/gemini-3.8-flash",
+    "name": "Atlas",
+    "subject": "A teal-eyed synthetic news analyst with a luminous translucent jade face, twin swept-back silver antenna arcs and structured dark chrome collar, alert attentive expression",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Atlas, artistic interpretation of a role, not a real person or official brand mascot. Subject: A teal-eyed synthetic news analyst with a luminous translucent jade face, twin swept-back silver antenna arcs and structured dark chrome collar, alert attentive expression. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  },
+  {
+    "id": "argus",
+    "model": "anthropic/claude-sonnet-5.5",
+    "name": "Argus",
+    "subject": "A rigorous synthetic evidence auditor, copper and ivory masculine face, monocle-like concentric optical ring around one eye without a lens, sculpted charcoal armor, watchful composed expression",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Argus, artistic interpretation of a role, not a real person or official brand mascot. Subject: A rigorous synthetic evidence auditor, copper and ivory masculine face, monocle-like concentric optical ring around one eye without a lens, sculpted charcoal armor, watchful composed expression. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  },
+  {
+    "id": "orion",
+    "model": "openai/gpt-6.1-sol",
+    "name": "Orion",
+    "subject": "A commanding synthetic arbiter with a midnight blue metallic masculine face, fine silver celestial etching on cheekbones, small white luminous eyes and a clean sunburst collar, thoughtful stern expression",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Orion, artistic interpretation of a role, not a real person or official brand mascot. Subject: A commanding synthetic arbiter with a midnight blue metallic masculine face, fine silver celestial etching on cheekbones, small white luminous eyes and a clean sunburst collar, thoughtful stern expression. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  },
+  {
+    "id": "prisma",
+    "model": "qwen/qwen3.8-max-0902",
+    "name": "Prisma",
+    "subject": "A prismatic synthetic female interpreter with opalescent lavender face, sharply faceted aquamarine crown, symmetric crystalline ear panels, sharply focused expression",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Prisma, artistic interpretation of a role, not a real person or official brand mascot. Subject: A prismatic synthetic female interpreter with opalescent lavender face, sharply faceted aquamarine crown, symmetric crystalline ear panels, sharply focused expression. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  },
+  {
+    "id": "mnemos",
+    "model": "moonshotai/kimi-k3.1-pro",
+    "name": "Mnemos",
+    "subject": "An ancient-future synthetic archivist, smooth violet and platinum androgynous face with delicate flowing silver filaments like a memory lattice behind the temples, calm meditative eyes",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Mnemos, artistic interpretation of a role, not a real person or official brand mascot. Subject: An ancient-future synthetic archivist, smooth violet and platinum androgynous face with delicate flowing silver filaments like a memory lattice behind the temples, calm meditative eyes. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  },
+  {
+    "id": "nexus",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "name": "Nexus",
+    "subject": "A formidable synthetic orchestration intelligence, graphite masculine face framed by emerald segmented shell plates and a compact green crystal at the forehead, calm unifying leader expression",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Nexus, artistic interpretation of a role, not a real person or official brand mascot. Subject: A formidable synthetic orchestration intelligence, graphite masculine face framed by emerald segmented shell plates and a compact green crystal at the forehead, calm unifying leader expression. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  },
+  {
+    "id": "vector",
+    "model": "mistralai/mistral-large-4-0",
+    "name": "Vector",
+    "subject": "A refined synthetic tactical analyst with porcelain masculine face, wind-swept brushed steel crest and orange subtle optic highlights, sleek sculpted cobalt collar, thoughtful sideways gaze",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Vector, artistic interpretation of a role, not a real person or official brand mascot. Subject: A refined synthetic tactical analyst with porcelain masculine face, wind-swept brushed steel crest and orange subtle optic highlights, sleek sculpted cobalt collar, thoughtful sideways gaze. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  },
+  {
+    "id": "fulger",
+    "model": "nvidia/nemotron-3.5-lightning",
+    "name": "Fulger",
+    "subject": "A nimble synthetic rapid inspector, silver angular androgynous face with tiny electric yellow channels, swept streamlined titanium helmet fins and a sharp lemon light in the eyes, alert quick expression",
+    "prompt": "Use case: stylized-concept. Asset type: compact AI agent portrait for PRIMUL 11 collectible football analysis cards. Original fictional synthetic character called Fulger, artistic interpretation of a role, not a real person or official brand mascot. Subject: A nimble synthetic rapid inspector, silver angular androgynous face with tiny electric yellow channels, swept streamlined titanium helmet fins and a sharp lemon light in the eyes, alert quick expression. Premium detailed 3D science fiction character render; close head and upper shoulders, centered, face fills most of square, all headgear visible, dark plain midnight navy background #0a1020. Sculptural ceramic, crystal and brushed metal textures, crisp studio key light, subtle colored rim light, readable at 96 pixels. Portrait image only, absolutely no letters, numbers, logos, corporate marks, card border, badge, football, weapons, watermarks or multiple characters. One square portrait."
+  }
+]

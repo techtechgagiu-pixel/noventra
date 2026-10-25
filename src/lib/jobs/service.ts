@@ -78,7 +78,7 @@ export async function createOrGetJob(userId: string, slotId: string, at = new Da
       `SELECT s.fixture_id FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.user_id=$1 AND t.slot=$2 AND t.period_key=$3`, [userId, sibling, key])).map((r) => r.fixture_id);
   }
   const seed = randomBytes(16).toString('hex');
-  const cfg = { windowStart: window.startDate, windowDays: window.days, top10Only: false, maxFixtures: slot.period === 'weekly' ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, batchSize: config.limits.batchSize, avoidFixtures };
+  const cfg = { votingAgentIds: VOTING_AGENTS.map((a) => a.id), windowStart: window.startDate, windowDays: window.days, top10Only: false, maxFixtures: slot.period === 'weekly' ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, batchSize: config.limits.batchSize, avoidFixtures };
   const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
   const created = await tx(async (c) => {
     const ins = await c.query(
@@ -88,7 +88,7 @@ export async function createOrGetJob(userId: string, slotId: string, at = new Da
     );
     if (!ins.rows[0]) return null;
     const id = ins.rows[0].id as string;
-    await recordEvent(id, { type: 'JOB_CREATED', stage: 'QUEUED', payload: { slot: slot.id, title: slot.title, period: key, authorizedBy: 'click CREEAZĂ BILETUL' } }, c);
+    await recordEvent(id, { type: 'JOB_CREATED', stage: 'QUEUED', payload: { slot: slot.id, title: slot.title, period: key, agentIds: cfg.votingAgentIds, authorizedBy: 'click CREEAZĂ BILETUL' } }, c);
     await recordEvent(id, { type: 'TARGET_SELECTED', stage: 'QUEUED', payload: { target: slot.target, requiredLegs: slot.requiredLegs, tolerance: config.limits.targetTolerance, window: cfg } }, c);
     await recordEvent(id, { type: 'SEED_GENERATED', stage: 'QUEUED', payload: { seedPrefix: seed.slice(0, 12), note: 'Seed generat pe server; determină doar ordinea de explorare a meciurilor.' } }, c);
     await c.query("INSERT INTO audit_logs(user_id, action, detail) VALUES ($1,'job_created',$2)", [userId, JSON.stringify({ jobId: id, slot: slot.id, period: key })]);
@@ -230,7 +230,7 @@ export async function createReviewJob(userId: string, input: unknown, at = new D
     legs.push({ fixtureId: f.id, marketKey: m.key, label: m.label, odds: m.odds, match, league: `${f.country} · ${f.leagueName}`, kickoff: f.kickoff });
   }
   const target = Math.min(99999, Math.round(legs.reduce((x, l) => x * l.odds, 1) * 100) / 100);
-  const cfg = { windowStart: key, windowDays: 7, top10Only: false, maxFixtures: legs.length, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], review: { legs, advice } };
+  const cfg = { votingAgentIds: VOTING_AGENTS.map((a) => a.id), windowStart: key, windowDays: 7, top10Only: false, maxFixtures: legs.length, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], review: { legs, advice } };
   const seed = randomBytes(16).toString('hex');
   const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
   const id = await tx(async (c) => {
@@ -244,7 +244,7 @@ export async function createReviewJob(userId: string, input: unknown, at = new D
       [userId, slot, key, target, legs.length, seed, JSON.stringify(cfg), JSON.stringify(checkpoint)],
     );
     const jobId = ins.rows[0].id as string;
-    await recordEvent(jobId, { type: 'JOB_CREATED', stage: 'QUEUED', payload: { slot, title: `BILETUL TĂU — COTĂ ${target}`, period: key, authorizedBy: 'click TRIMITE LA ANALIZĂ', review: { legs: legs.map((l) => ({ match: l.match, label: l.label, odds: l.odds })), advice } } }, c);
+    await recordEvent(jobId, { type: 'JOB_CREATED', stage: 'QUEUED', payload: { slot, title: `BILETUL TĂU — COTĂ ${target}`, period: key, agentIds: cfg.votingAgentIds, authorizedBy: 'click TRIMITE LA ANALIZĂ', review: { legs: legs.map((l) => ({ match: l.match, label: l.label, odds: l.odds })), advice } } }, c);
     await recordEvent(jobId, { type: 'TARGET_SELECTED', stage: 'QUEUED', payload: { target, requiredLegs: legs.length, tolerance: 0, window: { windowStart: key, windowDays: 7 } } }, c);
     await c.query("INSERT INTO audit_logs(user_id, action, detail) VALUES ($1,'job_created',$2)", [userId, JSON.stringify({ jobId, slot, period: key, legs: legs.length })]);
     return jobId;
@@ -305,7 +305,7 @@ export async function resumeJob(userId: string, jobId: string) {
 
 /** The work queue: analyses waiting or running now, plus the ones finished in the last 2 hours. */
 export async function jobQueue(userId: string) {
-  const rows = await many<{ id: string; slot: string; status: string; stage: string; target_odds: string; required_legs: number | null; config: { custom?: CustomConfig }; checkpoint: { batches?: string[][]; batchIndex?: number; analyzed?: number; qualified?: number }; created_at: Date; started_at: Date | null; finished_at: Date | null; next_run_at: Date; last_error: string | null; ticket_id: string | null; actual_odds: string | null; generation_status: string | null }>(
+  const rows = await many<{ id: string; slot: string; status: string; stage: string; target_odds: string; required_legs: number | null; config: { custom?: CustomConfig; votingAgentIds?: string[] }; checkpoint: { batches?: string[][]; batchIndex?: number; analyzed?: number; qualified?: number }; created_at: Date; started_at: Date | null; finished_at: Date | null; next_run_at: Date; last_error: string | null; ticket_id: string | null; actual_odds: string | null; generation_status: string | null }>(
     `SELECT j.id, j.slot, j.status, j.stage, j.target_odds, j.required_legs, j.config, j.checkpoint, j.created_at, j.started_at, j.finished_at, j.next_run_at, j.last_error,
             t.id AS ticket_id, t.actual_odds, t.generation_status
      FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
@@ -319,7 +319,7 @@ export async function jobQueue(userId: string) {
       id: r.id, slot: r.slot, title: info.title, status: r.status, stage: r.stage, createdAt: r.created_at.toISOString(),
       startedAt: r.started_at?.toISOString() ?? null, finishedAt: r.finished_at?.toISOString() ?? null, nextRunAt: r.next_run_at.toISOString(), lastError: r.last_error,
       batch: Math.min(batches, (r.checkpoint.batchIndex ?? 0) + (r.status === 'COMPLETED' ? 0 : 1)), batches, analyzed: r.checkpoint.analyzed ?? 0, qualified: r.checkpoint.qualified ?? 0,
-      agents: r.config.custom?.agents ?? null, custom: isCustomSlot(r.slot), review: isReviewSlot(r.slot), position: r.status === 'QUEUED' ? waiting.indexOf(r.id) + 1 : null,
+      agents: r.config.custom?.agents ?? r.config.votingAgentIds ?? null, custom: isCustomSlot(r.slot), review: isReviewSlot(r.slot), position: r.status === 'QUEUED' ? waiting.indexOf(r.id) + 1 : null,
       ticketId: r.ticket_id, actualOdds: r.actual_odds ? Number(r.actual_odds) : null, generation: r.generation_status,
     };
   });

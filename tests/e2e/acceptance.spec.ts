@@ -135,7 +135,7 @@ test('statistics tab: per-agent record and consumption', async ({ page }) => {
   await page.goto('/auth/test-login?email=e2e@test.local');
   await page.goto('/?tab=statistici');
   await expect(page.getByRole('heading', { name: 'Statistici' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Agenții' }).locator('article')).toHaveCount(24);
+  await expect(page.getByRole('region', { name: 'Agenții' }).locator('article')).toHaveCount(34);
   await expect(page.getByText('Consum azi', { exact: false })).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/stats.png`, fullPage: true });
   await page.goto('/?tab=istoric');

@@ -22,7 +22,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
     <section className="card w-full max-w-md space-y-7 p-8">
       <div className="flex items-center gap-3"><img src="/logo.svg" alt="" className="h-12 w-12" /><span className="font-display text-2xl font-bold">PRIMUL <span className="text-cyan">11</span></span></div>
       <div>
-        <p className="mb-2 text-xs uppercase tracking-widest text-cyan">22 de agenți AI · dezbatere live</p>
+        <p className="mb-2 text-xs uppercase tracking-widest text-cyan">32 de agenți AI · dezbatere live</p>
         <h1 className="font-display text-3xl font-bold">{custom ? 'Un pas până la biletul tău.' : 'Bine ai venit în echipă.'}</h1>
         <p className="mt-3 text-sm text-muted">{custom ? 'Conectează-te, apoi alegi cota, meciurile și agenții. Analiza pornește numai când apeși „Pornește dezbaterea”.' : 'Intră cu contul tău Google. Biletele create de toată lumea apar la „Bilete create”, cu numele celui care le-a făcut.'}</p>
       </div>

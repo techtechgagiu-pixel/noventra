@@ -1,4 +1,5 @@
 'use client';
+import { NEW_AI_PROFILES } from '@/lib/ai/new-agent-profiles';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Minus, Plus, Sparkles, Trophy } from 'lucide-react';
@@ -12,6 +13,7 @@ const TARGETS = [2, 3, 5, 10, 20, 50, 100];
 const pick = (...ids: string[]) => (a: AgentCard[]) => a.filter((x) => ids.includes(x.id)).map((x) => x.id);
 /** Ready-made teams: by risk profile, by story (generations, roles) and by method. The user can still tick freely. */
 const GROUPS: Array<{ label: string; hint: string; ids: (a: AgentCard[]) => string[] }> = [
+  { label: 'Noua echipă AI (10)', hint: 'Cele zece modele noi, fiecare cu un rol distinct', ids: pick(...NEW_AI_PROFILES.map((a) => a.id)) },
   { label: 'Toți', hint: 'Toată echipa, toate opiniile', ids: (a) => a.map((x) => x.id) },
   { label: 'Prudenții', hint: 'Cote mici, probabilitate mare', ids: (a) => a.filter((x) => x.maxOdds <= 1.7).map((x) => x.id) },
   { label: 'Echilibrații', hint: 'Cote medii, risc moderat', ids: (a) => a.filter((x) => x.maxOdds > 1.7 && x.maxOdds < 2).map((x) => x.id) },

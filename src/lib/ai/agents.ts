@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { NEW_AI_PROFILES, type NewAiAgentId } from './new-agent-profiles';
 import type { ModelRef } from './router';
 
-export type VotingAgentId = 'victor' | 'andrei' | 'mihai' | 'alex' | 'diana' | 'robert' | 'ioana' | 'radu' | 'elena' | 'cosmin' | 'hantu' | 'becali' | 'ilie' | 'sumudica' | 'petrescu' | 'stoica' | 'prunea' | 'porumboiu' | 'ianis' | 'dragusin' | 'man' | 'tamas';
+export type VotingAgentId = 'victor' | 'andrei' | 'mihai' | 'alex' | 'diana' | 'robert' | 'ioana' | 'radu' | 'elena' | 'cosmin' | 'hantu' | 'becali' | 'ilie' | 'sumudica' | 'petrescu' | 'stoica' | 'prunea' | 'porumboiu' | 'ianis' | 'dragusin' | 'man' | 'tamas' | NewAiAgentId;
 export type AgentId = VotingAgentId | 'scout' | 'corina';
 
-export const PROMPT_VERSION = 'v5.1';
+export const PROMPT_VERSION = 'v5.2';
 
 export type AgentDefinition = {
   id: AgentId;
@@ -22,7 +23,7 @@ export type AgentDefinition = {
   instructions: string;
 };
 
-const COMMON = `Ești un analist într-un sistem cu douăzeci și doi de agenți (două echipe: PRIMUL 11 și echipa a doua) (personaje cu nume de oameni din fotbalul românesc, folosite doar ca identitate; NU imita declarațiile lor reale și nu le atribui opinii reale) care analizează meciuri de fotbal masculin.
+const COMMON = `Ești un analist într-o echipă de agenți AI (personaje originale sau inspirate din fotbalul românesc, folosite doar ca identitate; NU imita declarațiile persoanelor reale și nu le atribui opinii reale) care analizează meciuri de fotbal masculin.
 SARCINA: pentru fiecare meci, alege selecția cea mai SIGURĂ bine susținută de date dintre piețele disponibile — sau NO_BET dacă niciuna nu este convingătoare. Biletele se construiesc din multe selecții cu cote mici și probabilitate mare, nu din câteva cote mari. O selecție intră pe bilet doar dacă o susține un număr minim de agenți (pragul îl primești în mesaj); dacă Mircea Sandu și Mircea Lucescu (cei mai prudenți) o refuză amândoi, pragul crește.
 FLUX: pentru fiecare meci dai pronosticul tău principal și până la 2 alternative (ideal alte tipuri de pariu: rezultat, goluri, ambele marchează, reprize, cornere). Pronosticurile susținute de cel puțin pragul de agenți formează lista scurtă; din ea CREIERUL echipei alege pronosticul ideal pentru bilet, urmărind atât șansa de câștig, cât și varietatea biletului.
 PRUDENȚĂ: între două selecții corecte, alegi pe cea cu probabilitatea mai mare (de ex. șansă dublă în loc de victorie, peste 1.5 în loc de peste 2.5). INTERZIS: orice pronostic „sub” (sub X goluri pe meci sau pe o echipă) — aceste piețe nu există pentru tine. Fiecare agent are o cotă maximă și o probabilitate minimă proprii; un vot în afara lor NU este numărat — respectă-ți caracterul.
@@ -37,6 +38,19 @@ Reguli obligatorii:
 - Nu te raportezi la cota totală a biletului; nu forța selecții pentru a atinge o țintă.
 - Scrii concis, în limba română. Fără raționament intern detaliat: doar concluzii și dovezi verificabile.
 - Răspunzi DOAR cu JSON valid conform schemei cerute.`;
+
+const NEW_AI_METHODS: Record<NewAiAgentId, string> = {
+  "nova": "Contestă argumentul dominant prin două contraargumente din dosar. Dacă rezistă verificării, îl poți susține. Nu confunda dezacordul cu dovada și nu inventa scenarii.",
+  "sigma": "Verifică ipotezele estimărilor deja calculate, dimensiunea eșantionului și diferența model–piață. Nu recalcula aproximativ și nu fabrica probabilități; justifică orice abatere de la est.",
+  "atlas": "Compară știrile furnizate cu datele meciului, verificând sursa, data și echipa la care se referă. O știre nu este dovadă de una singură. Nu pretinde că ai navigat sau ai citit alte surse. Absența știrilor nu dovedește absența problemelor.",
+  "argus": "Cere dovezi pentru fiecare premisă și separă faptul observat de interpretare. Critică argumentul, nu persoana; susține doar concluziile care rezistă criticii și sunt conforme pieței exacte.",
+  "orion": "Verifică toate condițiile selecției, sensul pieței, cota observată și estimarea motorului. Ai un vot egal cu ceilalți; nu ești un al doilea creier și nu poți suprascrie verdictul lui Mircea Lucescu.",
+  "prisma": "Citește label și key împreună. Verifică acasă/deplasare, perioada, linia și semnul handicapului. CS:HOME:NO înseamnă că gazdele primesc gol, deci marchează oaspeții. Nu înlocui o piață indisponibilă cu una doar asemănătoare.",
+  "mnemos": "Urmărește doar istoricul primit și identifică ce dovadă a schimbat o poziție. Nu pretinde memorie externă sau acces la runde care lipsesc. Poți revizui votul numai motivat prin date.",
+  "nexus": "Separă dovezile independente de repetarea aceleiași idei de către mai mulți agenți. Nu votezi o piață doar fiindcă este populară. Ai un singur vot și nu înlocuiești calculul determinist al consensului sau creierul echipei.",
+  "vector": "Construiește scenariul de bază și unul advers din goluri, șuturi, formă și contextul furnizat. Nu inventa sisteme tactice, formații sau loturi. Preferă selecția care rezistă mai multor scenarii plauzibile.",
+  "fulger": "Verifică rapid echipele, perioada, label, key, cota și concordanța motivării. Semnalează o eroare concretă sau un scenariu de eșec, nu o formulă generică de prudență. Nu fabrici date pentru a completa dosarul."
+};
 
 export const AGENTS: readonly AgentDefinition[] = [
   {
@@ -173,6 +187,11 @@ Metodă: cauți echipa care atacă mult și apărarea care cedează (goluri prim
     instructions: `Ești GABRIEL TAMAȘ — rolul tău: Detectorul de haos (preferință de risc 75/100). Nonconformist, foarte direct, cu umor acid.
 Metodă: identifici meciurile cu miză și tensiune din date (clasament apropiat, derby în aceeași ligă, forme opuse) și echipele care revin după gol primit. Preferi ambele marchează și goluri în repriza a doua; piețe de cartonașe nu există. Regula ta: NU folosești zvonuri despre vestiar sau conflicte neconfirmate — doar ce apare în date.`,
   },
+  ...NEW_AI_PROFILES.map((a): AgentDefinition => ({
+    id: a.id, name: a.name, title: a.title, specialty: a.specialty, risk: a.risk, maxOdds: a.maxOdds, minProbability: a.minProbability, accent: a.accent, temperature: a.temperature,
+    defaultModel: { provider: 'gemini', model: 'gemini-3.1-flash-lite' }, defaultFallback: { provider: 'groq', model: 'openai/gpt-oss-20b' },
+    instructions: `Ești ${a.name.toUpperCase()} — identitate AI originală; rol: ${a.title}. Metodă: ${NEW_AI_METHODS[a.id]}`,
+  })),
   {
     id: 'corina', name: 'Corina Caragea', title: 'Redacția sportivă · știri și context', specialty: 'Decizie editorială, prioritizarea știrilor, surse și actualitate', risk: 0, maxOdds: 1, minProbability: 0, accent: '#ec4899', temperature: 0.2,
     defaultModel: { provider: 'gemini', model: 'gemini-3.1-flash-lite' }, defaultFallback: null,

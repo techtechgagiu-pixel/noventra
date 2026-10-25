@@ -1,6 +1,7 @@
 import { reportNewsBatch } from '../news-reporter';
 import { createHash } from 'node:crypto';
 import { config } from '../config';
+import { LEGACY_VOTER_IDS } from '../agent-roster';
 import { many, one, query, tx } from '../db';
 import { type Prediction, type Revision, AGENTS, BRAIN_AGENT_ID, BRAIN_SCHEMA_TEXT, BRAIN_SYSTEM, BrainOutputSchema, DEBATE_SCHEMA_TEXT, DebateOutputSchema, INITIAL_SCHEMA_TEXT, InitialOutputSchema, SCOUT_SCHEMA_TEXT, ScoutOutputSchema, VOTING_AGENTS, agentById, systemPrompt, type AgentDefinition } from '../ai/agents';
 import { activeAssignments } from '../ai/assignments';
@@ -15,7 +16,7 @@ import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sp
 import type { Fixture } from '../sports/types';
 import { modelFixture, selectionImplies } from '../stats/engine';
 import { localDate, yyyymmdd } from '../time';
-import { agentFacts, characterViolation, isBannedMarket, newsFacts, consensus, contested, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
+import { agentFacts, characterViolation, isBannedMarket, factsForAgent, consensus, contested, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
 import { agentTrackRecord, trackRecordText } from '../track-record';
 import { teamNews } from '../news/google-news';
 import { buildDigest } from '../digest';
@@ -24,7 +25,7 @@ import type { CandidateEntry, Checkpoint, FixtureSnapshot, LegReview, Stage } fr
 
 export type JobRow = {
   id: string; user_id: string; slot: string; period_key: string; target_odds: string; required_legs: number | null; seed: string;
-  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number } };
+  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; votingAgentIds?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number } };
   status: string; stage: Stage; checkpoint: Checkpoint; candidate_order: CandidateEntry[] | null; eligible_count: number | null; attempt_count: number;
   created_at?: Date | string;
 };
@@ -304,7 +305,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
   const policy = jobPolicy(job);
   const band = { minOdds: policy.minOdds, maxOdds: Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds) };
   const facts: Array<{ fixtureId: string; match: string; markets: Array<{ key: string; odds: number; est?: number | null; ev?: number | null }> }> =
-    agent.id === 'hantu' ? snaps.map((s) => newsFacts(s, band)) : snaps.map((s) => agentFacts(s, band));
+    snaps.map((s) => factsForAgent(agent.id, s, band));
   const review = job.config.review;
   if (review) for (const f of facts as Array<Record<string, unknown> & { fixtureId: string; markets: Array<{ key: string; odds: number; est?: number | null; ev?: number | null }> }>) {
     const leg = review.legs.find((l) => l.fixtureId === f.fixtureId); const snap = snaps.find((x) => x.fixture.id === f.fixtureId);
@@ -386,12 +387,11 @@ function jobPolicy(job: JobRow): LegPolicy {
   return job.config.custom ? customPolicy(job.config.custom) : policyFor(job.slot, Number(job.target_odds));
 }
 
-/** Agents voting on this job: all 11, or the subset the user chose for a custom ticket. */
+/** Pin the voting roster so adding agents never changes an already-created analysis. */
 export function jobAgents(job: Pick<JobRow, 'config'>): AgentDefinition[] {
-  const chosen = job.config.custom?.agents;
-  if (!chosen?.length) return VOTING_AGENTS;
+  const chosen: readonly string[] = job.config.custom?.agents?.length ? job.config.custom.agents : job.config.votingAgentIds ?? LEGACY_VOTER_IDS;
   const list = VOTING_AGENTS.filter((a) => chosen.includes(a.id));
-  return list.length ? list : VOTING_AGENTS;
+  return list.length ? list : VOTING_AGENTS.filter((a) => (LEGACY_VOTER_IDS as readonly string[]).includes(a.id));
 }
 
 /** Votes needed for a selection: the global threshold for the full team, ~30% of a smaller custom team (min 1). */

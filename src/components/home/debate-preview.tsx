@@ -20,7 +20,7 @@ export function DebatePreview({ thread, models = {} }: { thread?: Thread; models
   const ids = thread ? [...new Set(thread.messages.flatMap((m) => m.agentId ? [m.agentId] : []))].slice(0, 5) : ['andrei', 'alex', 'hantu', 'robert'];
   const messages = thread?.messages.filter((m) => step === 0 ? ['pick', 'nobet'].includes(m.kind) : step === 1 ? ['objection', 'revised', 'kept'].includes(m.kind) : ['brain', 'result'].includes(m.kind));
   return <section className="debate-preview" aria-label={thread ? 'Fragment real din dezbatere' : 'Cum dezbat agenții AI'}>
-    <div className="debate-preview-top"><span>{thread ? 'Dintr-o analiză reală' : 'La masa dezbaterii'}</span><span>{thread ? fmtDateTime(thread.at) : '22 de analiști AI + redacția'}</span></div>
+    <div className="debate-preview-top"><span>{thread ? 'Dintr-o analiză reală' : 'La masa dezbaterii'}</span><span>{thread ? fmtDateTime(thread.at) : '32 de analiști AI + redacția'}</span></div>
     <div className="debate-cast">
       {ids.map((id) => { const a = AGENT_META[id]; if (!a) return null; return <div key={id} className="debate-cast-agent" style={{ ['--agent-color' as string]: a.accent }}>
         <img src={a.img} alt="" width={64} height={64} />

@@ -4,7 +4,7 @@ import { GoogleSignIn } from '@/components/google-sign-in';
 import { HomeIntro, HowItWorks } from './home-intro';
 
 /** Public explanation only: no account data, database reads, polling or inference. */
-export function PublicHome({ google }: { google: boolean }) {
+export function PublicHome({ google, unavailable = false }: { google: boolean; unavailable?: boolean }) {
   const agents = Object.entries(AGENT_META).filter(([id]) => id !== 'scout');
   return <>
     <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/95">
@@ -14,6 +14,7 @@ export function PublicHome({ google }: { google: boolean }) {
       </div>
     </header>
     <main className="home-page mx-auto max-w-6xl px-4 pb-16 pt-8 sm:pt-12">
+      {unavailable && <p role="status" className="mb-6 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm text-gold">Biletele și conectarea sunt temporar indisponibile din cauza limitei serviciului de date. Poți consulta în continuare prezentarea aplicației.</p>}
       <HomeIntro />
       {!google && <p role="status" className="mt-4 text-sm text-gold">Conectarea cu Google este momentan indisponibilă. Poți folosi un cod de acces.</p>}
       <HowItWorks />

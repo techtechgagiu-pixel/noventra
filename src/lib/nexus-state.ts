@@ -1,3 +1,6 @@
+import { VOTER_IDS } from './agent-roster';
+import { AGENT_META } from './format';
+
 // Client-safe reducer: turns persisted backend events into the NEXUS view state.
 // The SAME reducer drives LIVE execution and HISTORICAL REPLAY, so the replay shows exactly what was recorded.
 
@@ -30,8 +33,9 @@ export type NexusState = {
   seed: string | null;
 };
 
-const VOTERS = ['victor', 'andrei', 'mihai', 'alex', 'diana', 'robert', 'ioana', 'radu', 'elena', 'cosmin', 'hantu', 'becali', 'ilie', 'sumudica', 'petrescu', 'stoica', 'prunea', 'porumboiu', 'ianis', 'dragusin', 'man', 'tamas'];
-const NAMES: Record<string, string> = { victor: 'Mircea Sandu', andrei: 'Gheorghe Hagi', mihai: 'Gică Popescu', alex: 'Adrian Mutu', diana: 'Răzvan Raț', robert: 'Mircea Lucescu', ioana: 'Cristi Chivu', radu: 'Răzvan Lucescu', elena: 'Dumitru Dragomir', cosmin: 'Anghel Iordănescu', hantu: 'Ștucan', becali: 'Gigi Becali', ilie: 'Ilie Dumitrescu', sumudica: 'Marius Șumudică', petrescu: 'Dan Petrescu', stoica: 'Mihai Stoica', prunea: 'Florin Prunea', porumboiu: 'Adrian Porumboiu', ianis: 'Ianis Hagi', dragusin: 'Radu Drăgușin', man: 'Dennis Man', tamas: 'Gabriel Tamaș', scout: 'SCOUT' };
+const VOTERS = VOTER_IDS;
+const NAMES: Record<string, string> = Object.fromEntries(Object.entries(AGENT_META).map(([id, a]) => [id, a.name]));
+
 
 export function initialState(): NexusState {
   return {

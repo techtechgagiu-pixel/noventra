@@ -12,7 +12,7 @@ import { TicketArchive } from '@/components/ticket-archive';
 import { NexusLive } from '@/components/nexus-live';
 import { ReplayPlayer } from '@/components/replay-player';
 import { PerformancePanel } from '@/components/performance-panel';
-import { STATUS_RO, fmtDateTime } from '@/lib/format';
+import { AGENT_META, STATUS_RO, fmtDateTime } from '@/lib/format';
 import { CUSTOM_LIMIT_PER_DAY, slotById } from '@/lib/slots';
 import { VOTING_AGENTS } from '@/lib/ai/agents';
 import { activeAssignments } from '@/lib/ai/assignments';
@@ -30,6 +30,7 @@ import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
 import { localDate } from '@/lib/time';
 import { topSixAgentIds } from '@/lib/agent-ranking';
+import { databaseIssue } from '@/lib/database-availability';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +40,12 @@ const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
 /** PRIMUL 11 — public introduction and authenticated application sections. */
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string; scope?: string; luna?: string; vedere?: string }> }) {
-  const user = await currentUser();
+  let user;
+  try { user = await currentUser(); }
+  catch (error) {
+    if (databaseIssue(error) === 'quota') return <PublicHome google={googleConfigured()} unavailable />;
+    throw error;
+  }
   const sp = await searchParams;
   if (!user) {
     if ((sp.tab && sp.tab !== 'acasa') || sp.ticket || sp.job || sp.replay) redirect('/login');
@@ -208,7 +214,7 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
               const tone = j.outcome_status === 'WON' ? 'border-emerald/60' : j.outcome_status === 'LOST' ? 'border-rose/60' : '';
               return (
                 <Link key={j.id} href={`/?tab=custom&job=${j.id}`} className={`card-soft flex items-center gap-3 p-3 hover:border-cyan/50 ${tone}`}>
-                  <div className="flex -space-x-2">{(c?.agents ?? []).slice(0, 4).map((a) => <img key={a} src={`/agents/${a}.webp`} alt="" className="h-7 w-7 rounded-full border-2 border-ink object-cover" />)}</div>
+                  <div className="flex -space-x-2">{(c?.agents ?? []).slice(0, 4).map((a) => <img key={a} src={AGENT_META[a]?.img} alt="" className="h-7 w-7 rounded-full border-2 border-ink object-cover" />)}</div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">Cotă {Number(j.target_odds)} · {j.required_legs} meciuri{j.actual_odds ? <span className="text-emerald"> → {Number(j.actual_odds).toFixed(2)}</span> : null}</p>
                     <p className="text-xs text-muted">{fmtDateTime(j.created_at.toISOString())} · {(c?.agents ?? []).length} agenți</p>
@@ -239,7 +245,7 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
     <div className="space-y-6 pb-16 lg:pb-0">
       <div>
         <h1 className="font-display text-2xl font-bold">Vino cu biletul tău la analiză</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Îți faci biletul din meciurile cu cote reale, le lași tacticienilor sfaturile tale și îl trimiți la analiză. Cei 22 de agenți îl dezbat live pe hartă, îți spun ce meci e solid, riscant sau slab, ce să înlocuiești, iar Mircea Lucescu îți dă verdictul final. Biletul rămâne salvat și îl urmărim verde/roșu până la final.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Îți faci biletul din meciurile cu cote reale, le lași tacticienilor sfaturile tale și îl trimiți la analiză. Agenții echipei îl dezbat live pe hartă, îți spun ce meci e solid, riscant sau slab, ce să înlocuiești, iar Mircea Lucescu îți dă verdictul final. Biletul rămâne salvat și îl urmărim verde/roșu până la final.</p>
       </div>
       <ReviewBuilder />
       {recent.length > 0 && (

@@ -28,7 +28,8 @@ export async function agentStats(userId: string, admin = false, month = currentM
   void admin;
   const picks = await many<{ id: string; round: number; agent_id: string; decision: string; outcome: string | null; odds: string | null; estimated_probability: string | null; label: string | null; market_key: string | null; home: string; away: string; created_at: Date; model_id: string; fixture_id: string; job_id: string; kickoff_utc: Date; status: string; home_score: number | null; away_score: number | null; league: string }>(
     `${finalAgentPicksCte(true)}
-     SELECT p.*, p.payload->>'marketLabel' AS label, f.home_team AS home, f.away_team AS away,
+     SELECT p.id,p.round,p.agent_id,p.decision,p.outcome,p.odds,p.estimated_probability,p.market_key,p.created_at,p.model_id,p.fixture_id,p.job_id,
+            p.payload->>'marketLabel' AS label, f.home_team AS home, f.away_team AS away,
             f.kickoff_utc, f.status, f.home_score, f.away_score, l.name AS league
      FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id JOIN leagues l ON l.id=f.league_id
      WHERE ($2 = 'all' OR to_char(f.kickoff_utc AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM') = $2)

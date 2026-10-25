@@ -1,6 +1,8 @@
+import { NEW_AI_PROFILES } from './ai/new-agent-profiles';
 import type { AgentStat } from './agent-stats';
 
 const MODEL_NAMES: Record<string, string> = {
+  ...Object.fromEntries(NEW_AI_PROFILES.map((a) => [a.model.slice(a.model.indexOf('/') + 1), a.modelName])),
   'claude-haiku-5.5': 'Claude Haiku 5.5', 'deepseek-v4.1-flash': 'DeepSeek V4.1 Flash',
   'gpt-6-luna': 'GPT-6 Luna', 'gpt-6-luna-pro': 'GPT-6 Luna Pro', 'mimo-v2.6-flash': 'MiMo V2.6 Flash',
   'glm-5.3-flash': 'GLM 5.3 Flash', 'qwen3.8-flash': 'Qwen 3.8 Flash', 'llama-4-maverick': 'Llama 4 Maverick',
@@ -14,9 +16,9 @@ const PROVIDERS: Record<string, string> = {
   anthropic: 'Anthropic', openai: 'OpenAI', deepseek: 'DeepSeek', xiaomi: 'Xiaomi', 'z-ai': 'Z.ai', qwen: 'Qwen',
   'meta-llama': 'Meta', google: 'Google', tencent: 'Tencent', nvidia: 'NVIDIA', 'x-ai': 'xAI', mistralai: 'Mistral AI',
   moonshotai: 'Moonshot AI', cohere: 'Cohere', 'bytedance-seed': 'ByteDance', upstage: 'Upstage', inception: 'Inception',
-  'nex-agi': 'NEX AGI', inclusionai: 'InclusionAI',
+  'nex-agi': 'NEX AGI', inclusionai: 'InclusionAI', minimax: 'MiniMax',
 };
-const PORTRAITS = new Set(['victor','andrei','mihai','alex','diana','robert','ioana','radu','elena','cosmin','hantu','becali','ilie','sumudica','petrescu','stoica','prunea','porumboiu','ianis','dragusin','man','tamas','corina','scout']);
+const PORTRAITS = new Set([...NEW_AI_PROFILES.map((a) => a.id), 'victor','andrei','mihai','alex','diana','robert','ioana','radu','elena','cosmin','hantu','becali','ilie','sumudica','petrescu','stoica','prunea','porumboiu','ianis','dragusin','man','tamas','corina','scout']);
 
 /** Presentation only: keep the agent identity, records and behavior intact when revealing its assigned model. */
 export function aiCardIdentity(agent: Pick<AgentStat, 'id' | 'name' | 'title' | 'ownModel' | 'model'>) {

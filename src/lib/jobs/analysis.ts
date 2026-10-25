@@ -45,6 +45,13 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
   };
 }
 
+/** Atlas cross-checks sourced news with statistics; Ștucan keeps his news-only role. */
+export function factsForAgent(id: string, s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
+  if (id === 'hantu') return newsFacts(s, band);
+  const facts = agentFacts(s, band);
+  return id === 'atlas' ? { ...facts, news: newsFacts(s, band).news } : facts;
+}
+
 export type FinalPosition = { agentId: string; decision: 'BET_CANDIDATE' | 'NO_BET'; marketKey: string | null; estimatedProbability: number | null; confidence: number; risk: string; round: number; rationale: string; provider: string; model: string;
   /** Other selections the agent also backs (validated keys, main pick excluded). */
   alternatives?: string[] };

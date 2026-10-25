@@ -1,3 +1,5 @@
+import { NEW_AI_PROFILES } from './ai/new-agent-profiles';
+
 export const TZ = 'Europe/Bucharest';
 export const fmtDateTime = (iso: string) => new Intl.DateTimeFormat('ro-RO', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 export const fmtTime = (iso: string) => new Intl.DateTimeFormat('ro-RO', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(iso));
@@ -6,6 +8,7 @@ export const odds = (n: number | null | undefined) => (n == null ? '—' : n.toF
 export const STATUS_RO: Record<string, string> = { QUEUED: 'În coadă', RUNNING: 'Rulează', WAITING: 'Așteaptă limita furnizorului', PAUSED: 'În pauză', COMPLETED: 'Finalizat', INCOMPLETE: 'Incomplet', NO_BET: 'NO BET', FAILED: 'Eșuat' };
 export const OUTCOME_RO: Record<string, string> = { PENDING: 'În așteptare', WON: 'Câștigat', LOST: 'Pierdut', VOID: 'Anulat', PARTIAL_VOID: 'Câștigat (cu anulări)', NOT_APPLICABLE: '—' };
 export const AGENT_META: Record<string, { name: string; short?: string; title: string; accent: string; img: string }> = {
+  ...Object.fromEntries(NEW_AI_PROFILES.map((a) => [a.id, { name: a.name, short: a.name, title: a.title, accent: a.accent, img: `/ai-portraits/${a.id}-v1.webp` }])),
   corina: { name: 'Corina Caragea', short: 'Corina', title: 'Redacția sportivă · știri și context', accent: '#ec4899', img: '/agents/corina.png' },
   victor: { name: 'Mircea Sandu', short: 'Sandu', title: 'Fost președinte FRF', accent: '#34d399', img: '/agents/victor.webp' },
   andrei: { name: 'Gheorghe Hagi', short: 'Hagi', title: 'Regele fotbalului românesc', accent: '#60a5fa', img: '/agents/andrei.webp' },

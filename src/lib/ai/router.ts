@@ -3,6 +3,7 @@ import { config } from '../config';
 import { many, query } from '../db';
 import { aiUsageToday, recordProviderUsage } from '../usage';
 import { OPENROUTER_PRICE } from './openrouter-models';
+import { NEW_AI_PROFILES } from './new-agent-profiles';
 
 export type Provider = 'groq' | 'gemini' | 'openrouter';
 export type ModelRef = { provider: Provider; model: string };
@@ -79,9 +80,10 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
   if (ref.provider === 'groq' && ref.model.startsWith('qwen/')) { body.reasoning_effort = 'none'; }
   // Reasoning models would spend the whole output budget thinking; agents need the JSON, not the chain of thought.
   if (ref.provider === 'openrouter') {
-    // Thinking models otherwise spend the whole budget on hidden reasoning and return no JSON. Billing is per token
-    // actually produced, so a generous ceiling costs nothing extra and prevents truncated answers.
-    body.reasoning = { enabled: false };
+    // Mandatory-reasoning models cannot disable thinking. Use their lowest supported effort,
+    // omit reasoning text and leave room for JSON; reasoning still consumes billed output tokens.
+    const effort = NEW_AI_PROFILES.find((a) => a.model === ref.model)?.reasoningEffort;
+    body.reasoning = effort ? { effort, exclude: true } : { enabled: false };
     body.max_completion_tokens = Math.min(8000, Math.max(Number(body.max_completion_tokens) || 0, 4000));
   }
   const res = await fetch(`${baseUrl}/chat/completions`, {

@@ -15,7 +15,7 @@ test('compact agent cards preserve career across month filters, editorial roles 
   await page.goto('/?tab=statistici&luna=all');
   const before = await (await page.request.get('/api/test/stats')).json();
   const cards = page.getByRole('region', { name: 'Agenții' }).locator('article');
-  await expect(cards).toHaveCount(24);
+  await expect(cards).toHaveCount(34);
   const card = page.getByRole('article', { name: 'Card Mircea Lucescu', exact: true });
   await expect(card).toContainText('Nivel');
   await expect(card.getByRole('progressbar')).toHaveCount(1);

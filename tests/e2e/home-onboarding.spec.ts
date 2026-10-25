@@ -37,7 +37,7 @@ test('first visit explains AI debate and reaches a compact Custom form without s
   await page.locator('summary').filter({ hasText: 'Echipa de agenți' }).click();
   await expect(page.getByRole('group', { name: 'Echipe gata făcute' })).toBeVisible();
   await page.getByRole('button', { name: 'Toți', exact: true }).click();
-  await expect(page.locator('summary').filter({ hasText: 'Echipa de agenți' })).toContainText('22 agenți aleși');
+  await expect(page.locator('summary').filter({ hasText: 'Echipa de agenți' })).toContainText('32 agenți aleși');
   await page.locator('summary').filter({ hasText: 'Echipa de agenți' }).click();
   await page.locator('summary').filter({ hasText: 'Interval și ligi' }).click();
   await expect(page.getByRole('button', { name: /Ligi.*Toate ligile/ })).toBeVisible({ timeout: 30_000 });
