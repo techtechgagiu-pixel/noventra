@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Minus, Plus, Sparkles } from 'lucide-react';
+import { Check, Minus, Plus, Sparkles, Trophy } from 'lucide-react';
 import { AGENT_META, api } from '@/lib/format';
 import { CUSTOM_LIMIT_PER_DAY, customPolicy, customThreshold } from '@/lib/slots';
 import { LeaguePicker, type LeagueOption } from '@/components/matches/league-picker';
@@ -34,7 +34,7 @@ const dur = (h: number) => (h < 1 ? `${Math.round(h * 60)} min` : h < 24 ? `${h}
 const at = (h: number) => new Date(Date.now() + h * 3600_000).toLocaleString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
 const span = (a: number, b: number) => `${at(a)} – ${at(b)}`;
 
-export function CustomForm({ agents, remaining = CUSTOM_LIMIT_PER_DAY }: { agents: AgentCard[]; remaining?: number }) {
+export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_PER_DAY }: { agents: AgentCard[]; topAgentIds?: string[]; remaining?: number }) {
   const router = useRouter();
   const [count, setCount] = useState(1);
   const inFlight = useRef(false);
@@ -76,6 +76,9 @@ export function CustomForm({ agents, remaining = CUSTOM_LIMIT_PER_DAY }: { agent
   const leagueOptions = useMemo(() => (catalog?.leagues ?? []).map((l) => ({ ...l, count: inWindow.filter((m) => m.leagueId === l.id).length })), [catalog, inWindow]);
   const available = leagues.length ? inWindow.filter((m) => leagues.includes(m.leagueId)).length : inWindow.length;
   const fits = (a: AgentCard) => Math.min(a.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds) >= perLeg * 0.92;
+  const topSix = topAgentIds.filter((id) => agents.some((a) => a.id === id));
+  const topSixReady = topSix.length === 6;
+  const topSixActive = topSixReady && chosen.length === 6 && topSix.every((id) => chosen.includes(id));
   const toggle = (id: string) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
 
   async function create() {
@@ -148,13 +151,18 @@ export function CustomForm({ agents, remaining = CUSTOM_LIMIT_PER_DAY }: { agent
       <details className="custom-options">
         <summary><span>Echipa de agenți</span><span className="custom-team-peek" aria-hidden="true">{chosen.slice(0, 5).map((id) => <img key={id} src={AGENT_META[id]?.img} alt="" width={24} height={24} />)}</span><span>{chosen.length} {chosen.length === 1 ? 'agent ales' : 'agenți aleși'} · schimbă echipa</span></summary>
         <div className="custom-options-body">
-          <div className="mb-4 flex flex-wrap gap-3" aria-label="Echipa selectată">{agents.filter((a) => chosen.includes(a.id)).map((a) => <div key={a.id} className="flex items-center gap-2 rounded-lg border border-line px-2 py-1.5"><img src={AGENT_META[a.id]?.img} alt="" className="h-8 w-8 rounded-full object-cover" /><div><p className="text-xs font-semibold">{a.name}</p><p className="text-[10px] text-muted">{a.model ?? 'Model AI'}</p></div></div>)}</div>
+          <div className="mb-4 flex flex-wrap gap-3" aria-label="Echipa selectată">{chosen.flatMap((id) => agents.filter((a) => a.id === id)).map((a) => <div key={a.id} className="flex items-center gap-2 rounded-lg border border-line px-2 py-1.5"><img src={AGENT_META[a.id]?.img} alt="" className="h-8 w-8 rounded-full object-cover" /><div><p className="text-xs font-semibold">{a.name}</p><p className="text-[10px] text-muted">{a.model ?? 'Model AI'}</p></div></div>)}</div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h3 className="font-display text-lg font-bold">Alege agenții din teren</h3>
           <span className="text-sm text-muted">{chosen.length} {chosen.length === 1 ? 'ales' : 'aleși'}</span>
           <button onClick={() => setChosen([])} className="ml-auto chip text-muted hover:text-text">Golește</button>
         </div>
         <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible" role="group" aria-label="Echipe gata făcute">
+          <button type="button" aria-pressed={topSixActive} disabled={!topSixReady || busy} onClick={() => setChosen(topSix)}
+            title="Primii șase agenți din Statistici · luna curentă · toată comunitatea"
+            className={`chip shrink-0 disabled:opacity-50 ${topSixActive ? 'border-gold text-gold' : 'text-gold hover:text-text'}`}>
+            <Trophy size={13} aria-hidden /> Top 6
+          </button>
           {GROUPS.map((g) => {
             const ids = g.label.startsWith('Surpriză') ? null : g.ids(agents);
             const active = !!ids && ids.length === chosen.length && ids.every((id) => chosen.includes(id));
@@ -166,6 +174,7 @@ export function CustomForm({ agents, remaining = CUSTOM_LIMIT_PER_DAY }: { agent
             );
           })}
         </div>
+        <p className="mb-3 text-xs text-muted">{topSixReady ? 'Top 6 selectează primii șase agenți din Statistici: luna curentă, toată comunitatea. Se actualizează odată cu rezultatele; poți modifica echipa după selectare.' : 'Top 6 devine disponibil când cel puțin șase agenți au rezultate decise în luna curentă.'}</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {agents.map((a) => {
             const on = chosen.includes(a.id); const meta = AGENT_META[a.id]; const [role, bio] = a.title.split(' · ');
