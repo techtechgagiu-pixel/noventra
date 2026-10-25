@@ -1,4 +1,5 @@
 'use client';
+import { CustomBatch } from './custom-batch';
 import { CreatorBadge } from '@/components/ticket-archive';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -34,6 +35,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
 
   return (
     <div className="space-y-4">
+      {meta.customBatch && meta.customBatch.count > 1 && <CustomBatch key={meta.customBatch.id} batch={meta.customBatch} jobId={jobId} />}
       <div className="flex flex-wrap items-center gap-2">
         {back && <Link href={back.href} className="text-sm text-muted hover:text-text">{back.label}</Link>}
         <h2 className="font-display text-lg font-bold md:ml-2">{meta.title}</h2>

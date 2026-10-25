@@ -22,7 +22,7 @@ const CREATOR_COLS = `u.id AS creator_id, u.name AS creator_name, u.email AS cre
 /** Shared read access: every signed-in account may watch any analysis; only its creator may act on it. */
 export async function jobMeta(userId: string, jobId: string) {
   const j = await one<Record<string, unknown>>(
-    `SELECT j.id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.target_odds, j.required_legs, j.status, j.stage, j.eligible_count, j.last_error, j.next_run_at, j.created_at, j.finished_at, j.last_event_seq, j.checkpoint, t.id AS ticket_id
+    `SELECT j.id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.target_odds, j.required_legs, j.status, j.stage, j.eligible_count, j.last_error, j.next_run_at, j.created_at, j.finished_at, j.last_event_seq, j.checkpoint, j.config->'customBatch' AS custom_batch, t.id AS ticket_id
             , ${CREATOR_COLS}
      FROM ticket_generation_jobs j JOIN users u ON u.id=j.user_id LEFT JOIN tickets t ON t.job_id=j.id WHERE j.id=$1`,
     [jobId],
@@ -37,6 +37,7 @@ export async function jobMeta(userId: string, jobId: string) {
     finishedAt: j.finished_at ? new Date(j.finished_at as string).toISOString() : null, lastSeq: j.last_event_seq as number, ticketId: (j.ticket_id as string) ?? null,
     batches: cp.batches?.length ?? 0, batchIndex: cp.batchIndex ?? 0, analyzed: cp.analyzed ?? 0, qualified: cp.qualified ?? 0,
     creator: creatorOf(j as never, userId), mine: j.creator_id === userId,
+    customBatch: j.creator_id === userId ? j.custom_batch as { id: string; index: number; count: number } | undefined : undefined,
   };
 }
 
