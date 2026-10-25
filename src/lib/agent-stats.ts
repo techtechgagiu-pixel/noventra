@@ -12,6 +12,7 @@ export type AgentStat = {
   recent: Array<{ predictionId: string; decision: string; round: number; model: string; fixtureId: string; jobId: string; match: string; league: string; label: string; odds: number | null; outcome: string | null; at: string; kickoff: string; status: string; score: string | null }>;
   upcoming: number; live: number; awaiting: number; editorial: boolean;
   career: { won: number; lost: number };
+  character: { role: string; specialty: string; risk: number; maxOdds: number; minProbability: number };
   usage: { calls: number; failed: number; fallback: number; inTokens: number; outTokens: number; costToday: number; cost7d: number; costMonth: number; costTotal: number; avgLatencyMs: number | null; models: string[] };
 };
 
@@ -70,6 +71,7 @@ export async function agentStats(userId: string, admin = false, month = currentM
       awaiting: bets.filter((p) => !p.outcome && p.status !== 'in' && !(p.status === 'pre' && p.kickoff_utc.getTime() > Date.now())).length,
       editorial: a.id === 'scout' || a.id === 'corina',
       career: career.get(a.id) ?? { won: 0, lost: 0 },
+      character: { role: a.title.split(' · ')[0], specialty: a.specialty, risk: a.risk, maxOdds: a.maxOdds, minProbability: a.minProbability },
       hitRate: won + lost ? won / (won + lost) : null,
       avgOdds: priced.length ? priced.reduce((s, p) => s + Number(p.odds), 0) / priced.length : null,
       avgEstimated: est.length ? est.reduce((s, p) => s + Number(p.estimated_probability), 0) / est.length : null,
