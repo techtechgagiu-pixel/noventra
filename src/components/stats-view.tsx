@@ -2,6 +2,7 @@ import type { AgentStat } from '@/lib/agent-stats';
 import Link from 'next/link';
 import { AgentPlayerCard } from './agent-player-card';
 import { AGENT_RANKS } from '@/lib/agent-progression';
+import { rankAgents } from '@/lib/agent-ranking';
 
 const money = (x: number) => (x < 0.01 && x > 0 ? '< 0,01 $' : `${x.toFixed(2).replace('.', ',')} $`);
 const num = (x: number) => new Intl.NumberFormat('ro-RO').format(Math.round(x));
@@ -13,7 +14,7 @@ const shift = (m: string, k: number) => { const d = new Date(Date.UTC(Number(m.s
 export function StatsView({ agents, totals, month, scope = 'all' }: { agents: AgentStat[]; totals: { today: number; week: number; total: number; calls: number; cap: number }; month: string; scope?: 'all' | 'mine' }) {
   const now = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7);
   const choices = [now, shift(now, -1), shift(now, -2), 'all'];
-  const sorted = [...agents].sort((a, b) => (b.won + b.lost ? 1 : 0) - (a.won + a.lost ? 1 : 0) || (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.bets - a.bets);
+  const sorted = rankAgents(agents);
   const used = Math.min(1, totals.cap ? totals.today / totals.cap : 0);
   return (
     <div className="space-y-8">
