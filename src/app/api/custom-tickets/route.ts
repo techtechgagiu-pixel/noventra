@@ -1,16 +1,18 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { fail, json, rateLimited, requireUser, sameOrigin } from '@/lib/http';
-import { SlotError, createCustomJob, customJobs } from '@/lib/jobs/service';
+import { SlotError, createCustomJob, customJobs, customBatchJobs } from '@/lib/jobs/service';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const user = await requireUser(req);
   if (user instanceof NextResponse) return user;
-  return json({ jobs: await customJobs(user.id) });
+  const batch = req.nextUrl.searchParams.get('batch');
+  if (batch && !/^[0-9a-f-]{36}$/i.test(batch)) return fail('Lot invalid.', 400);
+  return json({ jobs: batch ? await customBatchJobs(user.id, batch) : await customJobs(user.id) });
 }
 
-/** Creates a custom ticket: { target, legs, agents[], window: '48h' | '7d' }. */
+/** Queues custom tickets: { target, legs, agents[], fromHours, toHours, leagues[], count?, requestId? }. */
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return fail('Cerere respinsă (origine necunoscută).', 403);
   const user = await requireUser(req);

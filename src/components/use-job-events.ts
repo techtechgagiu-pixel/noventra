@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/format';
 import type { NexusEvent } from '@/lib/nexus-state';
 
-export type JobMeta = { id: string; title: string; subtitle?: string; target: number; requiredLegs?: number | null; status: string; lastError: string | null; ticketId: string | null; nextRunAt: string; mine?: boolean; creator?: { name: string; detail: string | null; picture: string | null; mine: boolean } };
+export type JobMeta = { customBatch?: { id: string; index: number; count: number }; id: string; title: string; subtitle?: string; target: number; requiredLegs?: number | null; status: string; lastError: string | null; ticketId: string | null; nextRunAt: string; mine?: boolean; creator?: { name: string; detail: string | null; picture: string | null; mine: boolean } };
 export const TERMINAL = ['COMPLETED', 'INCOMPLETE', 'NO_BET', 'FAILED'];
 
 /** Live job events: SSE first, JSON polling as fallback. Shared by the Nexus view and the custom-ticket map. */

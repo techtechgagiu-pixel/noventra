@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Minus, Plus, Sparkles } from 'lucide-react';
 import { AGENT_META, api } from '@/lib/format';
-import { customPolicy, customThreshold } from '@/lib/slots';
+import { CUSTOM_LIMIT_PER_DAY, customPolicy, customThreshold } from '@/lib/slots';
 import { LeaguePicker, type LeagueOption } from '@/components/matches/league-picker';
 import type { MatchRow } from '@/lib/catalog';
 
@@ -34,8 +34,11 @@ const dur = (h: number) => (h < 1 ? `${Math.round(h * 60)} min` : h < 24 ? `${h}
 const at = (h: number) => new Date(Date.now() + h * 3600_000).toLocaleString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
 const span = (a: number, b: number) => `${at(a)} – ${at(b)}`;
 
-export function CustomForm({ agents }: { agents: AgentCard[] }) {
+export function CustomForm({ agents, remaining = CUSTOM_LIMIT_PER_DAY }: { agents: AgentCard[]; remaining?: number }) {
   const router = useRouter();
+  const [count, setCount] = useState(1);
+  const inFlight = useRef(false);
+  const attempt = useRef<{ body: string; requestId: string } | null>(null);
   const [target, setTarget] = useState(5);
   const [legs, setLegs] = useState(4);
   const [fromI, setFromI] = useState(STOPS.indexOf(2));
@@ -76,11 +79,15 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
   const toggle = (id: string) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
 
   async function create() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true); setError(null);
+    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues, count });
+    if (attempt.current?.body !== body) attempt.current = { body, requestId: crypto.randomUUID() };
     try {
-      const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues }) });
+      const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ ...JSON.parse(body), requestId: attempt.current.requestId }) });
       router.push(`/?tab=custom&job=${r.jobId}`);
-    } catch (e) { setError((e as Error).message); setBusy(false); }
+    } catch (e) { setError((e as Error).message); setBusy(false); inFlight.current = false; }
   }
 
   return (
@@ -109,15 +116,6 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
         </div>
       </div>
 
-      <div className="custom-submit">
-        <p className="text-sm text-muted md:flex-1">
-          Cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> voturi pentru o selecție. Mircea Lucescu dă verdictul final.
-        </p>
-        {!chosen.length && <p className="text-sm text-gold">Alege cel puțin un agent din „Echipa de agenți”.</p>}
-        {error && <p className="text-sm text-rose" role="alert">{error}</p>}
-        <button onClick={create} disabled={busy || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && leagues.length > 0 && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : 'Pornește dezbaterea'}</button>
-      </div>
-      <p className="text-xs leading-relaxed text-muted">După pornire vezi agenții pe hartă și argumentele în chat. Cota este o țintă; echipa poate refuza meciuri și poate încheia fără un bilet complet.</p>
       <details className="custom-options" onToggle={(e) => setOptionsOpen(e.currentTarget.open)}>
         <summary><span>Interval și ligi</span><span>Peste {dur(fromHours)}–{dur(toHours)} · {leagues.length ? `${leagues.length} ligi` : 'toate ligile'}</span></summary>
         <div className="custom-options-body">
@@ -195,6 +193,25 @@ export function CustomForm({ agents }: { agents: AgentCard[] }) {
         </div>
         </div>
       </details>
+      <section className="card p-4" aria-labelledby="ticket-count-label">
+        <label id="ticket-count-label" htmlFor="ticket-count" className="font-display text-lg font-bold">Câte bilete să creeze echipa?</label>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <input id="ticket-count" type="number" inputMode="numeric" min={1} max={Math.max(1, remaining)} step={1} value={count} disabled={busy || remaining === 0}
+            onChange={(e) => setCount(Math.max(1, Math.min(Math.max(1, remaining), Math.trunc(Number(e.target.value) || 1))))}
+            className="w-24 rounded-xl border border-line bg-ink px-3 py-2 text-xl font-bold tabular outline-none focus:border-cyan" />
+          <p className="text-sm text-muted" role="status">Mai ai <strong className="text-cyan">{remaining}</strong> din {CUSTOM_LIMIT_PER_DAY} bilete custom azi.</p>
+        </div>
+        <p className="mt-2 text-xs text-muted">Aceeași cotă țintă, aceleași ligi și aceeași echipă pentru fiecare bilet. Fiecare are propria analiză și consumă un loc din limita zilnică. Meciurile se pot repeta între bilete.</p>
+      </section>
+      <div className="custom-submit">
+        <p className="text-sm text-muted md:flex-1">
+          {count} {count === 1 ? 'bilet' : 'bilete'} · fiecare cu cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> voturi pentru o selecție. Mircea Lucescu dă verdictul final.
+        </p>
+        {!chosen.length && <p className="text-sm text-gold">Alege cel puțin un agent din „Echipa de agenți”.</p>}
+        {error && <p className="text-sm text-rose" role="alert">{error}</p>}
+        <button onClick={create} disabled={busy || remaining === 0 || count < 1 || count > remaining || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && leagues.length > 0 && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : count === 1 ? 'Pornește dezbaterea' : `Creează ${count} bilete`}</button>
+      </div>
+      <p className="text-xs leading-relaxed text-muted">După pornire vezi agenții pe hartă și argumentele în chat. Cota este o țintă; echipa poate refuza meciuri și poate încheia fără un bilet complet.</p>
     </div>
   );
 }

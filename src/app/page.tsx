@@ -28,6 +28,7 @@ import { agentStats, currentMonth } from '@/lib/agent-stats';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
+import { localDate } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
@@ -191,14 +192,14 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
       return <CustomLive key={job} jobId={job} initialMeta={plain(meta)} initialEvents={plain(events)} info={info} />;
     }
   }
-  const recent = await customJobs(userId, 12);
+  const recent = await customJobs(userId, CUSTOM_LIMIT_PER_DAY);
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-bold">Bilet custom</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Alege cota și numărul de meciuri, apoi pornește dezbaterea. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {CUSTOM_LIMIT_PER_DAY} bilete custom pe zi.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {CUSTOM_LIMIT_PER_DAY} bilete custom pe zi.</p>
       </div>
-      <CustomForm agents={cards} />
+      <CustomForm agents={cards} remaining={Math.max(0, CUSTOM_LIMIT_PER_DAY - recent.filter((j) => j.period_key === localDate()).length)} />
       {recent.length > 0 && (
         <section>
           <h3 className="mb-2 font-display text-lg font-bold">Biletele tale custom</h3>

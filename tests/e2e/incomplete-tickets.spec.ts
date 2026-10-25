@@ -19,7 +19,7 @@ test('incomplete archive and detail show validated matches and refresh their res
     const before = await (await page.request.get('/api/test/stats')).json();
     await page.clock.install();
     await page.goto('/?tab=istoric');
-    await page.getByRole('button',{name:'Incomplete',exact:true}).click();
+    await page.getByRole('button',{name:'Pierdute la un meci',exact:true}).click();
     const card = page.locator(`a[href="/?tab=istoric&ticket=${ticket}"]`);
     await expect(card).toContainText('3 selecții acceptate');
     await expect(card).toContainText('DEMO Incomplete Home 0');

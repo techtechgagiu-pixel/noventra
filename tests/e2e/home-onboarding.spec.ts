@@ -28,8 +28,8 @@ test('first visit explains AI debate and reaches a compact Custom form without s
   await expect(page.getByLabel('Cota dorită')).toHaveValue('5');
   const action = page.getByRole('button', { name: 'Pornește dezbaterea', exact: true });
   await expect(action).toBeEnabled();
-  const actionBox = (await action.boundingBox())!;
-  expect(actionBox.y + actionBox.height).toBeLessThanOrEqual(844);
+  await expect(page.getByRole('spinbutton', { name: 'Câte bilete să creeze echipa?', exact: true })).toHaveValue('1');
+  // Final quantity and submit follow league/agent options, as the last configuration step.
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   const options = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: 'Echipa de agenți' }) });
   await expect(options).not.toHaveAttribute('open', '');
