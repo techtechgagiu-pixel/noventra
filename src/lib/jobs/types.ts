@@ -1,3 +1,4 @@
+import type { MatchBrief } from '../scout/match-brief';
 import type { NewsItem } from '../news/google-news';
 import type { FixtureModel } from '../stats/engine';
 import type { OddsSnapshot } from '../sports/types';
@@ -44,6 +45,8 @@ export type FixtureSnapshot = {
   model: FixtureModel;
   dossier: ScoutDossier;
   dataQuality: { historyHome: number; historyAway: number; shotsAvailable: boolean; standings: boolean; oddsObservedAt: string };
+  /** Hanțu's pre-match research brief (h2h, home/away form, table, lineups, absences, finances). */
+  brief?: MatchBrief;
   /** Real dated headlines for Nemotron 3.5 Super VL (Google News); absent for older snapshots and demo data. */
   news?: { home: NewsItem[]; away: NewsItem[]; errors: string[] };
 };

@@ -1,3 +1,4 @@
+import { briefForPrompt } from '../scout/match-brief';
 import { selectionImplies } from '../stats/engine';
 import type { Prediction, Revision } from '../ai/agents';
 import type { FixtureSnapshot } from './types';
@@ -5,6 +6,14 @@ import type { FixtureSnapshot } from './types';
 /** Compact, identical factual snapshot for all six agents (token-efficient). */
 /** User rule (2026-10-21): no „Under” selections at all — match totals or team totals. */
 export const isBannedMarket = (key: string | null) => !!key && /:UNDER(:|$)/.test(key);
+
+export const MAX_FACT_MARKETS = 18;
+/** Keeps the most likely selections (by the engine's estimate, then the market's), in their original order. */
+export function topMarkets<T extends { key: string; estimatedProbability: number | null; fairMarketProbability?: number | null }>(ms: T[], max = MAX_FACT_MARKETS): T[] {
+  if (ms.length <= max) return ms;
+  const keep = new Set([...ms].sort((a, b) => (b.estimatedProbability ?? b.fairMarketProbability ?? 0) - (a.estimatedProbability ?? a.fairMarketProbability ?? 0)).slice(0, max).map((m) => m.key));
+  return ms.filter((m) => keep.has(m.key));
+}
 
 export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number } = { minOdds: 1.12, maxOdds: 6 }) {
   const d = s.dossier;
@@ -24,8 +33,11 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
     standings: { home: s.standings.home, away: s.standings.away },
     scout: { home: team(d.home), away: team(d.away) },
     model: { lambdaHome: s.model.lambdaHome, lambdaAway: s.model.lambdaAway, uncertainty: s.model.uncertainty, margin1x2: s.model.bookmakerMargin1x2 },
-    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, label: m.label, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: m.fairMarketProbability, model: m.modelProbability, est: m.estimatedProbability, ev: m.expectedValue })),
+    // Token economy: at most MAX_FACT_MARKETS selections per match, the most likely first (agents pick the safest anyway).
+    markets: topMarkets(s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds)).map((m) => ({ key: m.key, label: m.label, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: m.fairMarketProbability, model: m.modelProbability, est: m.estimatedProbability, ev: m.expectedValue })),
     missing: d.missing.filter((x) => !/xG|Accident/.test(x)).slice(0, 2),
+    /** Hanțu's research brief: every agent must weigh h2h, home/away form, table, absences and finances. */
+    researchBrief: briefForPrompt(s.brief),
   };
 }
 
@@ -40,6 +52,7 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
     league: s.fixture.league,
     kickoffUtc: s.fixture.kickoff,
     standings: { home: s.standings.home, away: s.standings.away },
+    researchBrief: briefForPrompt(s.brief),
     news: { [s.fixture.home]: n.home.map(fmt), [s.fixture.away]: n.away.map(fmt), note: n.home.length + n.away.length === 0 ? 'Nicio știre relevantă găsită în ultimele zile.' : undefined },
     markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, label: m.label, odds: m.odds, fair: m.fairMarketProbability })),
   };

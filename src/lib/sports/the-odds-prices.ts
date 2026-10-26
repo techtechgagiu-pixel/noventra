@@ -3,20 +3,26 @@ import type { Fixture, MarketQuote } from './types';
 import type { InformationalMatch } from './informational-matches';
 
 /**
- * Real prices from The Odds API for fixtures whose usual source (ESPN/LPF) publishes none — e.g. SuperLiga or
- * smaller leagues. Only featured markets are requested (1X2 and goal totals), at the median price across the
- * bookmakers the API lists. Nothing is derived: no double chance computed from 1X2, no missing line filled in.
+ * The Odds API is the MAIN price source (user decision 26.10): its median price across the listed bookmakers is used
+ * for every market it publishes (1X2 and goal totals at every .5 line), and ESPN/LPF prices stay in the background
+ * for the markets The Odds API does not cover (double chance, BTTS, corners, halves, handicaps…). Every agent gets
+ * the merged menu, each price tagged with its source. Nothing is derived: no double chance computed from 1X2.
  *
- * Credits are scarce (free plan: 500/month; each competition costs 2 per refresh), so:
- * - only competitions that actually contain fixtures without prices are requested,
- * - every competition is cached for 6 hours (shared by every job through the database),
+ * Free plan (500 credits/month; 2 credits per competition per call, football only):
+ * - each competition is fetched at most once every 3 days and cached in the database (shared by every job),
+ * - competitions with the most fixtures we analyse go first, then the big leagues,
  * - a daily allowance = remaining credits ÷ days left in the month, never below a 40-credit reserve.
  */
 const PROVIDER = 'the-odds-api-prices';
 const CATALOG = 'the-odds-api';
-const FRESH_MS = 6 * 3600_000;
+const FRESH_MS = 3 * 24 * 3600_000;
 const COST = 2;
 const RESERVE = 40;
+/** Big competitions first when credits are short (after the ones holding our own fixtures). */
+const PRIORITY = ['soccer_uefa_champs_league', 'soccer_epl', 'soccer_spain_la_liga', 'soccer_italy_serie_a', 'soccer_germany_bundesliga', 'soccer_france_ligue_one',
+  'soccer_uefa_europa_league', 'soccer_uefa_europa_conference_league', 'soccer_netherlands_eredivisie', 'soccer_portugal_primeira_liga', 'soccer_romania_liga_1',
+  'soccer_turkey_super_league', 'soccer_belgium_first_div', 'soccer_efl_champ', 'soccer_spl', 'soccer_greece_super_league', 'soccer_austria_bundesliga'];
+const rank = (sport: string) => { const i = PRIORITY.indexOf(sport); return i < 0 ? PRIORITY.length : i; };
 
 type Event = { id: string; home: string; away: string; kickoff: string; markets: MarketQuote[]; books: number };
 type Payload = { bySport?: Record<string, { at: string; events: Event[] }>; day?: string; usedToday?: number; creditsRemaining?: number | null };
@@ -83,10 +89,26 @@ export function parseTheOddsPrices(raw: unknown): Event[] {
 const utcDay = () => new Date().toISOString().slice(0, 10);
 const daysLeftInMonth = () => { const d = new Date(); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate() - d.getUTCDate() + 1; };
 
-/** Adds The Odds API prices to fixtures that have none. Returns the same array (new objects for enriched rows). */
+/** Cached Odds API events (no network). Used by the Meciuri tab for schedule-only competitions. */
+export async function cachedTheOddsEvents(): Promise<Record<string, { at: string; events: Event[] }>> {
+  const row = await one<{ payload: Payload }>('SELECT payload FROM sports_catalog_cache WHERE provider=$1', [PROVIDER]).catch(() => null);
+  return row?.payload.bySport ?? {};
+}
+
+/** Merges The Odds API prices (main) with the fixture's own ESPN/LPF prices (background). */
+export function mergeTheOdds(f: Fixture, e: Event, at: string): Fixture {
+  const book = `The Odds API · mediana a ${e.books} case`;
+  // Labels use the fixture's own team names, so the rest of the app sees one consistent match.
+  const main = e.markets.map((m) => ({ ...m, bookmaker: book, label: m.key === '1X2:HOME' ? `${f.home} câștigă (1)` : m.key === '1X2:AWAY' ? `${f.away} câștigă (2)` : m.label }));
+  const keys = new Set(main.map((m) => m.key));
+  const background = (f.odds?.markets ?? []).filter((m) => !keys.has(m.key)).map((m) => ({ ...m, bookmaker: m.bookmaker ?? f.odds?.bookmaker }));
+  return { ...f, odds: { bookmaker: book, source: 'the-odds-api', observedAt: at, providerUpdatedAt: at, markets: [...main, ...background] } };
+}
+
+/** Adds The Odds API prices to every listed fixture it covers (cached 3 days, credit-budgeted). */
 export async function withTheOddsPrices(fixtures: Fixture[], opts: { fetchAllowed?: boolean } = {}): Promise<Fixture[]> {
-  const missing = fixtures.filter((f) => f.status === 'pre' && (!f.odds || !f.odds.markets.some((m) => m.marketType === '1X2')));
-  if (!missing.length) return fixtures;
+  const open = fixtures.filter((f) => f.status === 'pre');
+  if (!open.length) return fixtures;
   // Keep the free schedule (used to find each fixture's competition) current; it refreshes in the background.
   if (process.env.ODDS_API_KEY?.trim() && opts.fetchAllowed !== false) {
     const { theOddsCatalog } = await import('./the-odds-catalog');
@@ -95,25 +117,27 @@ export async function withTheOddsPrices(fixtures: Fixture[], opts: { fetchAllowe
   }
   const catalog = await one<{ payload: { byLeague?: Record<string, { fixtures: InformationalMatch[] }>; creditsRemaining?: number | null } }>('SELECT payload FROM sports_catalog_cache WHERE provider=$1', [CATALOG]).catch(() => null);
   const byLeague = catalog?.payload.byLeague ?? {};
-  // Which competitions hold the fixtures that need prices (from the free schedule already cached).
+  // Which competitions hold our fixtures (from the free schedule already cached).
   const needed = new Map<string, number>();
   const sportOf = new Map<string, string>();
-  for (const f of missing) {
+  for (const f of open) {
     for (const [sport, d] of Object.entries(byLeague)) {
       if (d.fixtures.some((e) => sameMatch(f, e))) { sportOf.set(f.id, sport); needed.set(sport, (needed.get(sport) ?? 0) + 1); break; }
     }
   }
-  if (!needed.size) return fixtures;
+  // Big competitions are priced even without an ESPN counterpart, so the Meciuri tab shows their markets too.
+  for (const [sport, d] of Object.entries(byLeague)) if (!needed.has(sport) && rank(sport) < PRIORITY.length && d.fixtures.some((x) => Date.parse(x.kickoff) > Date.now())) needed.set(sport, 0);
   const row = await one<{ payload: Payload }>('SELECT payload FROM sports_catalog_cache WHERE provider=$1', [PROVIDER]).catch(() => null);
   const payload: Payload = { bySport: {}, ...(row?.payload ?? {}) };
   payload.bySport = { ...payload.bySport };
   if (payload.day !== utcDay()) { payload.day = utcDay(); payload.usedToday = 0; }
   const key = process.env.ODDS_API_KEY?.trim();
   let changed = false;
-  if (key && opts.fetchAllowed !== false) {
+  if (key && opts.fetchAllowed !== false && needed.size) {
     const remaining = payload.creditsRemaining ?? catalog?.payload.creditsRemaining ?? 500;
     const allowance = Math.max(0, Math.floor((remaining - RESERVE) / daysLeftInMonth()));
-    const stale = [...needed].filter(([sport]) => { const c = payload.bySport![sport]; return !c || Date.now() - Date.parse(c.at) >= FRESH_MS; }).sort((a, b) => b[1] - a[1]);
+    const stale = [...needed].filter(([sport]) => { const c = payload.bySport![sport]; return !c || Date.now() - Date.parse(c.at) >= FRESH_MS; })
+      .sort((a, b) => b[1] - a[1] || rank(a[0]) - rank(b[0]));
     for (const [sport] of stale) {
       if ((payload.usedToday ?? 0) + COST > allowance) break;
       try {
@@ -128,19 +152,18 @@ export async function withTheOddsPrices(fixtures: Fixture[], opts: { fetchAllowe
         payload.bySport![sport] = { at: new Date().toISOString(), events: parseTheOddsPrices(await res.json()) };
       } catch { console.warn(JSON.stringify({ event: 'the_odds_prices_failed', status: 'network' })); break; }
     }
+    // Events that already kicked off are dropped from the cache (keeps the row small).
+    for (const [sport, c] of Object.entries(payload.bySport!)) payload.bySport![sport] = { ...c, events: c.events.filter((x) => Date.parse(x.kickoff) > Date.now() - 3 * 3600_000) };
     if (changed) {
       await query(`INSERT INTO sports_catalog_cache(provider,payload,next_attempt_at) VALUES($1,$2,$3)
         ON CONFLICT(provider) DO UPDATE SET payload=$2`, [PROVIDER, JSON.stringify(payload), new Date()]).catch(() => null);
     }
   }
   return fixtures.map((f) => {
+    if (f.status !== 'pre') return f;
     const sport = sportOf.get(f.id);
     const cached = sport ? payload.bySport![sport] : undefined;
     const e = cached?.events.find((x) => sameMatch(f, x));
-    if (!e) return f;
-    // Labels use the fixture's own team names, so the rest of the app sees one consistent match.
-    const markets = e.markets.map((m) => ({ ...m, label: m.key === '1X2:HOME' ? `${f.home} câștigă (1)` : m.key === '1X2:AWAY' ? `${f.away} câștigă (2)` : m.label }));
-    const kept = (f.odds?.markets ?? []).filter((m) => !markets.some((x) => x.key === m.key));
-    return { ...f, odds: { bookmaker: `The Odds API · mediana a ${e.books} case`, source: 'the-odds-api', observedAt: cached!.at, providerUpdatedAt: cached!.at, markets: [...markets, ...kept] } };
+    return e ? mergeTheOdds(f, e, cached!.at) : f;
   });
 }

@@ -76,6 +76,7 @@ export function applyEvent(prev: NexusState, e: NexusEvent): NexusState {
       log(`Ordine aleatoare de explorare salvată: ${s.order.length} meciuri în ${s.batches} loturi.`);
       break;
     case 'BATCH_STARTED': s.batchIndex = (p.batch ?? 1) - 1; s.batchFraction = 0; for (const id of (Array.isArray(p.fixtures) ? p.fixtures : [])) setFx(id, { state: 'RESEARCH' }); log(`Lotul ${p.batch}/${p.of} intră în analiză.`); break;
+    case 'RESEARCH_BRIEF': log(`Omul de știri · dosar ${p.match}: ${short(String(p.text ?? '').split('\n')[0], 200)}`); break;
     case 'NEWS_COMMENTARY': log(`Claude Haiku 5.5: ${short(p.commentary, 240)}`); break;
     case 'SCOUT_STARTED': s.scout = { ...s.scout, status: 'RESEARCHING', message: p.message }; log(p.message); break;
     case 'MARKETS_CHECKED': log(`Filtru: ${p.accepted} meciuri au minimum ${p.minimum} pronosticuri cu cotă reală; ${p.rejected} au avut prea puține și au fost lăsate deoparte.`); break;

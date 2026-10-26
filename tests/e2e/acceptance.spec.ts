@@ -149,7 +149,12 @@ test('matches tab: every available fixture with odds and analysis status', async
   await expect(page.getByRole('heading', { name: 'Toate meciurile' })).toBeVisible();
   await expect(page.locator('section li').first()).toBeVisible({ timeout: 30_000 });
   const before = await page.locator('section li').count();
-  await page.getByRole('button', { name: 'Pe bilet' }).click();
+  // A row expands to every stored market of that match.
+  const row = page.locator('section li [aria-expanded]').first();
+  await row.click();
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('section li').first().getByText(/pronosticuri · surse|nu publică încă/)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Pe bilet', exact: true }).click();
   expect(await page.locator('section li').count()).toBeLessThanOrEqual(before);
   await page.getByRole('button', { name: 'Toate', exact: true }).click();
   if (process.env.SHOTS) { await page.screenshot({ path: `${process.env.SHOTS}/matches.png`, fullPage: true }); await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: `${process.env.SHOTS}/matches-mobile.png`, fullPage: false }); }

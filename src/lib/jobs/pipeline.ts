@@ -1,3 +1,4 @@
+import { briefForChat, buildMatchBrief } from '../scout/match-brief';
 import { reportNewsBatch } from '../news-reporter';
 import { createHash } from 'node:crypto';
 import { config } from '../config';
@@ -189,8 +190,8 @@ async function freshFixture(f: Fixture): Promise<Fixture | null> {
   }
   const day = await espnLeagueDay(league, yyyymmdd(localDate(new Date(f.kickoff))));
   const listed = day.find((x) => x.id === f.id) ?? null;
-  // Keep the same price source as at analysis time: cached The Odds API prices when ESPN has none (no new credits).
-  const found = listed && !listed.odds && f.odds?.source === 'the-odds-api' ? (await withTheOddsPrices([listed], { fetchAllowed: false }).catch(() => [listed]))[0] : listed;
+  // Same price sources as at analysis time: cached The Odds API prices (main) + ESPN (background), no new credits.
+  const found = listed ? (await withTheOddsPrices([listed], { fetchAllowed: false }).catch(() => [listed]))[0] : listed;
   if (found) await persistFixtures([found]);
   return found ? withExtraMarkets(found) : null;
 }
@@ -217,9 +218,10 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
       if (!f || !f.odds) { await recordEvent(job.id, { type: 'CANDIDATE_REJECTED', stage: 'SCOUT', fixtureId: id, payload: { reason: 'Datele meciului nu mai sunt disponibile' } }); return; }
       const [home, away] = await Promise.all([teamHistory(f, 'home'), teamHistory(f, 'away')]);
       let standings: FixtureSnapshot['standings'] = { home: null, away: null };
+      let summary: Record<string, unknown> | null = null;
       if (f.provider === 'espn') {
         try {
-          const summary = await espnSummary(f.leagueKey, f.providerId);
+          summary = await espnSummary(f.leagueKey, f.providerId);
           const sh = standingFor(summary, f.homeTeamId), sa = standingFor(summary, f.awayTeamId);
           standings = { home: sh ? { rank: sh.rank, points: sh.points, played: sh.played } : null, away: sa ? { rank: sa.rank, points: sa.points, played: sa.played } : null };
         } catch { /* standings stay explicitly missing */ }
@@ -233,9 +235,11 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
         news = { home: nh.items, away: na.items, errors: [...nh.errors, ...na.errors] };
         await recordEvent(job.id, { type: 'NEWS_COLLECTED', stage: 'SCOUT', fixtureId: f.id, agentId: 'hantu', payload: { match: `${f.home} – ${f.away}`, home: nh.items.length, away: na.items.length, headlines: [...nh.items, ...na.items].slice(0, 6).map((x) => ({ title: x.title, source: x.source, publishedAt: x.publishedAt, link: x.link })), errors: news.errors.slice(0, 2) } });
       }
+      const brief = buildMatchBrief({ home: f.home, away: f.away, kickoff: f.kickoff, summary, homeMatches: home.matches, awayMatches: away.matches, standings, news });
+      await recordEvent(job.id, { type: 'RESEARCH_BRIEF', stage: 'SCOUT', fixtureId: f.id, agentId: 'hantu', payload: { match: `${f.home} – ${f.away}`, kickoff: f.kickoff, brief, text: briefForChat(brief) } });
       const snapshot: FixtureSnapshot = {
         fixture: { id: f.id, home: f.home, away: f.away, league: `${f.country} · ${f.leagueName}`, leagueKey: f.leagueKey, kickoff: f.kickoff, provider: f.provider, providerId: f.providerId },
-        odds: f.odds, standings, model, dossier, news,
+        odds: f.odds, standings, model, dossier, news, brief,
         dataQuality: { historyHome: home.matches.length, historyAway: away.matches.length, shotsAvailable: model.usedShotsOnTarget, standings: !!(standings.home && standings.away), oddsObservedAt: f.odds.observedAt },
       };
       await query('INSERT INTO fixture_snapshots(fixture_id, job_id, payload, data_quality) VALUES ($1,$2,$3,$4)', [f.id, job.id, JSON.stringify(snapshot), JSON.stringify(snapshot.dataQuality)]);
@@ -343,7 +347,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
   }
   try {
     const res = round === 0
-      ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user, temperature: agent.temperature, maxOutputTokens: Math.min(config.limits.maxOutputTokens, 380 * snaps.length + 300) }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL' } })
+      ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user, temperature: agent.temperature, maxOutputTokens: Math.min(config.limits.maxOutputTokens, 320 * snaps.length + 250) }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL' } })
       : await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: DebateOutputSchema, input: { system: systemPrompt(agent), user, temperature: agent.temperature, maxOutputTokens: Math.min(config.limits.maxOutputTokens, 300 * snaps.length + 300) }, log: { jobId: job.id, agentId: agent.id, stage: `DEBATE${round}` } });
     let items: Array<Prediction | Revision> = 'predictions' in res.data ? res.data.predictions : res.data.revisions;
     // Which call (and therefore which model) produced each answer: a retry may be served by the fallback model,
@@ -355,7 +359,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       try {
         const subset = facts.filter((f) => missingIds.includes(f.fixtureId));
         const retry = round === 0
-          ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user: `Analizează independent fiecare meci. Bilet: ${ticketBrief(job, policy)}\nSchema răspunsului: ${INITIAL_SCHEMA_TEXT}\nMeciuri (${subset.length}):\n${JSON.stringify(subset)}`, temperature: agent.temperature, maxOutputTokens: 380 * subset.length + 300 }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL_RETRY' } })
+          ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user: `Analizează independent fiecare meci. Bilet: ${ticketBrief(job, policy)}\nSchema răspunsului: ${INITIAL_SCHEMA_TEXT}\nMeciuri (${subset.length}):\n${JSON.stringify(subset)}`, temperature: agent.temperature, maxOutputTokens: 320 * subset.length + 250 }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL_RETRY' } })
           : null;
         if (retry) {
           for (const p of retry.data.predictions) if (!source.has(p.fixtureId)) source.set(p.fixtureId, { provider: retry.provider, model: retry.model, requested: retry.requestedModel, usedFallback: retry.usedFallback });

@@ -11,7 +11,8 @@ export type InformationalSourceStatus = {
   configured: boolean; refreshing: boolean; updatedAt: string | null; leaguesLoaded: number; leaguesTotal: number;
   creditsUsed: number | null; creditsRemaining: number | null; error: string | null;
 };
-const PROVIDER = 'the-odds-api', FRESH_MS = 3600_000;
+// User decision 26.10: the schedule is read once every 3 days (8-day window), cached in the database.
+const PROVIDER = 'the-odds-api', FRESH_MS = 3 * 24 * 3600_000;
 const g = globalThis as unknown as { __p11TheOddsRefresh?: Promise<void> | null };
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown) => typeof value === 'string' ? value.trim().slice(0, 200) : '';

@@ -7,6 +7,7 @@ import { useVisibleRefresh } from '@/lib/use-visible-refresh';
 import type { MatchRow } from '@/lib/catalog';
 import type { InformationalSourceStatus } from '@/lib/sports/the-odds-catalog';
 import { LeaguePicker, type LeagueOption } from './league-picker';
+import { MatchMarkets } from './match-markets';
 
 type Data = { rows: MatchRow[]; leagues: LeagueOption[]; refreshing: boolean; updatedAt: string | null; errors: number; additionalSource?: InformationalSourceStatus };
 type Source = 'all' | 'existing' | 'the-odds-api';
@@ -30,7 +31,7 @@ const STATUS: Array<{ id: Status; label: string }> = [
 ];
 
 function Verdict({ m }: { m: MatchRow }) {
-  if (m.source === 'the-odds-api') return <span className="text-muted/70">The Odds API · program informativ{m.status === 'unknown' ? ' · scor indisponibil' : ''}</span>;
+  if (m.source === 'the-odds-api') return <span className="text-muted/70">The Odds API{m.odds ? ` · ${m.odds.markets} pronosticuri (mediana caselor)` : ' · program informativ'}{m.status === 'unknown' ? ' · scor indisponibil' : ''}</span>;
   const a = m.analysis;
   if (a?.onTicket) {
     const outcome = a.selectionOutcome;
@@ -55,13 +56,15 @@ export function MatchesView() {
   const [today, setToday] = useState('');
   const [source, setSource] = useState<Source>('all');
   const [limit, setLimit] = useState(PAGE_SIZE);
+  const [open, setOpen] = useState<string | null>(null);
   useEffect(() => { setLimit(PAGE_SIZE); }, [leagues, day, status, hideDone, q, source]);
 
   const load = useCallback(async () => {
     try { setData(await api<Data>('/api/matches?includeInformational=1')); setError(null); } catch (e) { setError((e as Error).message); }
   }, []);
   useEffect(() => { setToday(dayOf(new Date().toISOString())); void load(); }, [load]);
-  useVisibleRefresh(load);
+  // Prices change at most every few hours (The Odds API: every 3 days); a 5-minute refresh is plenty.
+  useVisibleRefresh(load, 5 * 60_000);
   // While the source is being refreshed in the background, pick up the new snapshot.
   useEffect(() => { if (!data?.refreshing) return; const t = setTimeout(load, 15_000); return () => clearTimeout(t); }, [data, load]);
 
@@ -142,7 +145,9 @@ export function MatchesView() {
             <h2 className="flex items-center justify-between border-b border-line bg-ink/40 px-4 py-2 text-xs font-bold uppercase tracking-wider text-muted">{name}<span className="tabular">{ms.length}</span></h2>
             <ul className="divide-y divide-line/60">
               {ms.map((m) => (
-                <li key={m.id} className="grid grid-cols-[52px_minmax(0,1fr)] gap-x-3 gap-y-1 px-4 py-2.5 sm:grid-cols-[64px_minmax(0,1fr)_auto]">
+                <li key={m.id}>
+                <div role="button" tabIndex={0} aria-expanded={open === m.id} onClick={() => setOpen((o) => (o === m.id ? null : m.id))} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => (o === m.id ? null : m.id)); } }}
+                  className={`grid cursor-pointer grid-cols-[52px_minmax(0,1fr)] gap-x-3 gap-y-1 px-4 py-2.5 transition hover:bg-panel-2/60 sm:grid-cols-[64px_minmax(0,1fr)_auto] ${open === m.id ? 'bg-panel-2/60' : ''}`}>
                   <div className="row-span-2 text-xs tabular text-muted sm:row-span-1">
                     {m.status === 'in' ? <span className="font-bold text-rose">LIVE</span> : <span suppressHydrationWarning>{time(m.kickoff)}</span>}
                     {day === 'all' && today && <div className="text-[10px]">{dayLabel(dayOf(m.kickoff), today)}</div>}
@@ -161,8 +166,11 @@ export function MatchesView() {
                     {m.odds && (['home', 'draw', 'away'] as const).map((k, i) => (
                       <span key={k} className="whitespace-nowrap rounded-md border border-line px-1.5 py-0.5"><span className="text-muted">{['1', 'X', '2'][i]}</span> {m.odds![k]?.toFixed(2) ?? '—'}</span>
                     ))}
-                    {m.analysis && <Link href={`/?tab=analiza&job=${m.analysis.jobId}`} className="text-cyan hover:underline">jurnal</Link>}
+                    {m.odds && <span className="whitespace-nowrap text-cyan">{m.odds.markets} piețe {open === m.id ? '▴' : '▾'}</span>}
+                    {m.analysis && <Link href={`/?tab=analiza&job=${m.analysis.jobId}`} onClick={(e) => e.stopPropagation()} className="text-cyan hover:underline">jurnal</Link>}
                   </div>
+                </div>
+                {open === m.id && <div className="border-t border-line/60 bg-ink/40 px-4 py-3"><MatchMarkets id={m.id} /></div>}
                 </li>
               ))}
             </ul>
@@ -174,7 +182,7 @@ export function MatchesView() {
         {limit < shown.length && <button onClick={() => setLimit((n) => n + PAGE_SIZE)} className="btn btn-ghost">Arată mai multe meciuri</button>}
       </div>}
       {data && data.errors > 0 && <p className="text-xs text-muted">{data.errors} cereri către sursă au eșuat; meciurile lor apar la următoarea actualizare.</p>}
-      <p className="text-xs text-muted">Surse: ESPN și LPF pentru SuperLiga{data?.additionalSource?.configured ? ', completate de The Odds API pentru programul competițiilor de fotbal. Sursa suplimentară se actualizează aproximativ o dată pe oră cât pagina este folosită și nu intră în analizele agenților. Cererile pentru program nu consumă creditele lunare; nu importăm cote sau scoruri din această sursă' : ''}.</p>
+      <p className="text-xs text-muted">Surse: The Odds API este sursa principală de cote (mediana caselor de pariuri, rezultat final și goluri peste/sub pe toate liniile), actualizată o dată la 3 zile pentru următoarele 7 zile; ESPN și LPF rămân în fundal pentru program, scoruri, istoric și piețele pe care The Odds API nu le are. Apasă pe un meci ca să vezi toate pronosticurile.</p>
     </div>
   );
 }

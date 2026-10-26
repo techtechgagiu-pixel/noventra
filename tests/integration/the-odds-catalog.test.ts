@@ -12,7 +12,7 @@ const today = localDate(), sport = { key: 'soccer_epl', title: 'EPL', active: tr
 const event = { id: 'event1', sport_key: sport.key, home_team: 'Extra Home', away_team: 'Extra Away', commence_time: `${today}T12:00Z` };
 const headers = { 'x-requests-used': '0', 'x-requests-remaining': '500', 'x-requests-last': '0' };
 const wait = async () => { await g.__p11TheOddsRefresh; };
-async function seedCache(age = 7200_000, next = new Date(0)) {
+async function seedCache(age = 4 * 86400_000, next = new Date(0)) {
   const payload = { sports: [sport], sportsAt: new Date().toISOString(), byLeague: { [sport.key]: { at: new Date(Date.now() - age).toISOString(), fixtures: parseTheOddsMatches([event], sport, today, 8) } }, creditsUsed: 0, creditsRemaining: 500 };
   await query('INSERT INTO sports_catalog_cache(provider,payload,next_attempt_at) VALUES($1,$2,$3)', ['the-odds-api', JSON.stringify(payload), next]);
   return payload;
@@ -38,7 +38,7 @@ it('shares a refresh among concurrent readers, calls only free metadata/events a
   expect(await one('SELECT * FROM fixtures')).toBeNull(); expect(await one('SELECT * FROM agent_predictions')).toBeNull();
 });
 it('honors another process lease and serves a persistent snapshot without making calls', async () => {
-  await seedCache(7200_000, new Date(Date.now() + 300_000));
+  await seedCache(4 * 86400_000, new Date(Date.now() + 300_000));
   expect((await theOddsCatalog(today, 8)).fixtures).toHaveLength(1); await wait(); expect(fetch).not.toHaveBeenCalled();
 });
 it('preserves previous data and safely backs off when a key is rejected', async () => {

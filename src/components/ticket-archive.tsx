@@ -9,6 +9,13 @@ import type { IncompletePick } from '@/lib/incomplete-ticket-picks';
 import type { Creator } from '@/lib/views';
 import { archiveResult } from '@/lib/archive-visibility';
 
+/** Match day and hour on the ticket card, in Romanian time (e.g. "sâm. 31.10 · 21:00"). */
+const kickoffShort = (iso: string) => {
+  const d = new Date(iso); if (Number.isNaN(d.getTime())) return '';
+  const tz = { timeZone: 'Europe/Bucharest' } as const;
+  return `${d.toLocaleDateString('ro-RO', { ...tz, weekday: 'short' })} ${d.toLocaleDateString('ro-RO', { ...tz, day: '2-digit', month: '2-digit' })} · ${d.toLocaleTimeString('ro-RO', { ...tz, hour: '2-digit', minute: '2-digit' })}`;
+};
+
 export function CreatorBadge({ c, small }: { c?: Creator; small?: boolean }) {
   if (!c) return null;
   return (
@@ -19,7 +26,7 @@ export function CreatorBadge({ c, small }: { c?: Creator; small?: boolean }) {
   );
 }
 
-type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; partialSelections?: IncompletePick[]; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null }> };
+type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; partialSelections?: IncompletePick[]; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null; kickoff?: string | null; status?: string | null; home_score?: number | null; away_score?: number | null }> };
 const FILTERS = [['all', 'Toate'], ['today', 'Azi'], ['yesterday', 'Ieri'], ['week', 'Săptămâna asta'], ['weekly', 'Biletul săptămânii'], ['PENDING', 'În așteptare'], ['WON', 'Verzi'], ['ONE_LOSS', 'Pierdute la un meci']] as const;
 const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
 
@@ -59,7 +66,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
           {list.map((t) => {
             const result = archiveResult(t);
             const partial = t.generation_status === 'INCOMPLETE' ? t.partialSelections ?? [] : [];
-            const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome }));
+            const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome, kickoff: s.snapshot.kickoff as string | null, status: null as string | null, home_score: null as number | null, away_score: null as number | null }));
             return (
             <li key={t.id}>
               <Link href={`/?tab=istoric&ticket=${t.id}`} className={`card block p-4 transition hover:border-cyan/50 ${result === 'WON' ? 'border-emerald bg-emerald/10' : result === 'ONE_LOSS' ? 'border-rose bg-rose/10' : ''}`}>
@@ -77,7 +84,8 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                     {shown.map((s, i) => (
                       <li key={i} className="flex items-center gap-2">
                         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.outcome === 'WON' ? 'bg-emerald' : s.outcome === 'LOST' ? 'bg-rose' : s.outcome === 'VOID' ? 'bg-muted' : 'border border-muted'}`} aria-label={s.outcome === 'WON' ? 'a intrat' : s.outcome === 'LOST' ? 'nu a intrat' : s.outcome === 'VOID' ? 'anulat' : 'în așteptare'} />
-                        <span className={`truncate ${s.outcome === 'LOST' ? 'text-rose' : s.outcome === 'WON' ? 'text-emerald' : 'text-muted'}`}>{s.match} — {s.label} @ {odds(s.odds)}</span>
+                        <span className={`min-w-0 truncate ${s.outcome === 'LOST' ? 'text-rose' : s.outcome === 'WON' ? 'text-emerald' : 'text-muted'}`}>{s.match} — {s.label} @ {odds(s.odds)}</span>
+                        <span className="ml-auto shrink-0 tabular text-[11px] text-muted">{s.status === 'in' && s.home_score != null ? <span className="font-semibold text-gold">LIVE {s.home_score}–{s.away_score}</span> : s.status === 'post' && s.home_score != null ? `${s.home_score}–${s.away_score}` : s.kickoff ? kickoffShort(s.kickoff) : ''}</span>
                       </li>
                     ))}
                   </ul>

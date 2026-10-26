@@ -21,7 +21,7 @@ test('open archive and ticket receive green/red results without reload, retain f
     const before = await (await page.request.get('/api/test/stats')).json();
     await db.query(`UPDATE ticket_selections SET outcome='WON' WHERE ticket_id=$1`, [ticket]);
     await db.query(`UPDATE tickets SET outcome_status='WON' WHERE id=$1`, [ticket]);
-    await page.clock.runFor(61_000);
+    await page.clock.runFor(601_000);
     const archiveLeg = page.getByText('DEMO Refresh Home – DEMO Refresh Away');
     await expect(archiveLeg).toHaveClass(/text-emerald/);
     await expect(filter).toHaveClass(/text-cyan/);
@@ -30,7 +30,7 @@ test('open archive and ticket receive green/red results without reload, retain f
     await expect(page.getByText('✓ A intrat')).toBeVisible();
     await db.query(`UPDATE ticket_selections SET outcome='LOST' WHERE ticket_id=$1`, [ticket]);
     await db.query(`UPDATE tickets SET outcome_status='LOST' WHERE id=$1`, [ticket]);
-    await page.clock.runFor(61_000);
+    await page.clock.runFor(601_000);
     await expect(page.getByText('✗ Nu a intrat')).toBeVisible();
     expect(new URL(page.url()).searchParams.get('ticket')).toBe(ticket);
     const after = await (await page.request.get('/api/test/stats')).json();

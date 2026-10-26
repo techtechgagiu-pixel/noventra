@@ -19,6 +19,8 @@ type AgentNode = { id: string; status: AgentStatus; pulse: number; bubble: { tex
 type Ref = { k: 'agent'; id: string } | { k: 'fx'; id: string } | { k: 'src' } | { k: 'news' } | { k: 'tray' };
 type Packet = { from: Ref; to: Ref; t0: number; dur: number; color: string; size: number; bend: number; done?: () => void };
 type Burst = { at: Ref; t0: number; dur: number; color: string; r: number };
+type Particle = { x: number; y: number; vx: number; vy: number; t0: number; life: number; color: string; size: number; spin: number; g: number };
+type Callout = { text: string; color: string; t0: number; dur: number; big: boolean };
 type Layout = {
   mode: 'wide' | 'tall'; w: number; h: number; r: number;
   pitch: { x: number; y: number; w: number; h: number };
@@ -44,6 +46,29 @@ export const FORMATION: Array<{ id: string; u: number; v: number; line: string }
   { id: 'sumudica', u: 0.6, v: 0.3, line: 'Echipa a doua · atac' }, { id: 'man', u: 0.6, v: 0.7, line: 'Echipa a doua · atac' },
 ];
 const BRAIN = 'robert';
+const NEW_IDS = new Set<string>(NEW_AI_PROFILES.map((a) => a.id));
+type Spot = { u: number; v: number };
+/**
+ * Positions only the agents that actually play this job. Without any of the new agents the classic two-team
+ * formation is kept; otherwise the selected squad is spread in columns across the whole pitch, brain in goal,
+ * press (corina) and VAR (porumboiu) on the touchlines, so nobody sits outside the field or on the bench.
+ */
+export function autoFormation(active: Set<string> | null): Record<string, Spot> {
+  const ids = FORMATION.map((f) => f.id).filter((id) => !active || active.has(id) || id === 'corina' || id === BRAIN);
+  if (!ids.some((id) => NEW_IDS.has(id))) return Object.fromEntries(FORMATION.filter((f) => ids.includes(f.id)).map((f) => [f.id, { u: f.u, v: f.v }]));
+  const out: Record<string, Spot> = { [BRAIN]: { u: 0.04, v: 0.5 } };
+  if (ids.includes('corina')) out.corina = { u: 0.5, v: 1.1 };
+  if (ids.includes('porumboiu')) out.porumboiu = { u: 0.5, v: -0.1 };
+  const rest = [...ids.filter((id) => !NEW_IDS.has(id)), ...ids.filter((id) => NEW_IDS.has(id))].filter((id) => !(id in out));
+  const rows = rest.length <= 8 ? 3 : rest.length <= 15 ? 4 : 5;
+  const cols = Math.max(1, Math.ceil(rest.length / rows));
+  rest.forEach((id, i) => {
+    const c = Math.floor(i / rows); const inCol = Math.min(rows, rest.length - c * rows); const j = i % rows;
+    out[id] = { u: cols === 1 ? 0.5 : 0.16 + c * (0.8 / (cols - 1)), v: 0.08 + ((j + 0.5) / inCol) * 0.84 };
+  });
+  return out;
+}
+const CONFETTI = ['#34d399', '#e8c26a', '#5ee7f7', '#fb7185', '#a78bfa', '#eef2fb'];
 const C = { cyan: '#5ee7f7', emerald: '#34d399', gold: '#e8c26a', rose: '#fb7185', violet: '#a78bfa', muted: '#94a3c4', text: '#eef2fb', lime: '#84cc16', line: '#22325a' };
 const NAME = (id: string) => AGENT_META[id]?.short ?? AGENT_META[id]?.name ?? id;
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -65,6 +90,11 @@ export class MapScene {
   private fx = new Map<string, Fx>();
   private agents = new Map<string, AgentNode>();
   private activeAgents: Set<string> | null = null;
+  private formation: Record<string, Spot> = autoFormation(null);
+  private spawnAt = new Map<string, number>();
+  private particles: Particle[] = [];
+  private callout: Callout | null = null;
+  private ball: { pos: Vec; to: Ref | null; trail: Vec[] } = { pos: { x: 0, y: 0 }, to: null, trail: [] };
   private packets: Packet[] = [];
   private bursts: Burst[] = [];
   private dust: Array<{ x: number; y: number; vx: number; vy: number; a: number }> = [];
@@ -108,7 +138,7 @@ export class MapScene {
 
   /** Resets everything (used by replay). */
   reset() {
-    this.fx.clear(); this.packets = []; this.bursts = []; this.queue = []; this.final = null; this.banner = null; this.acceptedCount = 0; this.stage = 'QUEUED'; this.lastSeq = 0;
+    this.fx.clear(); this.packets = []; this.bursts = []; this.particles = []; this.callout = null; this.ball = { pos: { x: 0, y: 0 }, to: null, trail: [] }; this.setSquad(null, 0); this.queue = []; this.final = null; this.banner = null; this.acceptedCount = 0; this.stage = 'QUEUED'; this.lastSeq = 0;
     for (const a of this.agents.values()) Object.assign(a, { status: 'IDLE', pulse: 0, bubble: null, picks: {}, activity: 0 });
   }
 
@@ -118,7 +148,7 @@ export class MapScene {
     this.canvas.height = Math.round(cssH * this.dpr);
     this.canvas.style.width = `${cssW}px`;
     this.canvas.style.height = `${cssH}px`;
-    this.L = layout(cssW, cssH);
+    this.L = layout(cssW, cssH, this.formation);
     this.bg = null; this.sprites.clear(); this.glow.clear();
     if (!this.dust.length) for (let i = 0; i < 40; i++) this.dust.push({ x: Math.random(), y: Math.random(), vx: (Math.random() - 0.5) * 0.006, vy: (Math.random() - 0.5) * 0.004, a: 0.15 + Math.random() * 0.35 });
     if (!this.running) this.draw(performance.now());
@@ -165,7 +195,25 @@ export class MapScene {
   private onLeave = () => { if (this.hover) { this.hover = null; this.hooks.onAgentHover?.(null); } };
 
   // ── Event → scene ───────────────────────────────────────────────────────
-  private isActive(id: string) { return id === 'corina' || !this.activeAgents || this.activeAgents.has(id); }
+  private isActive(id: string) { return id in this.formation; }
+  /** Puts exactly the selected squad on the pitch (and nobody else), with a short staggered entrance. */
+  private setSquad(ids: readonly string[] | null, now: number) {
+    this.activeAgents = ids ? new Set(ids) : null;
+    this.formation = autoFormation(this.activeAgents);
+    this.spawnAt.clear();
+    Object.keys(this.formation).forEach((id, i) => this.spawnAt.set(id, now + i * 45));
+    if (this.L) this.L = layout(this.L.w, this.L.h, this.formation);
+  }
+  private confetti(at: Vec, n: number, now: number, opts: { colors?: string[]; speed?: number; delay?: number; gravity?: number; life?: number } = {}) {
+    if (this.reducedMotion) return;
+    const colors = opts.colors ?? CONFETTI;
+    for (let i = 0; i < n && this.particles.length < 600; i++) {
+      const a = Math.random() * Math.PI * 2; const sp = (opts.speed ?? 160) * (0.35 + Math.random() * 0.8);
+      this.particles.push({ x: at.x, y: at.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (opts.speed ?? 160) * 0.35, t0: now + (opts.delay ?? 0), life: (opts.life ?? 1400) * (0.7 + Math.random() * 0.5), color: colors[i % colors.length], size: 2 + Math.random() * 3, spin: Math.random() * 6, g: opts.gravity ?? 260 });
+    }
+  }
+  private shout(text: string, color: string, now: number, big = false, dur = 1500) { if (!this.reducedMotion) this.callout = { text, color, t0: now, dur: dur / this.speed, big }; }
+  private kick(to: Ref) { if (!this.reducedMotion) this.ball.to = to; }
   private say(id: string, text: string, color: string, now: number) { const a = this.agents.get(id); if (a) { a.bubble = { text: cut(text, 34), color, t0: now }; a.pulse = now; a.activity = 1; } }
   private send(from: Ref, to: Ref, color: string, now: number, opts: { size?: number; dur?: number; delay?: number; bend?: number; done?: () => void } = {}) {
     if (this.reducedMotion) { opts.done?.(); return; }
@@ -181,7 +229,10 @@ export class MapScene {
     const F = (id: string): Ref => ({ k: 'fx', id });
     const go = anim;
     switch (e.type) {
-      case 'JOB_CREATED': this.activeAgents = new Set(Array.isArray(p.custom?.agents) && p.custom.agents.length ? p.custom.agents as string[] : Array.isArray(p.agentIds) ? p.agentIds as string[] : LEGACY_VOTER_IDS); break;
+      case 'JOB_CREATED':
+        this.setSquad(Array.isArray(p.custom?.agents) && p.custom.agents.length ? p.custom.agents as string[] : Array.isArray(p.agentIds) ? p.agentIds as string[] : LEGACY_VOTER_IDS, go ? now : 0);
+        if (go) this.shout(`${Object.keys(this.formation).length} agenți intră pe teren`, C.cyan, now, false, 1800);
+        break;
       case 'TARGET_SELECTED': this.target = Number(p.target) || this.target; break;
       case 'STAGE_CHANGED': this.stage = e.stage; this.banner = null; break;
       case 'CANDIDATE_SELECTED': {
@@ -204,8 +255,11 @@ export class MapScene {
       case 'NEWS_COMMENTARY':
         if (go) this.send({ k: 'news' }, A('corina'), '#ec4899', now, { done: () => this.say('corina', cut(String(p.commentary ?? ''), 60), '#ec4899', performance.now()) });
         break;
+      case 'RESEARCH_BRIEF':
+        if (go && e.fixtureId) { const rep = this.isActive('hantu') ? 'hantu' : 'corina'; this.send({ k: 'src' }, A(rep), C.lime, now, { size: 1, done: () => { const t2 = performance.now(); this.say(rep, `🔎 dosar · ${cut(String(p.match ?? ''), 20)}`, C.lime, t2); this.send(A(rep), F(e.fixtureId!), C.lime, t2, { size: 0.8 }); } }); }
+        break;
       case 'NEWS_COLLECTED':
-        if (go) { this.send({ k: 'news' }, A('hantu'), C.lime, now, { size: 1.1, done: () => this.say('hantu', `${(p.home ?? 0) + (p.away ?? 0)} știri · ${cut(String(p.match ?? ''), 18)}`, C.lime, performance.now()) }); }
+        if (go) { const rep = this.isActive('hantu') ? 'hantu' : 'corina'; this.send({ k: 'news' }, A(rep), C.lime, now, { size: 1.1, done: () => this.say(rep, `${(p.home ?? 0) + (p.away ?? 0)} știri · ${cut(String(p.match ?? ''), 18)}`, C.lime, performance.now()) }); }
         break;
       case 'AGENT_STARTED': {
         const id = e.agentId!; const a = this.agents.get(id); if (!a) break;
@@ -224,6 +278,7 @@ export class MapScene {
           const label = e.type === 'POSITION_REVISED' ? `↺ ${bet ? p.marketLabel ?? p.marketKey : 'NO BET'}` : bet ? `${p.marketLabel ?? p.marketKey}${p.odds ? ` @${Number(p.odds).toFixed(2)}` : ''}` : 'NO BET';
           this.send(A(id), F(e.fixtureId), bet ? accent : C.muted, now, { size: bet ? 1.1 : 0.7, done: () => { this.setFx(e.fixtureId!, { flash: performance.now(), flashColor: bet ? accent : C.muted }); } });
           this.say(id, label, bet ? accent : C.muted, now);
+          if (bet) this.kick(A(id));
         }
         break;
       }
@@ -234,17 +289,19 @@ export class MapScene {
           const others = [...this.agents.values()].filter((o) => o.id !== id && this.isActive(o.id) && fx in o.picks && o.picks[fx] !== mine).slice(0, 3);
           this.send(A(id), F(fx), C.gold, now, { size: 1.2, done: () => { const t = performance.now(); others.forEach((o, i) => this.send(F(fx), A(o.id), C.gold, t, { delay: i * 80, size: 0.8, dur: 700 })); this.burst(F(fx), C.gold, t, 0.8); } });
           this.say(id, `„${String(p.objection ?? 'obiecție')}”`, C.gold, now);
+          this.kick(A(id)); this.confetti(this.refPos(A(id)), 8, now, { colors: [C.gold, '#fff3c4'], speed: 90, gravity: 0, life: 600 });
         }
         break;
       }
-      case 'AGENT_COMPLETED': { const a = this.agents.get(e.agentId!); if (a) { a.status = 'DONE'; if (go) this.burst(A(a.id), AGENT_META[a.id]?.accent ?? C.emerald, now, 0.6, 600); } break; }
+      case 'AGENT_COMPLETED': { const a = this.agents.get(e.agentId!); if (a) { a.status = 'DONE'; if (go) { const col = AGENT_META[a.id]?.accent ?? C.emerald; this.burst(A(a.id), col, now, 0.6, 600); this.confetti(this.refPos(A(a.id)), 10, now, { colors: [col, '#ffffff'], speed: 110, gravity: 120, life: 700 }); } } break; }
       case 'AGENT_FAILED': { const a = this.agents.get(e.agentId ?? ''); if (a) { a.status = 'FAILED'; if (go) { this.burst(A(a.id), C.rose, now, 0.8); this.say(a.id, 'indisponibil acum', C.rose, now); } } break; }
       case 'DEBATE_STARTED':
         for (const a of this.agents.values()) if (a.status !== 'FAILED') a.status = 'IDLE';
         for (const f of (Array.isArray(p.fixtures) ? p.fixtures : []) as string[]) { this.setFx(f, { state: 'DEBATE' }); if (go) this.burst(F(f), C.gold, now, 1.2); }
+        if (go) this.shout('⚔ DEZBATERE', C.gold, now);
         break;
       case 'BRAIN_STARTED':
-        if (go) { this.say(BRAIN, '🧠 aleg pronosticul ideal', C.gold, now); this.burst(A(BRAIN), C.gold, now, 1.6, 1200); }
+        if (go) { this.say(BRAIN, '🧠 aleg pronosticul ideal', C.gold, now); this.burst(A(BRAIN), C.gold, now, 1.6, 1200); this.shout('🧠 CREIERUL DECIDE', C.gold, now); this.kick(A(BRAIN)); }
         for (const f of this.fx.values()) if (['RESEARCH', 'ANALYSIS', 'DEBATE'].includes(f.state)) f.state = 'VOTING';
         break;
       case 'VOTE_SUBMITTED':
@@ -257,7 +314,7 @@ export class MapScene {
         if (e.fixtureId) { this.setFx(e.fixtureId, { votes: `${p.votesFor ?? 0}/${p.total ?? '?'}` }); if (go) this.burst(F(e.fixtureId), p.outcome === 'QUALIFIED' ? C.emerald : C.muted, now, 1); }
         break;
       case 'SELECTION_ACCEPTED':
-        if (e.fixtureId) { this.setFx(e.fixtureId, { state: 'ACCEPTED', odds: p.odds ?? null, market: p.marketLabel ?? null, acceptedIndex: this.acceptedCount++ }); if (go) this.burst(F(e.fixtureId), C.emerald, now, 1.5, 1100); }
+        if (e.fixtureId) { this.setFx(e.fixtureId, { state: 'ACCEPTED', odds: p.odds ?? null, market: p.marketLabel ?? null, acceptedIndex: this.acceptedCount++ }); if (go) { this.burst(F(e.fixtureId), C.emerald, now, 1.5, 1100); this.confetti(this.refPos(F(e.fixtureId)), 28, now); this.kick(F(e.fixtureId)); } }
         break;
       case 'SELECTION_REJECTED':
         if (e.fixtureId) { this.setFx(e.fixtureId, { state: 'REJECTED', market: p.marketLabel ?? null }); if (go) this.burst(F(e.fixtureId), C.rose, now, 1); }
@@ -266,7 +323,7 @@ export class MapScene {
         if (e.fixtureId) {
           const col = p.verdict === 'SOLID' ? C.emerald : p.verdict === 'RISCANT' ? C.gold : C.rose;
           this.setFx(e.fixtureId, { state: 'ACCEPTED', odds: p.odds ?? null, market: p.label ?? null, acceptedIndex: this.acceptedCount++, verdict: p.verdict });
-          if (go) { this.burst(F(e.fixtureId), col, now, 1.4, 1100); for (const id of ((p.supporters ?? []) as string[]).slice(0, 6)) this.send(A(id), F(e.fixtureId), col, now, { size: 0.6, delay: Math.random() * 250 }); }
+          if (go) { this.burst(F(e.fixtureId), col, now, 1.4, 1100); if (p.verdict === 'SOLID') this.confetti(this.refPos(F(e.fixtureId)), 22, now); for (const id of ((p.supporters ?? []) as string[]).slice(0, 6)) this.send(A(id), F(e.fixtureId), col, now, { size: 0.6, delay: Math.random() * 250 }); }
         }
         break;
       case 'REVIEW_ADVICE':
@@ -279,7 +336,15 @@ export class MapScene {
       case 'TICKET_FINALIZED':
         this.final = { totalOdds: p.totalOdds ?? null, generation: p.generation, legs: p.legs ?? 0, target: p.target ?? this.target };
         for (const a of this.agents.values()) if (a.status !== 'FAILED') a.status = 'DONE';
-        if (go) { this.burst({ k: 'tray' }, p.generation === 'COMPLETED' ? C.emerald : C.gold, now, 2.4, 1600); for (const id of FORMATION.map((f) => f.id).filter((x) => this.isActive(x))) this.send(A(id), { k: 'tray' }, AGENT_META[id]?.accent ?? C.cyan, now, { size: 0.6, delay: Math.random() * 300 }); }
+        if (go) { this.burst({ k: 'tray' }, p.generation === 'COMPLETED' ? C.emerald : C.gold, now, 2.4, 1600); for (const id of Object.keys(this.formation)) this.send(A(id), { k: 'tray' }, AGENT_META[id]?.accent ?? C.cyan, now, { size: 0.6, delay: Math.random() * 300 });
+          this.kick({ k: 'tray' });
+          if (p.generation === 'COMPLETED') {
+            this.shout('GOOOL! BILETUL E GATA', C.emerald, now, true, 2600);
+            const P = this.L.pitch;
+            for (let i = 0; i < 6; i++) this.confetti({ x: P.x + P.w * (0.15 + Math.random() * 0.7), y: P.y + P.h * (0.2 + Math.random() * 0.5) }, 40, now, { delay: i * 260, speed: 220 });
+            this.confetti(this.refPos({ k: 'tray' }), 50, now, { speed: 200 });
+          } else this.shout(p.generation === 'NO_BET' ? 'NO BET · PRUDENȚĂ' : 'BILET INCOMPLET', C.gold, now, true, 2000);
+        }
         break;
       case 'JOB_WAITING': case 'JOB_PAUSED':
         this.banner = { text: e.type === 'JOB_PAUSED' ? 'ÎN PAUZĂ' : 'AȘTEAPTĂ LIMITA FURNIZORULUI', color: C.gold };
@@ -298,7 +363,7 @@ export class MapScene {
       const item = this.queue.shift()!;
       this.apply(item.e, item.animate);
       this.hooks.onProgress?.(item.e.seq);
-      const visual = ['AGENT_STARTED', 'PREDICTION_SAVED', 'OBJECTION_RECORDED', 'POSITION_REVISED', 'BRAIN_DECISION', 'SELECTION_ACCEPTED', 'SELECTION_REJECTED', 'BATCH_STARTED', 'NEWS_COLLECTED', 'TICKET_FINALIZED', 'DEBATE_STARTED', 'BRAIN_STARTED', 'CONSENSUS_CALCULATED'].includes(item.e.type);
+      const visual = ['AGENT_STARTED', 'PREDICTION_SAVED', 'OBJECTION_RECORDED', 'POSITION_REVISED', 'BRAIN_DECISION', 'SELECTION_ACCEPTED', 'SELECTION_REJECTED', 'BATCH_STARTED', 'NEWS_COLLECTED', 'RESEARCH_BRIEF', 'TICKET_FINALIZED', 'DEBATE_STARTED', 'BRAIN_STARTED', 'CONSENSUS_CALCULATED'].includes(item.e.type);
       const base = visual ? 340 : item.e.type === 'VOTE_SUBMITTED' ? 45 : 0;
       this.nextAt = t + base / this.speed / (1 + this.queue.length / 10);
       if (base > 0) break;
@@ -318,6 +383,20 @@ export class MapScene {
     // Packets
     this.packets = this.packets.filter((p) => { if (t - p.t0 >= p.dur) { p.done?.(); return false; } return true; });
     this.bursts = this.bursts.filter((b) => t - b.t0 < b.dur);
+    this.particles = this.particles.filter((q) => {
+      if (t < q.t0) return true;
+      if (t - q.t0 > q.life) return false;
+      q.vy += q.g * dt; q.vx *= 1 - dt * 0.9; q.x += q.vx * dt; q.y += q.vy * dt; q.spin += dt * 8; return true;
+    });
+    if (this.callout && t - this.callout.t0 > this.callout.dur) this.callout = null;
+    if (this.L) {
+      const b = this.ball; const P = this.L.pitch;
+      if (b.pos.x === 0 && b.pos.y === 0) b.pos = { x: P.x + P.w / 2, y: P.y + P.h / 2 };
+      const tgt = b.to ? this.refPos(b.to) : { x: P.x + P.w / 2, y: P.y + P.h / 2 };
+      const kb = 1 - Math.exp(-dt * 4 * this.speed);
+      b.pos = { x: b.pos.x + (tgt.x - b.pos.x) * kb, y: b.pos.y + (tgt.y - b.pos.y) * kb };
+      b.trail.unshift({ ...b.pos }); if (b.trail.length > 12) b.trail.pop();
+    }
     this.draw(t);
     // FPS
     this.fpsAcc.frames++;
@@ -345,7 +424,7 @@ export class MapScene {
   private refPos(r: Ref): Vec {
     const L = this.L;
     switch (r.k) {
-      case 'agent': return L.agents[r.id] ?? { x: L.w / 2, y: L.h / 2 };
+      case 'agent': return L.agents[r.id] ?? L.src;
       case 'fx': { const f = this.fx.get(r.id); if (!f) return L.src; const w = this.fxWidth(f); return { x: f.pos.x + (L.mode === 'wide' ? 0 : w / 2) + (L.mode === 'wide' ? 4 : 0), y: f.pos.y }; }
       case 'src': return L.src;
       case 'news': return L.news;
@@ -381,7 +460,10 @@ export class MapScene {
     this.drawArena(t);
     this.drawAgents(t);
     this.drawBursts(t);
+    this.drawBall();
+    this.drawParticles(t);
     this.drawHud(t);
+    this.drawCallout(t);
   }
 
   private renderBackground() {
@@ -518,17 +600,30 @@ export class MapScene {
   private drawAgents(t: number) {
     const { ctx, L } = this;
     const r = L.r;
+    const squad = this.activeAgents !== null;
     for (const f of FORMATION) {
-      const a = this.agents.get(f.id)!; const p = L.agents[f.id]; const on = this.isActive(f.id);
+      if (!this.isActive(f.id)) continue; // unselected agents are not on the pitch at all
+      const a = this.agents.get(f.id)!; const p = L.agents[f.id];
+      if (!p) continue;
       const accent = AGENT_META[f.id]?.accent ?? C.cyan;
       ctx.save();
-      ctx.globalAlpha = on ? 1 : 0.22;
+      // Entrance: each selected agent pops onto the pitch
+      const sp = this.spawnAt.get(f.id); const enter = sp && !this.reducedMotion ? ease(clamp((t - sp) / 520, 0, 1)) : 1;
+      if (enter < 1) { ctx.translate(p.x, p.y); ctx.scale(0.3 + enter * 0.7, 0.3 + enter * 0.7); ctx.translate(-p.x, -p.y); ctx.globalAlpha = enter; }
+      // Every selected agent is highlighted (soft halo + rotating selection ring), not only the one talking
+      if (squad && f.id !== 'corina') {
+        const hs = this.glowSprite(accent); const hr = r * (1.9 + Math.sin(t / 700 + f.u * 9) * 0.12);
+        ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.22 * enter; ctx.drawImage(hs, p.x - hr, p.y - hr, hr * 2, hr * 2);
+        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = enter;
+        ctx.save(); ctx.strokeStyle = hexA(accent, 0.7); ctx.lineWidth = 1.2; ctx.setLineDash([5, 5]); ctx.lineDashOffset = -t / 60;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r + 9, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
       // Glow when working
       const working = a.status === 'ANALYZING' || a.status === 'DEBATING';
-      if (on && (working || a.activity > 0.05 || this.hover === f.id)) {
+      if (working || a.activity > 0.05 || this.hover === f.id) {
         const s = this.glowSprite(a.status === 'DEBATING' ? C.gold : accent); const gs = r * (2.4 + (working ? Math.sin(t / 260) * 0.25 : 0) + a.activity * 0.6);
         ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = working ? 0.5 : 0.3 + a.activity * 0.3; ctx.drawImage(s, p.x - gs, p.y - gs, gs * 2, gs * 2);
-        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = enter;
       }
       // Disc + portrait
       ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fillStyle = '#0f1a35'; ctx.fill();
@@ -547,23 +642,23 @@ export class MapScene {
         if (a.status === 'WAITING') ctx.setLineDash([3, 4]);
         ctx.beginPath(); ctx.arc(p.x, p.y, r + 2, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
       }
-      if (a.status === 'DONE' && on) { ctx.beginPath(); ctx.arc(p.x + r * 0.72, p.y - r * 0.72, 6, 0, Math.PI * 2); ctx.fillStyle = C.emerald; ctx.fill(); ctx.strokeStyle = '#04121a'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(p.x + r * 0.72 - 3, p.y - r * 0.72); ctx.lineTo(p.x + r * 0.72 - 1, p.y - r * 0.72 + 2.5); ctx.lineTo(p.x + r * 0.72 + 3, p.y - r * 0.72 - 2.5); ctx.stroke(); }
-      if (f.id === BRAIN && on && L.mode === 'wide') { ctx.font = `700 9px ${this.font}`; ctx.fillStyle = C.gold; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('CREIER', p.x, p.y - r - 6); }
+      if (a.status === 'DONE') { ctx.beginPath(); ctx.arc(p.x + r * 0.72, p.y - r * 0.72, 6, 0, Math.PI * 2); ctx.fillStyle = C.emerald; ctx.fill(); ctx.strokeStyle = '#04121a'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(p.x + r * 0.72 - 3, p.y - r * 0.72); ctx.lineTo(p.x + r * 0.72 - 1, p.y - r * 0.72 + 2.5); ctx.lineTo(p.x + r * 0.72 + 3, p.y - r * 0.72 - 2.5); ctx.stroke(); }
+      if (f.id === BRAIN && L.mode === 'wide') { ctx.font = `700 9px ${this.font}`; ctx.fillStyle = C.gold; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('CREIER', p.x, p.y - r - 6); }
       // Name
       ctx.font = `600 ${r < 24 ? 10 : 11}px ${this.font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      const label = on ? (f.id === BRAIN && L.mode === 'tall' ? `🧠 ${NAME(f.id)}` : NAME(f.id)) : `${NAME(f.id)} · bancă`;
-      ctx.fillStyle = on ? C.text : C.muted; ctx.fillText(fit(ctx, label, L.mode === 'wide' ? 120 : 86), p.x, p.y + r + 6);
+      const label = f.id === BRAIN && L.mode === 'tall' ? `🧠 ${NAME(f.id)}` : NAME(f.id);
+      ctx.fillStyle = C.text; ctx.fillText(fit(ctx, label, L.mode === 'wide' ? 120 : 86), p.x, p.y + r + 6);
       ctx.restore();
     }
     // Speech bubbles on top of everything (newest few only, so the map stays readable on a phone)
-    const maxBubbles = L.mode === 'wide' ? 6 : 3;
+    const maxBubbles = L.mode === 'wide' ? 8 : 4;
     const talking = new Set(FORMATION.map((f) => this.agents.get(f.id)!).filter((a) => a.bubble && this.isActive(a.id)).sort((a, b) => b.bubble!.t0 - a.bubble!.t0).slice(0, maxBubbles).map((a) => a.id));
     for (const f of FORMATION) {
       const a = this.agents.get(f.id)!; if (!a.bubble || !this.isActive(f.id)) continue;
       if (!talking.has(f.id)) { if ((t - a.bubble.t0) / 1000 > 3.6 / this.speed) a.bubble = null; continue; }
       const age = (t - a.bubble.t0) / 1000; const life = 3.6 / this.speed;
       if (age > life) { a.bubble = null; continue; }
-      const p = L.agents[f.id];
+      const p = L.agents[f.id]; if (!p) continue;
       const alpha = Math.min(1, age * 6) * Math.min(1, (life - age) * 2);
       ctx.save(); ctx.globalAlpha = alpha;
       ctx.font = `600 11px ${this.font}`;
@@ -575,6 +670,50 @@ export class MapScene {
       ctx.fillText(fit(ctx, a.bubble.text, w - 14), bx + 8, by + h / 2 + 0.5);
       ctx.restore();
     }
+  }
+
+  private drawBall() {
+    if (this.reducedMotion || !this.ball.to) return;
+    const { ctx } = this; const b = this.ball;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const s = this.glowSprite('#ffffff');
+    b.trail.forEach((q, i) => { ctx.globalAlpha = (1 - i / b.trail.length) * 0.25; const z = 7 - i * 0.4; ctx.drawImage(s, q.x - z, q.y - z, z * 2, z * 2); });
+    ctx.restore(); ctx.save();
+    ctx.beginPath(); ctx.arc(b.pos.x, b.pos.y, 5, 0, Math.PI * 2); ctx.fillStyle = '#f8fafc'; ctx.fill();
+    ctx.beginPath(); ctx.arc(b.pos.x, b.pos.y, 1.8, 0, Math.PI * 2); ctx.fillStyle = '#0f172a'; ctx.fill();
+    ctx.restore();
+  }
+
+  private drawParticles(t: number) {
+    if (!this.particles.length) return;
+    const { ctx } = this;
+    ctx.save();
+    for (const q of this.particles) {
+      if (t < q.t0) continue;
+      const u = (t - q.t0) / q.life;
+      ctx.globalAlpha = Math.max(0, 1 - u * u);
+      ctx.fillStyle = q.color;
+      const w = q.size * Math.abs(Math.cos(q.spin)) + 1;
+      ctx.fillRect(q.x - w / 2, q.y - q.size / 2, w, q.size);
+    }
+    ctx.restore();
+  }
+
+  private drawCallout(t: number) {
+    const c = this.callout; if (!c) return;
+    const { ctx, L } = this; const P = L.pitch;
+    const u = (t - c.t0) / c.dur;
+    const pop = u < 0.15 ? ease(u / 0.15) : 1; const fade = u > 0.75 ? 1 - (u - 0.75) / 0.25 : 1;
+    const size = (c.big ? Math.min(34, P.w / 14) : 14) * (0.6 + pop * 0.4);
+    ctx.save();
+    ctx.globalAlpha = fade; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `800 ${Math.round(size)}px ${this.font}`;
+    const x = P.x + P.w / 2, y = c.big ? P.y + P.h / 2 : P.y + 46;
+    const w = ctx.measureText(c.text).width + 32, h = size + 18;
+    if (c.big) { const s = this.glowSprite(c.color); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.45 * fade; ctx.drawImage(s, x - w * 0.7, y - h * 1.6, w * 1.4, h * 3.2); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = fade; }
+    roundRect(ctx, x - w / 2, y - h / 2, w, h, h / 2); ctx.fillStyle = 'rgba(6,11,24,0.82)'; ctx.fill(); ctx.strokeStyle = hexA(c.color, 0.9); ctx.lineWidth = c.big ? 2 : 1.2; ctx.stroke();
+    ctx.fillStyle = c.color; ctx.fillText(c.text, x, y + 1);
+    ctx.restore();
   }
 
   private drawArena(t: number) {
@@ -656,7 +795,7 @@ export class MapScene {
 }
 
 // ── Layout ───────────────────────────────────────────────────────────────
-function layout(w: number, h: number): Layout {
+function layout(w: number, h: number, form: Record<string, Spot>): Layout {
   const wide = w / h > 1.15;
   if (wide) {
     const arenaW = clamp(w * 0.27, 190, 300);
@@ -665,9 +804,9 @@ function layout(w: number, h: number): Layout {
     const queue = { x: ax, y: 12, w: arenaW, h: clamp(h * 0.24, 122, 136) };
     const tray = { x: ax, y: h - 12 - clamp(h * 0.34, 120, 230), w: arenaW, h: clamp(h * 0.34, 120, 230) };
     const active = { x: ax, y: queue.y + queue.h + 10, w: arenaW, h: tray.y - (queue.y + queue.h + 10) - 10 };
-    const r = clamp(Math.min(pitch.w / 30, pitch.h / 13), 13, 24);
+    const r = clamp(Math.min(pitch.w / 30, pitch.h / 13), 13, 24) * (Object.keys(form).length > 24 ? 0.82 : 1);
     const agents: Record<string, Vec> = {};
-    for (const f of FORMATION) agents[f.id] = { x: pitch.x + 30 + f.u * (pitch.w - 60), y: pitch.y + 75 + f.v * (pitch.h - 160) };
+    for (const [id, f] of Object.entries(form)) agents[id] = { x: pitch.x + 30 + f.u * (pitch.w - 60), y: pitch.y + 75 + f.v * (pitch.h - 160) };
     return { mode: 'wide', w, h, r, pitch, agents, src: { x: pitch.x + pitch.w - 120, y: pitch.y + 18 }, news: { x: pitch.x + 22, y: pitch.y + 18 }, discard: { x: ax + arenaW + 40, y: active.y + active.h / 2 }, queue, active, tray };
   }
   const queue = { x: 10, y: 10, w: w - 20, h: 48 };
@@ -675,9 +814,9 @@ function layout(w: number, h: number): Layout {
   const trayH = clamp(h * 0.16, 96, 132);
   const tray = { x: 10, y: h - 10 - trayH, w: w - 20, h: trayH };
   const pitch = { x: 10, y: active.y + active.h + 10, w: w - 20, h: tray.y - (active.y + active.h + 10) - 10 };
-  const r = clamp(Math.min(pitch.w / 13, pitch.h / 30), 12, 20);
+  const r = clamp(Math.min(pitch.w / 13, pitch.h / 30), 12, 20) * (Object.keys(form).length > 24 ? 0.85 : 1);
   const agents: Record<string, Vec> = {};
-  for (const f of FORMATION) agents[f.id] = { x: pitch.x + 54 + f.v * (pitch.w - 108), y: pitch.y + pitch.h - 30 - f.u * (pitch.h - 76) };
+  for (const [id, f] of Object.entries(form)) agents[id] = { x: pitch.x + 54 + f.v * (pitch.w - 108), y: pitch.y + pitch.h - 30 - f.u * (pitch.h - 76) };
   return { mode: 'tall', w, h, r, pitch, agents, src: { x: pitch.x + 14, y: pitch.y + 14 }, news: { x: pitch.x + pitch.w - 54, y: pitch.y + 14 }, discard: { x: w / 2, y: -40 }, queue, active, tray };
 }
 
