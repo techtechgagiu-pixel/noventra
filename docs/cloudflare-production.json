@@ -1,0 +1,76 @@
+{
+  "format": 1,
+  "hostname": "primul11.noventra.ro",
+  "worker": "primul11-app",
+  "database": "primul11-production-20261026",
+  "databaseId": "8ec1fe52-2f39-46d4-9c8b-22271a5c3d4a",
+  "domainCutover": true,
+  "verifiedAt": "2026-10-26T13:18:40.246553+00:00",
+  "frozenSourceBackupVerified": true,
+  "finalD1ParityVerified": true,
+  "realGoogleOAuthVerified": true,
+  "runnerD1Verified": true,
+  "cronExecutionVerified": true,
+  "publicRoutesVerified": true,
+  "snapshot": {
+    "tables": 26,
+    "rows": 83608,
+    "tickets": 82,
+    "users": 14,
+    "agents": 34,
+    "allRowsCompared": true,
+    "identical": true,
+    "foreignKeyViolations": 0,
+    "transientLeasesReset": true,
+    "nativePostgresArchiveVerified": true
+  },
+  "runner": {
+    "service": "betmind-nexus",
+    "plan": "free",
+    "backend": "d1-http",
+    "runnerOnly": true,
+    "maintenance": false,
+    "bootAndD1BridgeVerified": true,
+    "idleColdWakeMeasured": false
+  },
+  "settlement": {
+    "workflow": "primul11-results",
+    "cron": "*/5 * * * *",
+    "scheduledExecutionObserved": true,
+    "instance": "settlement-5976735",
+    "startedAt": "2026-10-26T13:15:42.538Z",
+    "completedAt": "2026-10-26T13:17:57.148Z",
+    "status": "complete",
+    "pages": 30,
+    "steps": 31,
+    "retries": 0,
+    "moreWork": true,
+    "sourceErrorsLastPage": 0
+  },
+  "validation": {
+    "unitAndIntegration": 205,
+    "browser": 19,
+    "converter": 12,
+    "authenticatedHttpRoutes": 15,
+    "careerAgentRecordsCompared": 34,
+    "anonymousStatisticsStatus": 401,
+    "ordinaryGoogleAdminStatus": 403,
+    "unsignedBridgeStatus": 401,
+    "realAiCalls": 0,
+    "tailObserved": {
+      "events": 575,
+      "exceptions": 0,
+      "outcomes": [
+        "ok"
+      ],
+      "cpuTimeRawMax": 587
+    }
+  },
+  "workerVersion": "656d4db6-1392-4372-8cb7-b947388a8c86",
+  "sourceCodeCommit": "b1ffa76f3c7722791625d0c5cf0a2a35ebd4dc7a",
+  "notes": [
+    "Counts describe the frozen source snapshot; live data evolves after release.",
+    "Initial alphabetical D1 import rolled back completely; parent-first import verified before proceeding.",
+    "No subscription purchased by the agent. Cloudflare plan was upgraded by the user."
+  ]
+}

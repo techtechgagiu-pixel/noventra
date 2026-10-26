@@ -486,5 +486,7 @@
     "postgres-query": 21,
     "leases-and-locks": 11,
     "persistent-loop": 12
-  }
+  },
+  "historicalReport": true,
+  "supersededBy": "cloudflare-production.json"
 }

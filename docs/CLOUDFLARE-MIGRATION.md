@@ -1,12 +1,17 @@
-# PRIMUL 11 — mutare Cloudflare, staging hibrid
+# PRIMUL 11 — producție Cloudflare + D1
 
-Stare 26 octombrie 2026: utilizatorul a activat separat planul plătit Cloudflare, iar panoul D1 confirmă 50M scrieri incluse/lună. **Importul istoric complet:26 tabele /82.933 rânduri**, recitite remote și comparate integral, zero diferențe/FK rupte. Migrările D1 0001–0007 sunt aplicate pe ținta izolată. Codul include acum și ultima versiune publicată cu identități de modele AI.
+Mutarea efectivă s-a făcut pe 26 octombrie 2026. `primul11.noventra.ro` este domeniu personalizat al Workerului `primul11-app`, cu baza `primul11-production-20261026` (EU). Render `betmind-nexus` rămâne serviciul Free pentru analizele lungi, conectat la aceeași bază prin bridge HMAC. Neon și arhivele PostgreSQL se păstrează pentru recuperare; aplicația live nu le mai folosește.
 
-**Producția rămâne Render + Neon.** Există acum un Worker remote de validare, `primul11-validation`, protejat printr-o cheie privată în header, inclusiv înainte de instalarea secretelor. Bridge-ul are separat HMAC. Cron este gol, runnerul nu este conectat și nicio analiză AI reală nu a fost pornită.15pagini/API-uri trec cu sesiune sintetică obișnuită; admin refuzat403, bridge nesemnat401. Verzi/roșii/NO_BET/pending și recordul de carieră al tuturor34agenți coincid cu copia istorică sursă. Google OAuth real și ciclul real de trezire/recuperare Render rămân de verificat. Workflow-ul remote `migration-check-20261026` a finalizat cu succes mentenanța și30pagini de rezultate, fără retry/eroare; a raportat încă lucru restant (`moreWork:true`). Această probă modifică numai copia izolată; Cron rămâne oprit și nu înseamnă că întreg backlogul a fost actualizat.
+**Snapshot final înghețat: 26 tabele / 83.608 rânduri**, 82 bilete, 14 utilizatori și 34 agenți. Exportul remote D1 a fost comparat integral cu conversia sursei: zero diferențe, zero FK rupte, integritate `ok` pe copia SQLite reexportată. Singura normalizare intenționată: lease-uri tranzitorii golite. După verificare s-au aplicat migrările D1 0002–0007. Datele continuă apoi să evolueze normal, deci aceste numere descriu momentul transferului.
 
-Snapshotul este istoric: producția a primit între timp date noi. Cutoverul necesită oprirea coordonată a scrierilor și snapshot/reconciliere finală. Nu conecta runnerul la copia de validare și nu schimba DNS înainte de acești pași. Datele private/secretele sunt în afara Git, cu permisiuni restrictive; numai numele lor apar în configurațiile versionate.
+Google OAuth real a fost verificat pe callback-ul existent, apoi Custom; autentificarea Google rămâne de utilizator obișnuit. Codul administratorului și invitațiile sunt păstrate. Cele 15 rute autentificate au trecut și pe ținta finală; accesul anonim la statistici este refuzat 401, admin pentru Google 403, bridge nesemnat 401. Recordurile de carieră ale tuturor celor 34 de agenți coincid cu sursa înainte de reluarea actualizărilor. Nu s-au pornit analize AI reale pentru probe.
 
-## Arhitectura pregătită
+Prima execuție programată reală, `settlement-5976735`, a finalizat mentenanța și 30 de pagini la 26.10.2026 13:17:57 UTC: 31 de pași, fără retry sau eroare. Ultima pagină are `sourceErrors:0`, iar `moreWork:true` indică backlog preluat de următoarele execuții, nu o promisiune că toate meciurile sunt deja soluționate.
+
+Configurația live este `wrangler.production.jsonc`; comenzile sunt `npm run cf:build:production` și `npm run cf:deploy`. Starea finală verificată și execuția Cron sunt consemnate în [cloudflare-production.json](cloudflare-production.json). Importul istoric și Workerul privat descrise mai jos sunt dovezi de pregătire, nu ținte de producție.
+
+## Arhitectura în producție
+
 
 - **Site și date:** Next 16.4.2 / React 19.2.0, OpenNext 1.20.13, Cloudflare Workers + D1.
 - **Analize lungi:** serviciul web Render existent execută joburile cerute explicit de utilizatori. Nu se creează serviciu Render Background Worker plătit. Păstrează pașii, modelele, rolurile, consensul și checkpointurile pipeline-ului existent.
@@ -84,7 +89,7 @@ Pentru un rând valid al cărui INSERT depășește 100 KB, textul este împăr�
 
 **Import complet după upgrade:** `remote-phases/progress.json` marchează toate cele13faze finalizate,82.933importate/0rămase. Contul are acum cotă lunară plătită, confirmată în panou. Nu reexecuta loturile sau dumpul peste ținta populată. Nu s-a creat o automatizare de continuare. Celelalte aplicații împart consumul contului.
 
-**Nu importa peste staging-ul deja populat cu configurații.** Pregătește o țintă nouă, goală. Compară schema generată cu baseline-ul 0001 și rezolvă explicit orice diferență. Aplică doar baseline-ul 0001 folosind temporar un director de migrări care conține numai acel fișier; importă apoi `data-only.sql`, care nu creează/șterge tabele și nu face upsert peste date. Verifică din nou fiecare rând și FK, apoi aplică migrările 0002–0007 din directorul normal. Bootstrap-ul agenților păstrează asignările/prompturile existente și adaugă doar lipsurile. Nu aplica migrarea 0001 peste o bază creată deja cu `import.sql`.
+**Nu importa peste staging-ul deja populat cu configurații.** Pregătește o țintă nouă, goală. Compară schema generată cu baseline-ul 0001 și rezolvă explicit orice diferență. Importul trebuie ordonat după dependențele FK (părinții înaintea copiilor); D1 poate încheia tranzacții între fragmente, deci `defer_foreign_keys` singur nu ajunge. Converterul verifică acum această ordine, iar un test comite separat fiecare comandă. Prima încercare finală în ordine alfabetică a fost anulată integral de D1, baza goală a fost verificată înainte de reluare. Aplică doar baseline-ul 0001 folosind temporar un director de migrări care conține numai acel fișier; importă apoi `data-only.sql`, care nu creează/șterge tabele și nu face upsert peste date. Verifică din nou fiecare rând și FK, apoi aplică migrările 0002–0007 din directorul normal. Bootstrap-ul agenților păstrează asignările/prompturile existente și adaugă doar lipsurile. Nu aplica migrarea 0001 peste o bază creată deja cu `import.sql`.
 
 `verification.json` confirmă conversia locală; nu este o confirmare a egalității bazei remote. Comparația integrală remote cu snapshotul real rămâne obligatorie înainte de cutover.
 
