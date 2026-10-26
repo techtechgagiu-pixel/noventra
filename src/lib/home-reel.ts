@@ -1,5 +1,5 @@
 import { cleanPayload } from './agent-names';
-import { many, one } from './db';
+import { many, one, dialect, SQL_AGO, timeCompare } from './db';
 import { slotInfo } from './slots';
 import type { NexusEvent } from './nexus-state';
 
@@ -54,8 +54,8 @@ export async function homeThreads(userId: string, scope: 'mine' | 'community' = 
      FROM analysis_events e JOIN ticket_generation_jobs j ON j.id=e.job_id
      WHERE j.id IN (
        SELECT recent.id FROM ticket_generation_jobs recent
-       WHERE ($2::boolean OR recent.user_id=$1) AND recent.status='COMPLETED'
-         AND recent.created_at > now() - interval '7 days'
+       WHERE (${dialect('$2::boolean','$2')} OR recent.user_id=$1) AND recent.status='COMPLETED'
+         AND ${timeCompare('recent.created_at','>',SQL_AGO(7,'days'))}
          AND EXISTS (SELECT 1 FROM analysis_events debate WHERE debate.job_id=recent.id AND debate.type='OBJECTION_RECORDED')
        ORDER BY recent.finished_at DESC NULLS LAST, recent.created_at DESC LIMIT 4
      ) AND e.fixture_id IS NOT NULL

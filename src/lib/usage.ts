@@ -1,5 +1,4 @@
-import type pg from 'pg';
-import { query, one } from './db';
+import { query, one, type Db } from './db';
 
 /** UTC day key used for provider quotas. */
 export const utcDay = (at = new Date()) => at.toISOString().slice(0, 10);
@@ -26,7 +25,7 @@ export async function providerUsageToday(provider: string) {
 }
 
 /** Totals across every AI provider for the current UTC day. */
-export async function aiUsageToday(db?: pg.PoolClient) {
+export async function aiUsageToday(db?: Db) {
   const row = await one<{ requests: string; tokens: string }>(
     `SELECT COALESCE(SUM(requests),0) AS requests, COALESCE(SUM(tokens),0) AS tokens FROM provider_usage
      WHERE day=$1 AND provider IN ('groq','gemini','openrouter')`,

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from '../config';
-import { one, query } from '../db';
+import { one, query, isD1, dialect, SQL_NOW } from '../db';
 import { BudgetExceededError, RateLimitError } from '../ai/router';
 import { QuotaExceededError } from '../sports/http';
 import { recordEvent } from './events';
@@ -13,6 +13,10 @@ const state = (g.__betmindWorker ??= { running: 0, timer: null, started: false }
 
 /** Atomically claims one runnable job (expired leases are reclaimed after a restart). */
 async function claim(): Promise<(JobRow & { recovered: boolean }) | null> {
+  if(isD1())return one<JobRow & {recovered:boolean}>(`UPDATE ticket_generation_jobs SET claim_recovered=(status='RUNNING'),lease_owner=$1,lease_expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','+3 minutes'),status='RUNNING',started_at=COALESCE(started_at,strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    WHERE id=(SELECT id FROM ticket_generation_jobs WHERE ((status IN ('QUEUED','WAITING') AND julianday(next_run_at)<=julianday('now')) OR (status='RUNNING' AND (lease_expires_at IS NULL OR julianday(lease_expires_at)<julianday('now')))) ORDER BY next_run_at LIMIT 1)
+      AND (SELECT count(*) FROM ticket_generation_jobs WHERE status='RUNNING' AND julianday(lease_expires_at)>julianday('now'))<$2
+    RETURNING *,claim_recovered AS recovered`,[WORKER_ID,config.limits.maxConcurrentJobs]);
   return one<JobRow & { recovered: boolean }>(
     `WITH picked AS (
        SELECT id, (status = 'RUNNING') AS recovered FROM ticket_generation_jobs
@@ -33,13 +37,13 @@ async function wasInterrupted(jobId: string) {
 async function processOne(): Promise<boolean> {
   const job = await claim();
   if (!job) return false;
-  const tick = setInterval(() => { void query("UPDATE ticket_generation_jobs SET lease_expires_at=now() + interval '3 minutes' WHERE id=$1 AND lease_owner=$2", [job.id, WORKER_ID]).catch((e) => console.error(JSON.stringify({ event: 'worker_heartbeat_failed', message: (e as Error).message }))); }, 60_000);
+  const tick = setInterval(() => { void query(`UPDATE ticket_generation_jobs SET lease_expires_at=${dialect("now()+interval '3 minutes'","strftime('%Y-%m-%dT%H:%M:%fZ','now','+3 minutes')")} WHERE id=$1 AND lease_owner=$2`, [job.id, WORKER_ID]).catch((e) => console.error(JSON.stringify({ event: 'worker_heartbeat_failed', message: (e as Error).message }))); }, 60_000);
   try {
     if (job.recovered && job.stage !== 'QUEUED' && (await wasInterrupted(job.id))) {
       await recordEvent(job.id, { type: 'JOB_RESUMED', stage: job.stage, payload: { by: 'system', note: 'Execuția a fost reluată din ultimul checkpoint salvat (serviciul a fost repornit sau a fost inactiv). Între timp nu s-a procesat nimic.' } });
     }
     const outcome = await runJobSlice(job);
-    if (outcome === 'CONTINUE') await query("UPDATE ticket_generation_jobs SET status='QUEUED', next_run_at=now(), lease_owner=NULL, lease_expires_at=NULL WHERE id=$1 AND lease_owner=$2", [job.id, WORKER_ID]);
+    if (outcome === 'CONTINUE') await query(`UPDATE ticket_generation_jobs SET status='QUEUED', next_run_at=${SQL_NOW()}, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1 AND lease_owner=$2`, [job.id, WORKER_ID]);
   } catch (error) {
     await handleError(job, error as Error);
   } finally {
@@ -53,7 +57,7 @@ async function handleError(job: JobRow, error: Error) {
   console.error(JSON.stringify({ event: 'job_error', jobId: job.id, stage: job.stage, message: msg }));
   if (error instanceof RateLimitError && (!error.daily || error.retryAfterMs <= 15 * 60_000)) {
     const waitMs = Math.min(Math.max(error.retryAfterMs, 5_000), 15 * 60_000);
-    await query("UPDATE ticket_generation_jobs SET status='WAITING', next_run_at=now() + ($2 || ' milliseconds')::interval, last_error=$3, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1", [job.id, String(waitMs), msg]);
+    await query(`UPDATE ticket_generation_jobs SET status='WAITING',next_run_at=${dialect("now()+($2||' milliseconds')::interval","strftime('%Y-%m-%dT%H:%M:%fZ','now','+'||($2/1000.0)||' seconds')")},last_error=$3,lease_owner=NULL,lease_expires_at=NULL WHERE id=$1`, [job.id, String(waitMs), msg]);
     await recordEvent(job.id, { type: 'JOB_WAITING', stage: job.stage, payload: { reason: msg, provider: error.provider, retryInSeconds: Math.ceil(waitMs / 1000) } });
     return;
   }
@@ -66,7 +70,7 @@ async function handleError(job: JobRow, error: Error) {
   const attempts = job.attempt_count + 1;
   if (attempts < 4) {
     const backoff = 15_000 * 2 ** (attempts - 1);
-    await query("UPDATE ticket_generation_jobs SET status='WAITING', attempt_count=$2, next_run_at=now() + ($3 || ' milliseconds')::interval, last_error=$4, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1", [job.id, attempts, String(backoff), msg]);
+    await query(`UPDATE ticket_generation_jobs SET status='WAITING',attempt_count=$2,next_run_at=${dialect("now()+($3||' milliseconds')::interval","strftime('%Y-%m-%dT%H:%M:%fZ','now','+'||($3/1000.0)||' seconds')")},last_error=$4,lease_owner=NULL,lease_expires_at=NULL WHERE id=$1`, [job.id, attempts, String(backoff), msg]);
     await recordEvent(job.id, { type: 'JOB_WAITING', stage: job.stage, payload: { reason: msg, attempt: attempts, retryInSeconds: backoff / 1000 } });
   } else {
     await query("UPDATE ticket_generation_jobs SET status='PAUSED', attempt_count=$2, last_error=$3, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1", [job.id, attempts, msg]);
@@ -102,4 +106,4 @@ export function startWorker() {
 }
 
 export const workerId = WORKER_ID;
-export { processOne as _processOneForTests };
+export { processOne as _processOneForTests, claim as _claimForTests };

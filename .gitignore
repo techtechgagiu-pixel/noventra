@@ -8,8 +8,8 @@ playwright-report/
 *.tsbuildinfo
 .DS_Store
 scripts/dev/*.log
-
-# Private Cloudflare development state
-.dev.vars
 .open-next/
 .wrangler/
+.dev.vars*
+migration-private/
+__pycache__/

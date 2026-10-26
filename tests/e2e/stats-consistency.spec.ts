@@ -37,7 +37,8 @@ test('archive filters, agent history and every statistics view use the same save
   const performance=await(await page.request.get('/api/performance')).json();
   expect(performance.tickets.total).toBe(allTickets.length);
   const summary=page.getByRole('region',{name:'Performanța biletelor afișate'});
-  // The archive hides NO_BET/empty and multiple-loss tickets; API history remains complete.
+  // The archive intentionally hides empty/NO_BET and tickets with multiple red legs.
+  // Its summary must match the visible creator-filter count; the API retains the full history.
   const count=async(label:RegExp)=>Number((await page.getByRole('option',{name:label}).textContent())!.match(/\((\d+)\)/)![1]);
   const visible=await count(/^toată lumea/);expect(visible).toBeLessThanOrEqual(allTickets.length);
   await expect(summary.getByText('Bilete afișate',{exact:true}).locator('..')).toContainText(String(visible));

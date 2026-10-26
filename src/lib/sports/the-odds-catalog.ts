@@ -1,4 +1,4 @@
-import { one, query } from '../db';
+import { one, query, dialect, SQL_NOW, timeCompare } from '../db';
 import { dateRange, localDate } from '../time';
 import { utcDay } from '../usage';
 import type { InformationalMatch } from './informational-matches';
@@ -46,8 +46,8 @@ function publicError(status: number) {
       : 'The Odds API nu este disponibil acum. Păstrăm ultimul program disponibil.';
 }
 async function refresh(today: string, count: number, key: string) {
-  const claimed = await one<CacheRow>(`INSERT INTO sports_catalog_cache(provider,next_attempt_at) VALUES($1,now()+interval '5 minutes')
-    ON CONFLICT(provider) DO UPDATE SET next_attempt_at=now()+interval '5 minutes' WHERE sports_catalog_cache.next_attempt_at<=now()
+  const claimed = await one<CacheRow>(`INSERT INTO sports_catalog_cache(provider,next_attempt_at) VALUES($1,${dialect("now()+interval '5 minutes'","strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 minutes')")})
+    ON CONFLICT(provider) DO UPDATE SET next_attempt_at=${dialect("now()+interval '5 minutes'","strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 minutes')")} WHERE ${timeCompare('sports_catalog_cache.next_attempt_at','<=',SQL_NOW())}
     RETURNING payload,next_attempt_at,last_error`, [PROVIDER]);
   if (!claimed) return;
   const payload: Payload = { ...claimed.payload, byLeague: { ...claimed.payload.byLeague } };
@@ -98,10 +98,11 @@ async function refresh(today: string, count: number, key: string) {
 export async function theOddsCatalog(today: string, count: number, enabled = true) {
   const empty = { fixtures: [] as InformationalMatch[], source: { configured: false, refreshing: false, updatedAt: null, leaguesLoaded: 0, leaguesTotal: 0, creditsUsed: null, creditsRemaining: null, error: null } as InformationalSourceStatus };
   const key = process.env.ODDS_API_KEY?.trim();
-  if (!enabled || !key) return empty;
+  const cloudflare=process.env.BETMIND_RUNTIME?.startsWith('cloudflare');
+  if (!enabled || (!key&&!cloudflare)) return empty;
   try {
     const cached = await one<CacheRow>('SELECT payload,next_attempt_at,last_error FROM sports_catalog_cache WHERE provider=$1', [PROVIDER]);
-    if ((!cached || cached.next_attempt_at.getTime() <= Date.now()) && !g.__p11TheOddsRefresh) {
+    if (!cloudflare && key && (!cached || cached.next_attempt_at.getTime() <= Date.now()) && !g.__p11TheOddsRefresh) {
       g.__p11TheOddsRefresh = refresh(today, count, key).catch(() => console.warn(JSON.stringify({ event: 'the_odds_catalog_failed' }))).finally(() => { g.__p11TheOddsRefresh = null; });
     }
     const sports = cached?.payload.sports ?? [], snapshots = sports.flatMap((s) => cached?.payload.byLeague?.[s.key] ? [cached.payload.byLeague[s.key]] : []);

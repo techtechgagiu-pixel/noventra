@@ -1,7 +1,7 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { config, isProduction } from './config';
-import { one, query, tx } from './db';
+import { one, query, atomic, SQL_NOW, timeCompare } from './db';
 
 export const SESSION_COOKIE = 'bm_sid';
 export const OAUTH_COOKIE = 'bm_oauth';
@@ -32,9 +32,9 @@ export async function userFromToken(raw: string | undefined): Promise<User | nul
        CASE WHEN s.owner_code_hash=$2 AND $2<>'' THEN 'admin' WHEN $3 THEN u.role ELSE 'user' END AS role,
        u.sound_enabled,u.sound_volume
      FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN invitation_codes i ON i.id=s.invitation_id
-     WHERE s.id=$1 AND s.expires_at>now() AND (
+     WHERE s.id=$1 AND ${timeCompare('s.expires_at','>',SQL_NOW())} AND (
        (s.owner_code_hash=$2 AND $2<>'') OR
-       (i.id IS NOT NULL AND i.user_id=s.user_id AND i.revoked_at IS NULL AND i.expires_at>now()) OR
+       (i.id IS NOT NULL AND i.user_id=s.user_id AND i.revoked_at IS NULL AND ${timeCompare('i.expires_at','>',SQL_NOW())}) OR
        (s.google_login AND u.blocked_at IS NULL) OR
        ($3 AND s.invitation_id IS NULL AND s.owner_code_hash IS NULL))`,
     [sha256(raw), config.ownerAccessCodeHash, config.allowDemoProviders]);
@@ -58,23 +58,22 @@ export async function loginWithCode(code: string, userAgent?: string) {
     return createSession(owner.id, userAgent, { ownerCodeHash: config.ownerAccessCodeHash });
   }
   const invite = await one<{ id: string; user_id: string; expires_at: Date }>(
-    `UPDATE invitation_codes SET last_used_at=now(),use_count=use_count+1
-     WHERE code_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING id,user_id,expires_at`, [hash]);
+    `UPDATE invitation_codes SET last_used_at=${SQL_NOW()},use_count=use_count+1
+     WHERE code_hash=$1 AND revoked_at IS NULL AND ${timeCompare('expires_at','>',SQL_NOW())} RETURNING id,user_id,expires_at`, [hash]);
   return invite ? createSession(invite.user_id, userAgent, { invitationId: invite.id, expiresAt: invite.expires_at }) : null;
 }
 
 export async function issueInvitation(adminId: string, label: string) {
   const code = newAccessCode();
-  return tx(async (db) => {
-    const key = randomBytes(16).toString('hex');
-    // Internal identities isolate visitor archives; visitors never register or supply an email.
-    const u = await one<{ id: string }>(`INSERT INTO users(google_sub,email,name,role) VALUES ($1,$2,$3,'user') RETURNING id`,
-      [`invite:${key}`, `${key}@visitor.primul11.local`, label], db);
-    const invite = await one<{ id: string; expires_at: Date }>(
-      `INSERT INTO invitation_codes(code_hash,label,user_id,created_by,expires_at) VALUES ($1,$2,$3,$4,now()+interval '168 hours') RETURNING id,expires_at`,
-      [hashAccessCode(code), label, u!.id, adminId], db);
-    return { id: invite!.id, code, label, expiresAt: invite!.expires_at.toISOString() };
-  });
+  const key = randomBytes(16).toString('hex'), userId = randomUUID(), id = randomUUID();
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt.getTime() + VISITOR_DAYS * 86400_000);
+  // Preallocated IDs allow an actual atomic D1 batch (no interactive transaction).
+  await atomic([
+    { text: `INSERT INTO users(id,google_sub,email,name,role) VALUES ($1,$2,$3,$4,'user')`, params: [userId, `invite:${key}`, `${key}@visitor.primul11.local`, label] },
+    { text: 'INSERT INTO invitation_codes(id,code_hash,label,user_id,created_by,expires_at,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)', params: [id, hashAccessCode(code), label, userId, adminId, expiresAt, createdAt] },
+  ]);
+  return { id, code, label, expiresAt: expiresAt.toISOString() };
 }
 // ── Google sign-in (OpenID Connect, code flow with PKCE). Always an ordinary account: administration needs the code. ──
 const b64url = (b: Buffer) => b.toString('base64url');
@@ -125,8 +124,8 @@ export async function completeGoogleLogin(code: string, state: string, oauthCook
   if (!['accounts.google.com', 'https://accounts.google.com'].includes(claims.iss ?? '') || claims.aud !== config.googleClientId || (claims.exp ?? 0) * 1000 < Date.now() || claims.nonce !== saved.nonce) throw new Error('Tokenul Google nu este valid.');
   if (!claims.sub || !claims.email || claims.email_verified !== true) throw new Error('Contul Google nu are un e-mail verificat.');
   const user = await one<{ id: string; blocked_at: Date | null }>(
-    `INSERT INTO users (google_sub, email, name, picture, role, last_login_at) VALUES ($1,$2,$3,$4,'user',now())
-     ON CONFLICT (google_sub) DO UPDATE SET email=EXCLUDED.email, name=EXCLUDED.name, picture=EXCLUDED.picture, last_login_at=now()
+    `INSERT INTO users (google_sub, email, name, picture, role, last_login_at) VALUES ($1,$2,$3,$4,'user',${SQL_NOW()})
+     ON CONFLICT (google_sub) DO UPDATE SET email=EXCLUDED.email, name=EXCLUDED.name, picture=EXCLUDED.picture, last_login_at=${SQL_NOW()}
      RETURNING id, blocked_at`,
     [claims.sub, claims.email.toLowerCase(), claims.name?.slice(0, 120) ?? null, claims.picture?.slice(0, 500) ?? null],
   );

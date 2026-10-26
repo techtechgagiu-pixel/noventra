@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { query } from '@/lib/db';
+import { query, SQL_NOW } from '@/lib/db';
 import { accountsList } from '@/lib/accounts';
 import { fail, json, requireAdmin, sameOrigin } from '@/lib/http';
 
@@ -20,6 +20,6 @@ export async function POST(req: NextRequest) {
   if (admin instanceof NextResponse) return admin;
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return fail('Cerere invalidă.');
-  await query(`UPDATE users SET blocked_at=${body.data.blocked ? 'now()' : 'NULL'} WHERE id=$1 AND google_sub NOT LIKE 'invite:%' AND google_sub <> 'owner:primary'`, [body.data.id]);
+  await query(`UPDATE users SET blocked_at=${body.data.blocked ? SQL_NOW() : 'NULL'} WHERE id=$1 AND google_sub NOT LIKE 'invite:%' AND google_sub <> 'owner:primary'`, [body.data.id]);
   return json({ accounts: await accountsList() });
 }

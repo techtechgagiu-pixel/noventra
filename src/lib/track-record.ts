@@ -1,5 +1,6 @@
-import { many } from './db';
+import { many, dialect, timeCompare } from './db';
 import { finalAgentPicksCte } from './final-agent-picks';
+import { romanianMonthWindow } from './time';
 
 /**
  * "Training" without fine-tuning: every agent pick is settled after the match (WON/LOST/VOID),
@@ -73,8 +74,8 @@ export async function allTrackRecords(agentIds: string[], options: { userId?: st
     `${finalAgentPicksCte(true)}
      SELECT p.agent_id,p.outcome,p.odds,p.estimated_probability
      FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id
-     WHERE p.agent_id=ANY($2) AND p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST')
-       AND ($3='all' OR to_char(f.kickoff_utc AT TIME ZONE 'Europe/Bucharest','YYYY-MM')=$3)
-     ORDER BY p.agent_id,f.kickoff_utc DESC,p.id DESC`, [options.userId ?? null, agentIds, options.month ?? 'all']);
+     WHERE ${dialect('p.agent_id=ANY($2)', 'p.agent_id IN (SELECT value FROM json_each($2))')} AND p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST')
+       AND ($3='all' OR (${timeCompare('f.kickoff_utc','>=','$4')} AND ${timeCompare('f.kickoff_utc','<','$5')}))
+     ORDER BY p.agent_id,f.kickoff_utc DESC,p.id DESC`, [options.userId ?? null, agentIds, options.month ?? 'all', ...romanianMonthWindow(options.month ?? 'all')]);
   return agentIds.map((id) => ({ id, record: recordOf(id, rows.filter((r) => r.agent_id === id)) }));
 }

@@ -1,0 +1,6 @@
+{
+  "extends":"../tsconfig.json",
+  "compilerOptions":{"incremental":false,"types":["@cloudflare/workers-types","node"]},
+  "include":["staging-worker.ts","staging-configuration.d.ts","../src/**/*.ts"],
+  "exclude":["../node_modules","../tests","worker-configuration.d.ts"]
+}

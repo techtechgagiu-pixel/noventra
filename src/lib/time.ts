@@ -47,3 +47,12 @@ export function formatLocal(iso: string | Date, opts: Intl.DateTimeFormatOptions
 export function yyyymmdd(date: string) {
   return date.replaceAll('-', '');
 }
+
+/** SQLite has no IANA timezone database. Compute exact Romanian calendar-month
+ * bounds in JS (including DST), then use a half-open UTC range in either DB. */
+export function romanianMonthWindow(month: string): [Date, Date] {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return [new Date(0), new Date(0)];
+  const [year, number] = month.split('-').map(Number);
+  const next = new Date(Date.UTC(year, number, 1, 12)).toISOString().slice(0, 10);
+  return [localMidnightUtc(month + '-01'), localMidnightUtc(next)];
+}

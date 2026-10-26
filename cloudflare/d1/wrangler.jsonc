@@ -1,0 +1,11 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "primul11-d1-preparation",
+  "compatibility_date": "2026-10-25",
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "primul11-staging",
+    "database_id": "bbd70eca-6c37-4915-9cdd-95ac477019e9",
+    "migrations_dir": "migrations"
+  }]
+}

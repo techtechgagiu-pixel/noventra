@@ -1,5 +1,9 @@
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== 'nodejs' || !process.env.DATABASE_URL) return;
+  if(process.env.BETMIND_MAINTENANCE==='1')return;
+  // A request-scoped Worker cannot own the Node service's interval loops.
+  // Cloudflare preparation must never resume production jobs accidentally.
+  if (process.env.BETMIND_RUNTIME?.startsWith('cloudflare')) return;
+  if (process.env.NEXT_RUNTIME !== 'nodejs' || (!process.env.DATABASE_URL && process.env.BETMIND_DATABASE!=='d1-http')) return;
   const { ensureAgentConfig } = await import('./lib/ai/assignments');
   const { startWorker } = await import('./lib/jobs/worker');
   const { startSettlement } = await import('./lib/settlement');
@@ -12,4 +16,8 @@ export async function register() {
   // Non-AI background work only: resuming already-authorised jobs and deterministic settlement.
   startWorker();
   startSettlement();
+  if(process.env.BETMIND_DATABASE==='d1-http'){
+    const {refreshStoredCatalog}=await import('./lib/d1/catalog');
+    void refreshStoredCatalog().catch(()=>console.warn(JSON.stringify({event:'catalog_refresh_failed'})));
+  }
 }

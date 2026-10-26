@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { structuredCall } from '@/lib/ai/router';
 import { NEW_AI_PROFILES } from '@/lib/ai/new-agent-profiles';
 import { readFileSync } from 'node:fs';
-vi.mock('@/lib/db',()=>({many:vi.fn(async()=>[]),query:vi.fn(async()=>({}))}));
+vi.mock('@/lib/db',async(importOriginal)=>({...await importOriginal<typeof import('@/lib/db')>(),many:vi.fn(async()=>[]),query:vi.fn(async()=>({}))}));
 vi.mock('@/lib/usage',()=>({aiUsageToday:vi.fn(async()=>({requests:0,tokens:0})),recordProviderUsage:vi.fn(async()=>{})}));
 afterEach(()=>{vi.unstubAllGlobals();if(saved===undefined)delete process.env.OPENROUTER_API_KEY;else process.env.OPENROUTER_API_KEY=saved;});
 const catalogue=JSON.parse(readFileSync('docs/new-ai-models-catalog-2026-10-25.json','utf8')).models;

@@ -1,4 +1,4 @@
-import { many } from './db';
+import { many, dialect } from './db';
 import { loadFixtures } from './sports/fixtures';
 import { localDate } from './time';
 import type { Fixture } from './sports/types';
@@ -17,6 +17,10 @@ const FRESH_MS = 10 * 60_000;
 export const CATALOG_DAYS = 8;
 
 export async function fixtureCatalog() {
+  if(process.env.BETMIND_RUNTIME?.startsWith('cloudflare')){
+    const {storedCatalog}=await import('./d1/catalog');
+    return storedCatalog();
+  }
   if ((!state.data || Date.now() - state.at > FRESH_MS || state.data.days[0] !== localDate()) && !state.running) {
     state.running = loadFixtures(localDate(), CATALOG_DAYS, { top10Only: false, persist: false })
       .then((d) => { state.data = d; state.at = Date.now(); })
@@ -48,24 +52,25 @@ export async function matchList(userId: string, scope: 'all' | 'mine' = 'all', i
   const fixtures: Fixture[] = data?.fixtures ?? [];
   const ids = fixtures.map((f) => f.id);
   const decided = ids.length ? await many<{ fixture_id: string; outcome: string; selection_outcome: string | null; market_key: string | null; votes_for: number; created_at: Date; job_id: string; label: string | null; odds: string | null; on_ticket: boolean }>(
-    `SELECT DISTINCT ON (fd.fixture_id) fd.fixture_id, fd.outcome, fd.market_key, fd.votes_for, fd.created_at, fd.job_id,
+    `SELECT * FROM (SELECT fd.fixture_id, fd.outcome, fd.market_key, fd.votes_for, fd.created_at, fd.job_id,
             COALESCE(ts.market_label, (SELECT p.payload->>'marketLabel' FROM agent_predictions p WHERE p.job_id=fd.job_id AND p.fixture_id=fd.fixture_id AND p.market_key=fd.market_key AND NULLIF(p.payload->>'marketLabel','') IS NOT NULL ORDER BY p.round DESC,p.id DESC LIMIT 1)) AS label,
             COALESCE(ts.odds, (SELECT p.odds FROM agent_predictions p WHERE p.job_id=fd.job_id AND p.fixture_id=fd.fixture_id AND p.market_key=fd.market_key AND p.odds IS NOT NULL LIMIT 1)) AS odds,
-            ts.ticket_id IS NOT NULL AS on_ticket, ts.outcome AS selection_outcome
+            ts.ticket_id IS NOT NULL AS on_ticket, ts.outcome AS selection_outcome,
+            ROW_NUMBER() OVER(PARTITION BY fd.fixture_id ORDER BY (ts.ticket_id IS NOT NULL) DESC,fd.created_at DESC,fd.id DESC) AS rank
      FROM final_decisions fd JOIN ticket_generation_jobs j ON j.id=fd.job_id
      LEFT JOIN tickets t ON t.job_id=fd.job_id LEFT JOIN ticket_selections ts ON ts.ticket_id=t.id AND ts.fixture_id=fd.fixture_id
-     WHERE ($1::uuid IS NULL OR j.user_id=$1) AND fd.fixture_id = ANY($2)
-     ORDER BY fd.fixture_id, (ts.ticket_id IS NOT NULL) DESC, fd.created_at DESC`, [scope === 'mine' ? userId : null, ids]) : [];
+     WHERE (${dialect('$1::uuid','$1')} IS NULL OR j.user_id=$1) AND ${dialect('fd.fixture_id = ANY($2)','fd.fixture_id IN (SELECT value FROM json_each($2))')}) ranked
+     WHERE rank=1 ORDER BY fixture_id`, [scope === 'mine' ? userId : null, ids]) : [];
   // Resolve missing display labels in one bounded snapshot read, after DISTINCT has selected
   // the decisions. Do not expand every snapshot's JSON inside the correlated SQL projection.
   const missing = decided.filter((d) => !d.label && d.market_key);
   const snapshots = missing.length ? await many<{ job_id: string; fixture_id: string; markets: Array<{ key: string; label: string }> | null }>(
-    `SELECT DISTINCT ON (job_id,fixture_id) job_id,fixture_id,payload->'model'->'markets' AS markets
-     FROM fixture_snapshots WHERE job_id=ANY($1::uuid[]) AND fixture_id=ANY($2::text[])
-     ORDER BY job_id,fixture_id,id DESC`, [[...new Set(missing.map((d) => d.job_id))], [...new Set(missing.map((d) => d.fixture_id))]]) : [];
+    `SELECT job_id,fixture_id,markets FROM (SELECT job_id,fixture_id,payload->'model'->'markets' AS markets,ROW_NUMBER() OVER(PARTITION BY job_id,fixture_id ORDER BY id DESC) AS rank
+     FROM fixture_snapshots WHERE ${dialect('job_id=ANY($1::uuid[])','job_id IN (SELECT value FROM json_each($1))')} AND ${dialect('fixture_id=ANY($2::text[])','fixture_id IN (SELECT value FROM json_each($2))')}) ranked
+     WHERE rank=1 ORDER BY job_id,fixture_id`, [[...new Set(missing.map((d) => d.job_id))], [...new Set(missing.map((d) => d.fixture_id))]]) : [];
   const labels = new Map(snapshots.flatMap((s) => (Array.isArray(s.markets) ? s.markets : []).map((m) => [`${s.job_id}|${s.fixture_id}|${m.key}`,m.label] as const)));
   const saved = ids.length ? await many<{ id: string; kickoff_utc: Date; status: string; home_score: number | null; away_score: number | null; source_observed_at: Date | null }>(
-    'SELECT id,kickoff_utc,status,home_score,away_score,source_observed_at FROM fixtures WHERE id=ANY($1)',[ids]) : [];
+    `SELECT id,kickoff_utc,status,home_score,away_score,source_observed_at FROM fixtures WHERE ${dialect('id=ANY($1)','id IN (SELECT value FROM json_each($1))')}`,[ids]) : [];
   const stored = new Map(saved.map((f) => [f.id,f]));
   const byFixture = new Map(decided.map((d) => [d.fixture_id, d]));
   const price = (f: Fixture, key: string) => f.odds?.markets.find((m) => m.key === key)?.odds ?? null;

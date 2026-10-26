@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { fail, json, requireAdmin, sameOrigin } from '@/lib/http';
 import { AGENTS } from '@/lib/ai/agents';
 import { activeAssignments, updateAssignment } from '@/lib/ai/assignments';
-import { many } from '@/lib/db';
+import { many, SQL_AGO, timeCompare } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 /** Reads stored metrics only. Opening this page never triggers inference. */
@@ -13,15 +13,15 @@ export async function GET(req: NextRequest) {
   if (admin instanceof NextResponse) return admin;
   const a = await activeAssignments();
   const stats = await many<Record<string, unknown>>(
-    `SELECT agent_id, provider, model_id, count(*)::int AS requests, avg(latency_ms)::int AS avg_latency, sum(COALESCE(input_tokens,0)+COALESCE(output_tokens,0))::int AS tokens,
-            avg(CASE WHEN ok THEN 0 ELSE 1 END)::float AS error_rate, avg(CASE WHEN schema_valid IS FALSE THEN 1 ELSE 0 END)::float AS invalid_rate
-     FROM model_usage_logs WHERE created_at > now() - interval '30 days' GROUP BY agent_id, provider, model_id ORDER BY agent_id`,
+    `SELECT agent_id,provider,model_id,CAST(count(*) AS INTEGER) AS requests,CAST(avg(latency_ms) AS INTEGER) AS avg_latency,CAST(sum(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)) AS INTEGER) AS tokens,
+            CAST(avg(CASE WHEN ok THEN 0 ELSE 1 END) AS DOUBLE PRECISION) AS error_rate,CAST(avg(CASE WHEN schema_valid IS FALSE THEN 1 ELSE 0 END) AS DOUBLE PRECISION) AS invalid_rate
+     FROM model_usage_logs WHERE ${timeCompare('created_at','>',SQL_AGO(30,'days'))} GROUP BY agent_id,provider,model_id ORDER BY agent_id`,
   );
   const history = await many<Record<string, unknown>>('SELECT agent_id, provider, model_id, fallback_provider, fallback_model_id, active, reason, created_at FROM agent_model_assignments ORDER BY created_at DESC LIMIT 100');
   const evaluated = await many<Record<string, unknown>>(
-    `SELECT p.agent_id, p.model_id, count(*)::int AS n,
-            avg(CASE WHEN s.outcome='WON' THEN 1 WHEN s.outcome='LOST' THEN 0 END)::float AS hit_rate,
-            avg(CASE WHEN s.outcome IN ('WON','LOST') THEN power(p.estimated_probability - CASE WHEN s.outcome='WON' THEN 1 ELSE 0 END, 2) END)::float AS brier
+    `SELECT p.agent_id,p.model_id,CAST(count(*) AS INTEGER) AS n,
+            CAST(avg(CASE WHEN s.outcome='WON' THEN 1 WHEN s.outcome='LOST' THEN 0 END) AS DOUBLE PRECISION) AS hit_rate,
+            CAST(avg(CASE WHEN s.outcome IN ('WON','LOST') THEN (p.estimated_probability-CASE WHEN s.outcome='WON' THEN 1 ELSE 0 END)*(p.estimated_probability-CASE WHEN s.outcome='WON' THEN 1 ELSE 0 END) END) AS DOUBLE PRECISION) AS brier
      FROM agent_predictions p JOIN ticket_selections s ON s.fixture_id=p.fixture_id AND s.market_key=p.market_key
      JOIN tickets t ON t.id=s.ticket_id AND t.job_id=p.job_id
      WHERE p.decision='BET_CANDIDATE' AND s.outcome IN ('WON','LOST') GROUP BY p.agent_id, p.model_id`,

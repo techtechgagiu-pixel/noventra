@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { many, one, query } from './db';
+import { many, one, query, dialect } from './db';
 import { agentById } from './ai/agents';
 import { activeAssignments } from './ai/assignments';
 import { structuredCall } from './ai/router';
@@ -31,8 +31,10 @@ async function material(ticketId: string) {
   const legs = await many<{ fixture_id: string; market_key: string; market_label: string; odds: string; votes_for: number; model_probability: string | null; snapshot: { home: string; away: string } }>(
     'SELECT fixture_id, market_key, market_label, odds, votes_for, model_probability, snapshot FROM ticket_selections WHERE ticket_id=$1 ORDER BY position', [ticketId]);
   const rows = await many<Row>(
-    `SELECT DISTINCT ON (fixture_id, agent_id) fixture_id, agent_id, decision, market_key, estimated_probability, payload
-     FROM agent_predictions WHERE job_id=$1 AND fixture_id = ANY($2) ORDER BY fixture_id, agent_id, round DESC`, [t.job_id, legs.map((l) => l.fixture_id)]);
+    `SELECT fixture_id,agent_id,decision,market_key,estimated_probability,payload FROM (
+      SELECT fixture_id,agent_id,decision,market_key,estimated_probability,payload,ROW_NUMBER() OVER(PARTITION BY fixture_id,agent_id ORDER BY round DESC,id DESC) AS rank
+      FROM agent_predictions WHERE job_id=$1 AND ${dialect('fixture_id = ANY($2)','fixture_id IN (SELECT value FROM json_each($2))')}) ranked
+      WHERE rank=1 ORDER BY fixture_id,agent_id`, [t.job_id, legs.map((l) => l.fixture_id)]);
   const agents = Number((t.summary as { agents?: number }).agents ?? 11);
   // Prudence is computed, not judged by the model: from the highest leg price and the chance that every leg wins.
   const maxLeg = Math.max(...legs.map((l) => Number(l.odds)));
@@ -83,6 +85,6 @@ export async function buildDigest(ticketId: string, jobId: string | null): Promi
       digest = { lines: res.data.lines.map((l) => l.replace(/^[-•\d.\s]+/, '').trim()).filter(Boolean).slice(0, 10), source: 'ai', model: `${res.provider}/${res.model}`, createdAt: new Date().toISOString() };
     } catch { /* keep the data-only digest; never block the ticket */ }
   }
-  await query(`UPDATE tickets SET summary = summary || jsonb_build_object('digest', $2::jsonb) WHERE id=$1`, [ticketId, JSON.stringify(digest)]);
+  await query(dialect("UPDATE tickets SET summary=summary || jsonb_build_object('digest',$2::jsonb) WHERE id=$1", "UPDATE tickets SET summary=json_set(summary,'$.digest',json($2)) WHERE id=$1"), [ticketId, JSON.stringify(digest)]);
   return digest;
 }

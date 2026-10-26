@@ -2,7 +2,8 @@ import { reportNewsBatch } from '../news-reporter';
 import { createHash } from 'node:crypto';
 import { config } from '../config';
 import { LEGACY_VOTER_IDS } from '../agent-roster';
-import { many, one, query, tx } from '../db';
+import { many, one, query, dialect, isD1, SQL_NOW } from '../db';
+import { finalizeTicket, type SavedLeg } from './finalize-ticket';
 import { type Prediction, type Revision, AGENTS, BRAIN_AGENT_ID, BRAIN_SCHEMA_TEXT, BRAIN_SYSTEM, BrainOutputSchema, DEBATE_SCHEMA_TEXT, DebateOutputSchema, INITIAL_SCHEMA_TEXT, InitialOutputSchema, SCOUT_SCHEMA_TEXT, ScoutOutputSchema, VOTING_AGENTS, agentById, systemPrompt, type AgentDefinition } from '../ai/agents';
 import { activeAssignments } from '../ai/assignments';
 import { BudgetExceededError, RateLimitError, providerConfigured, structuredCall } from '../ai/router';
@@ -45,10 +46,10 @@ async function setStage(job: JobRow, stage: Stage, checkpoint: Checkpoint) {
   if (job.stage !== stage) await recordEvent(job.id, { type: 'STAGE_CHANGED', stage, payload: { from: job.stage, to: stage } });
   job.stage = stage;
   job.checkpoint = checkpoint;
-  await query('UPDATE ticket_generation_jobs SET stage=$2, checkpoint=$3, status=\'RUNNING\', updated_at=now() WHERE id=$1', [job.id, stage, JSON.stringify(checkpoint)]);
+  await query(`UPDATE ticket_generation_jobs SET stage=$2,checkpoint=$3,status='RUNNING',updated_at=${SQL_NOW()} WHERE id=$1`, [job.id, stage, JSON.stringify(checkpoint)]);
 }
 async function save(job: JobRow) {
-  await query('UPDATE ticket_generation_jobs SET checkpoint=$2, updated_at=now() WHERE id=$1', [job.id, JSON.stringify(job.checkpoint)]);
+  await query(`UPDATE ticket_generation_jobs SET checkpoint=$2,updated_at=${SQL_NOW()} WHERE id=$1`, [job.id, JSON.stringify(job.checkpoint)]);
 }
 
 // ── Stage 0: discovery ─────────────────────────────────────────
@@ -154,7 +155,7 @@ async function discoverReview(job: JobRow, fixtures: Fixture[], errors: unknown[
 
 // ── Helpers ────────────────────────────────────────────────────
 async function batchSnapshots(job: JobRow, ids: string[]): Promise<FixtureSnapshot[]> {
-  const rows = await many<{ fixture_id: string; payload: FixtureSnapshot }>('SELECT DISTINCT ON (fixture_id) fixture_id, payload FROM fixture_snapshots WHERE job_id=$1 AND fixture_id = ANY($2) ORDER BY fixture_id, id DESC', [job.id, ids]);
+  const rows = await many<{ fixture_id: string; payload: FixtureSnapshot }>(`SELECT fixture_id,payload FROM (SELECT fixture_id,payload,ROW_NUMBER() OVER(PARTITION BY fixture_id ORDER BY id DESC) AS rank FROM fixture_snapshots WHERE job_id=$1 AND ${dialect('fixture_id=ANY($2)','fixture_id IN (SELECT value FROM json_each($2))')}) ranked WHERE rank=1 ORDER BY fixture_id`, [job.id, ids]);
   const map = new Map(rows.map((r) => [r.fixture_id, r.payload]));
   return ids.flatMap((id) => (map.has(id) ? [map.get(id)!] : []));
 }
@@ -240,7 +241,7 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
   }
   if (cp.batchStep === 'SCOUT') {
     const snaps = await batchSnapshots(job, ids);
-    const commented = new Set((await many<{ fixture_id: string }>("SELECT fixture_id FROM analysis_events WHERE job_id=$1 AND type='NEWS_COMMENTARY' AND fixture_id=ANY($2)", [job.id, ids])).map((x) => x.fixture_id));
+    const commented = new Set((await many<{ fixture_id: string }>(`SELECT fixture_id FROM analysis_events WHERE job_id=$1 AND type='NEWS_COMMENTARY' AND ${dialect('fixture_id=ANY($2)','fixture_id IN (SELECT value FROM json_each($2))')}`, [job.id, ids])).map((x) => x.fixture_id));
     const newsInputs = snaps.filter((s) => s.news && !commented.has(s.fixture.id)).map((s) => ({ fixtureId: s.fixture.id, match: `${s.fixture.home} – ${s.fixture.away}`, kickoff: s.fixture.kickoff, headlines: [...s.news!.home, ...s.news!.away] }));
     if (newsInputs.length) {
       await recordEvent(job.id, { type: 'AGENT_STARTED', stage: 'SCOUT', agentId: 'corina', payload: { role: 'news', fixtures: newsInputs.length } });
@@ -321,7 +322,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
     user = `${reviewIntro}Analizează independent fiecare meci. Bilet: ${ticketBrief(job, policy)}${record ? `\n${record}` : ''}\nSchema răspunsului: ${INITIAL_SCHEMA_TEXT}\nMeciuri (${facts.length}):\n${JSON.stringify(facts)}`;
   } else {
     const prior = await many<{ fixture_id: string; agent_id: string; round: number; decision: string; market_key: string | null; estimated_probability: string | null; payload: { rationale?: string; failureReasons?: string[]; objection?: string } }>(
-      `SELECT DISTINCT ON (fixture_id, agent_id) fixture_id, agent_id, round, decision, market_key, estimated_probability, payload FROM agent_predictions WHERE job_id=$1 AND fixture_id = ANY($2) AND round < $3 ORDER BY fixture_id, agent_id, round DESC`,
+      `SELECT fixture_id,agent_id,round,decision,market_key,estimated_probability,payload FROM (SELECT fixture_id,agent_id,round,decision,market_key,estimated_probability,payload,ROW_NUMBER() OVER(PARTITION BY fixture_id,agent_id ORDER BY round DESC,id DESC) AS rank FROM agent_predictions WHERE job_id=$1 AND ${dialect('fixture_id=ANY($2)','fixture_id IN (SELECT value FROM json_each($2))')} AND round<$3) ranked WHERE rank=1 ORDER BY fixture_id,agent_id`,
       [job.id, ids, round],
     );
     const debateFacts = facts.map((f) => ({
@@ -440,9 +441,10 @@ function guardPositions(job: JobRow, s: FixtureSnapshot, positions: FinalPositio
 
 async function latestPositions(jobId: string, fixtureId: string): Promise<FinalPosition[]> {
   const rows = await many<{ agent_id: string; round: number; decision: 'BET_CANDIDATE' | 'NO_BET'; market_key: string | null; estimated_probability: string | null; confidence: number; risk: string; payload: { rationale?: string; altKeys?: string[] }; provider: string; model_id: string; first_alts: string[] | null }>(
-    `SELECT DISTINCT ON (p.agent_id) p.agent_id, p.round, p.decision, p.market_key, p.estimated_probability, p.confidence, p.risk, p.payload, p.provider, p.model_id,
-            (SELECT r0.payload->'altKeys' FROM agent_predictions r0 WHERE r0.job_id=p.job_id AND r0.fixture_id=p.fixture_id AND r0.agent_id=p.agent_id AND r0.round=0) AS first_alts
-     FROM agent_predictions p WHERE p.job_id=$1 AND p.fixture_id=$2 ORDER BY p.agent_id, p.round DESC`,
+    `SELECT * FROM (SELECT p.agent_id,p.round,p.decision,p.market_key,p.estimated_probability,p.confidence,p.risk,p.payload,p.provider,p.model_id,
+            (SELECT r0.payload->'altKeys' FROM agent_predictions r0 WHERE r0.job_id=p.job_id AND r0.fixture_id=p.fixture_id AND r0.agent_id=p.agent_id AND r0.round=0) AS first_alts,
+            ROW_NUMBER() OVER(PARTITION BY p.agent_id ORDER BY p.round DESC,p.id DESC) AS rank
+     FROM agent_predictions p WHERE p.job_id=$1 AND p.fixture_id=$2) ranked WHERE rank=1 ORDER BY agent_id`,
     [jobId, fixtureId],
   );
   // Debate revisions carry only the main pick; the agent's round-0 alternatives still stand unless it switched to NO BET.
@@ -672,26 +674,12 @@ async function build(job: JobRow) {
     closest: result.closest ? { totalOdds: result.closest.totalOdds, legs: result.closest.legs.map((l) => ({ fixtureId: l.fixtureId, match: byId.get(l.fixtureId)?.teams.join(' – '), label: byId.get(l.fixtureId)?.label, odds: l.odds })) } : null,
     mixedBookmakers: result.mixedBookmakers,
   };
-  await tx(async (c) => {
-    const t = await c.query(
-      `INSERT INTO tickets (job_id, user_id, slot, period_key, target_odds, actual_odds, leg_count, generation_status, outcome_status, mixed_bookmakers, summary)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (job_id) DO UPDATE SET ${job.config.completion ? 'actual_odds=EXCLUDED.actual_odds,leg_count=EXCLUDED.leg_count,generation_status=EXCLUDED.generation_status,outcome_status=EXCLUDED.outcome_status,mixed_bookmakers=EXCLUDED.mixed_bookmakers,summary=EXCLUDED.summary' : 'job_id=EXCLUDED.job_id'} RETURNING id`,
-      [job.id, job.user_id, job.slot, job.period_key, job.target_odds, chosen.length ? result.totalOdds : null, chosen.length, generation, generation === 'COMPLETED' ? 'PENDING' : 'NOT_APPLICABLE', result.mixedBookmakers, JSON.stringify(summary)],
-    );
-    const ticketId = t.rows[0].id as string;
-    let pos = 1;
-    for (const leg of chosen) {
+  await finalizeTicket(job, { generation, totalOdds: chosen.length ? result.totalOdds : null, mixedBookmakers: result.mixedBookmakers, summary,
+    selections: chosen.map((leg) => {
       const cd = byId.get(leg.fixtureId)!;
-      await c.query(
-        `INSERT INTO ticket_selections (ticket_id, fixture_id, position, market_key, market_label, odds, bookmaker, quote_observed_at, votes_for, model_probability, risk, snapshot)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (ticket_id, fixture_id) DO NOTHING`,
-        [ticketId, leg.fixtureId, pos++, cd.marketKey, cd.label, leg.odds, leg.bookmaker, cd.observedAt, cd.votesFor, cd.probability, cd.riskLabel,
-          JSON.stringify({ match: `${cd.snapshot.fixture.home} – ${cd.snapshot.fixture.away}`, home: cd.snapshot.fixture.home, away: cd.snapshot.fixture.away, league: cd.snapshot.fixture.league, kickoff: cd.snapshot.fixture.kickoff, source: cd.snapshot.odds.source })],
-      );
-    }
-    await c.query(`UPDATE ticket_generation_jobs SET status=$2, stage='DONE', finished_at=now(), result=$3, lease_owner=NULL, lease_expires_at=NULL, checkpoint=$4 WHERE id=$1`,
-      [job.id, generation, JSON.stringify({ ticketId, generation, totalOdds: chosen.length ? result.totalOdds : null }), JSON.stringify({ ...job.checkpoint, phase: 'DONE' })]);
-    await recordEvent(job.id, { type: 'TICKET_FINALIZED', stage: 'DONE', payload: { generation, totalOdds: chosen.length ? result.totalOdds : null, legs: chosen.length, target: Number(job.target_odds), reason: summary.reason, mixedBookmakers: result.mixedBookmakers } }, c);
+      return { fixtureId:leg.fixtureId, marketKey:cd.marketKey,label:cd.label,odds:leg.odds,bookmaker:leg.bookmaker,observedAt:cd.observedAt,votes:cd.votesFor,probability:cd.probability,risk:cd.riskLabel,
+        snapshot:{ match:`${cd.snapshot.fixture.home} – ${cd.snapshot.fixture.away}`,home:cd.snapshot.fixture.home,away:cd.snapshot.fixture.away,league:cd.snapshot.fixture.league,kickoff:cd.snapshot.fixture.kickoff,source:cd.snapshot.odds.source } };
+    }),
   });
   job.status = generation;
   if (chosen.length) {
@@ -849,29 +837,15 @@ async function buildReview(job: JobRow) {
   }
   await recordEvent(job.id, { type: 'REVIEW_ADVICE', stage: 'BUILDING', agentId: BRAIN_AGENT_ID, payload: { overall, advice, model, totalOdds, chance, solid, risky, weak, legs: legs.length } });
   const summary = { review: { legs, overall, advice, chance, model, userAdvice: review.advice, solid, risky, weak }, analyzed: cp.analyzed, agents: jobAgents(job).length, agentIds: jobAgents(job).map((a) => a.id), reason: overall };
-  await tx(async (c) => {
-    const t = await c.query(
-      `INSERT INTO tickets (job_id, user_id, slot, period_key, target_odds, actual_odds, leg_count, generation_status, outcome_status, mixed_bookmakers, summary)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'COMPLETED','PENDING',false,$8) ON CONFLICT (job_id) DO UPDATE SET job_id=EXCLUDED.job_id RETURNING id`,
-      [job.id, job.user_id, job.slot, job.period_key, job.target_odds, totalOdds, legs.length, JSON.stringify(summary)],
-    );
-    const ticketId = t.rows[0].id as string;
-    let pos = 1;
-    for (const l of legs) {
-      const snap = (await batchSnapshots(job, [l.fixtureId]))[0];
-      const leg = review.legs.find((x) => x.fixtureId === l.fixtureId)!;
-      const [home, away] = l.match.split(' – ');
-      await c.query(
-        `INSERT INTO ticket_selections (ticket_id, fixture_id, position, market_key, market_label, odds, bookmaker, quote_observed_at, votes_for, model_probability, risk, snapshot)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (ticket_id, fixture_id) DO NOTHING`,
-        [ticketId, l.fixtureId, pos++, l.marketKey, l.label, l.odds, snap?.odds.bookmaker ?? 'sursa publică', snap?.odds.observedAt ?? new Date().toISOString(), l.supporters.length, l.engineProbability, l.verdict === 'SOLID' ? 'LOW' : l.verdict === 'RISCANT' ? 'MEDIUM' : 'HIGH',
-          JSON.stringify({ match: l.match, home, away, league: snap?.fixture.league ?? leg.league, kickoff: snap?.fixture.kickoff ?? leg.kickoff, source: snap?.odds.source ?? null, verdict: l.verdict })],
-      );
-    }
-    await c.query(`UPDATE ticket_generation_jobs SET status='COMPLETED', stage='DONE', finished_at=now(), result=$2, lease_owner=NULL, lease_expires_at=NULL, checkpoint=$3 WHERE id=$1`,
-      [job.id, JSON.stringify({ ticketId, generation: 'COMPLETED', totalOdds }), JSON.stringify({ ...cp, phase: 'DONE' })]);
-    await recordEvent(job.id, { type: 'TICKET_FINALIZED', stage: 'DONE', payload: { generation: 'COMPLETED', totalOdds, legs: legs.length, target: Number(job.target_odds), reason: overall, review: true } }, c);
-  });
+  const selections: SavedLeg[] = [];
+  for (const l of legs) {
+    const snap = (await batchSnapshots(job,[l.fixtureId]))[0];
+    const leg = review.legs.find(x=>x.fixtureId===l.fixtureId)!;
+    const [home,away] = l.match.split(' – ');
+    selections.push({fixtureId:l.fixtureId,marketKey:l.marketKey,label:l.label,odds:l.odds,bookmaker:snap?.odds.bookmaker ?? 'sursa publică',observedAt:snap?.odds.observedAt ?? new Date().toISOString(),votes:l.supporters.length,probability:l.engineProbability,risk:l.verdict==='SOLID'?'LOW':l.verdict==='RISCANT'?'MEDIUM':'HIGH',
+      snapshot:{match:l.match,home,away,league:snap?.fixture.league ?? leg.league,kickoff:snap?.fixture.kickoff ?? leg.kickoff,source:snap?.odds.source ?? null,verdict:l.verdict}});
+  }
+  await finalizeTicket(job,{generation:'COMPLETED',totalOdds,mixedBookmakers:false,summary,selections});
   job.status = 'COMPLETED';
 }
 
