@@ -25,7 +25,7 @@ export function StatsView({ agents, totals, month, scope = 'all' }: { agents: Ag
         <p className="stats-ai-note">Modele AI cu roluri, stiluri și limite de risc diferite. Portretele sunt ilustrative. Fiecare rol își păstrează istoricul și poate folosi un model de rezervă; rezultatele nu sunt cumulate între roluri.</p>
         <nav aria-label="Sfera statisticilor" className="mt-3 flex gap-2"><Link href={`/?tab=statistici&luna=${month}&scope=all${identityQuery}`} aria-current={scope === 'all' ? 'page' : undefined} className={`chip ${scope === 'all' ? 'text-cyan' : 'text-muted'}`}>Toată comunitatea</Link><Link href={`/?tab=statistici&luna=${month}&scope=mine${identityQuery}`} aria-current={scope === 'mine' ? 'page' : undefined} className={`chip ${scope === 'mine' ? 'text-cyan' : 'text-muted'}`}>Analizele mele</Link></nav>
         <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Luna">
-          {choices.map((c) => <a key={c} href={`/?tab=statistici&luna=${c}&scope=${scope}${identityQuery}`} aria-current={c === month ? 'page' : undefined} className={`chip ${c === month ? 'text-cyan' : 'text-muted'}`}>{c === 'all' ? 'De la început' : monthName(c)}</a>)}
+          {choices.map((c) => <Link key={c} href={`/?tab=statistici&luna=${c}&scope=${scope}${identityQuery}`} aria-current={c === month ? 'page' : undefined} className={`chip ${c === month ? 'text-cyan' : 'text-muted'}`}>{c === 'all' ? 'De la început' : monthName(c)}</Link>)}
         </nav>
       </div>
 
@@ -47,7 +47,7 @@ export function StatsView({ agents, totals, month, scope = 'all' }: { agents: Ag
         <details className="text-xs text-muted"><summary className="cursor-pointer text-cyan">Cum cresc nivelul și rangul</summary><div className="mt-2 space-y-2"><p>Un rezultat verde adaugă 30 XP; unul roșu scade 15 XP, până la minimum zero. Fiecare 100 XP înseamnă un nivel. Rezultatele în așteptare, anulate și NO BET nu modifică nivelul.</p><div className="flex flex-wrap gap-2">{AGENT_RANKS.map((r) => <span key={r.id} className="player-rank-rule" data-rarity={r.id}><strong>{r.name}</strong> {r.minimum ? `≥ ${r.minimum} decise · ${r.strict ? '>' : '≥'} ${Math.round(r.rate * 100)}% verzi` : 'rang inițial'}</span>)}</div><p>Diamond Super cere peste 80% verzi în carieră și minimum 15 rezultate decise; la exact 80% rangul este Super. Rangul poate scădea după rezultate roșii sau corecții oficiale. Indicator vizual al istoricului; nu estimează rezultatele viitoare. Rolurile de știri și cercetare sunt editoriale.</p></div></details>
       </div>
       <section aria-label="Agenții" className="agent-player-grid">
-        {sorted.map((a, rank) => <AgentPlayerCard key={a.id} agent={a} place={rank + 1} monthLabel={month === 'all' ? 'luna curentă' : monthName(month)} />)}
+        {sorted.map((a, rank) => <AgentPlayerCard key={a.id} agent={a} place={rank + 1} monthLabel={month === 'all' ? 'luna curentă' : monthName(month)} historyScope={{ month, scope }} />)}
       </section>
     </div>
   );

@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { fmtDateTime } from '@/lib/format';
 import type { AgentStat } from '@/lib/agent-stats';
@@ -7,15 +7,35 @@ import type { AgentStat } from '@/lib/agent-stats';
 const FILTERS = [['decided', 'Decise'], ['pending', 'În așteptare'], ['WON', 'Verzi'], ['LOST', 'Roșii'], ['VOID', 'Anulate'], ['NO_BET', 'NO BET'], ['all', 'Toate']] as const;
 const PAGE_SIZE = 8;
 const outcomeText: Record<string, string> = { WON: 'Verde', LOST: 'Roșu', VOID: 'Anulat' };
-export function AgentPredictionHistory({ agent, entries }: { agent: string; entries: AgentStat['recent'] }) {
+export function AgentPredictionHistory({ agent, entries: initialEntries, source, total }: { agent: string; entries?: AgentStat['recent']; source?: { url: string; revision: string }; total?: number }) {
+  const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState<{ key: string; entries: AgentStat['recent'] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  const key = source ? `${source.url}:${source.revision}` : '';
+  const ready = initialEntries !== undefined || loaded?.key === key;
+  const entries = initialEntries ?? (loaded?.key === key ? loaded.entries : []);
+  const url = source?.url;
+  useEffect(() => {
+    if (!open || ready || !url) return;
+    const controller = new AbortController();
+    setError(null);
+    void fetch(url, { cache: 'no-store', signal: controller.signal }).then(async response => {
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data.entries)) throw new Error(data.error ?? 'Nu am putut încărca pronosticurile.');
+      if (!controller.signal.aborted) setLoaded({ key, entries: data.entries });
+    }).catch(error => { if (!controller.signal.aborted) setError(error.message); });
+    return () => controller.abort();
+  }, [open, ready, url, key, retry]);
   const [filter, setFilter] = useState<string>('all');
   const [page, setPage] = useState(0);
   const matches = (r: AgentStat['recent'][number], f: string) => f === 'all' ? true : f === 'NO_BET' ? r.decision === 'NO_BET' : r.decision !== 'BET_CANDIDATE' ? false : f === 'decided' ? ['WON','LOST'].includes(r.outcome ?? '') : f === 'pending' ? !r.outcome : r.outcome === f;
   const list = useMemo(() => entries.filter((r) => matches(r, filter)), [entries, filter]);
   const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
-  return <details className="group mt-3" aria-label={`Istoric ${agent}`}>
-    <summary className="cursor-pointer text-xs font-semibold text-cyan">Pronosticuri și rezultate ({entries.length})</summary>
+  return <details className="group mt-3" aria-label={`Istoric ${agent}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary className="cursor-pointer text-xs font-semibold text-cyan">Pronosticuri și rezultate ({ready ? entries.length : total ?? 0})</summary>
+    {!ready ? <div className="mt-2 text-xs text-muted" role={error ? 'alert' : 'status'}>{error ? <>{error} <button className="text-cyan" onClick={() => setRetry(n => n + 1)}>Reîncearcă</button></> : 'Se încarcă pronosticurile…'}</div> : <>
     <p className="mt-2 text-[11px] text-muted">Aceeași lună și sferă ca în clasament. O poziție finală pe meci; NO BET nu este o pierdere. Biletul echipei poate avea altă selecție.</p>
     <label className="mt-2 block text-xs text-muted">Rezultate {agent}
       <select className="mt-1 w-full rounded-lg border border-line bg-ink p-2 text-text" value={filter} onChange={(e) => { setFilter(e.target.value); setPage(0); }}>
@@ -36,5 +56,6 @@ export function AgentPredictionHistory({ agent, entries }: { agent: string; entr
       </li>)}
     </ul>
     {pages > 1 && <div className="mt-3 flex items-center justify-between gap-2 text-xs"><button className="chip" disabled={current === 0} onClick={() => setPage(current - 1)} aria-label={`Pagina anterioară ${agent}`}>←</button><span>{current + 1} / {pages}</span><button className="chip" disabled={current === pages - 1} onClick={() => setPage(current + 1)} aria-label={`Pagina următoare ${agent}`}>→</button></div>}
+    </>}
   </details>;
 }

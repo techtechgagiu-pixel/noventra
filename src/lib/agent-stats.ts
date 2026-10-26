@@ -1,5 +1,5 @@
 import { describeModel } from '@/lib/model-identities';
-import { many, timeCompare } from './db';
+import { many, timeCompare, dialect } from './db';
 import { config } from './config';
 import { AGENTS } from './ai/agents';
 import { OPENROUTER_MODELS, OPENROUTER_PRICE } from './ai/openrouter-models';
@@ -24,20 +24,32 @@ const usd = (model: string, provider: string, i: number, o: number) => {
   return (i * p.inPerM + o * p.outPerM) / 1e6;
 };
 
-/** Per-agent record (each agent's final pick per match, settled after the match) and real model consumption. */
-/** month = 'YYYY-MM' (Romanian calendar): the record covers only that month; consumption always shows today, 7 days, the month and total. */
-export async function agentStats(userId: string, admin = false, month = currentMonth(), scope: 'all' | 'mine' = 'all') {
-  void admin;
+function loadAgentPicks(userId: string, month: string, scope: 'all' | 'mine', agentId?: string) {
   const window = romanianMonthWindow(month === 'all' ? currentMonth() : month);
-  const picks = await many<{ id: string; round: number; agent_id: string; decision: string; outcome: string | null; odds: string | null; estimated_probability: string | null; label: string | null; market_key: string | null; home: string; away: string; created_at: Date; model_id: string; fixture_id: string; job_id: string; kickoff_utc: Date; status: string; home_score: number | null; away_score: number | null; league: string }>(
+  return many<{ id: string; round: number; agent_id: string; decision: string; outcome: string | null; odds: string | null; estimated_probability: string | null; label: string | null; market_key: string | null; home: string; away: string; created_at: Date; model_id: string; fixture_id: string; job_id: string; kickoff_utc: Date; status: string; home_score: number | null; away_score: number | null; league: string }>(
     `${finalAgentPicksCte(true)}
      SELECT p.id,p.round,p.agent_id,p.decision,p.outcome,p.odds,p.estimated_probability,p.market_key,p.created_at,p.model_id,p.fixture_id,p.job_id,
             p.payload->>'marketLabel' AS label, f.home_team AS home, f.away_team AS away,
             f.kickoff_utc, f.status, f.home_score, f.away_score, l.name AS league
      FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id JOIN leagues l ON l.id=f.league_id
      WHERE ($2 = 'all' OR (${timeCompare('f.kickoff_utc','>=','$3')} AND ${timeCompare('f.kickoff_utc','<','$4')}))
-     ORDER BY p.created_at DESC,p.id DESC`, [scope === 'mine' ? userId : null, month, ...window]);
-  const usage = await many<{ agent_id: string | null; provider: string; model_id: string; requested_model_id: string; calls: string; successful: string; failed: string; i: string | null; o: string | null; lat: string | null; today_i: string | null; today_o: string | null; week_i: string | null; week_o: string | null; month_i: string | null; month_o: string | null }>(
+     AND (${dialect('$5::text','$5')} IS NULL OR p.agent_id=$5)
+     ORDER BY p.created_at DESC,p.id DESC`, [scope === 'mine' ? userId : null, month, ...window, agentId ?? null]);
+}
+
+const historyOf = (rows: Awaited<ReturnType<typeof loadAgentPicks>>): AgentStat['recent'] => rows.map((p) => ({ predictionId: String(p.id), decision: p.decision, round: p.round, model: p.model_id, fixtureId: p.fixture_id, jobId: p.job_id, match: `${p.home} – ${p.away}`, league: p.league, label: p.label ?? p.market_key ?? '', odds: p.odds === null ? null : Number(p.odds), outcome: p.outcome, at: p.created_at.toISOString(), kickoff: p.kickoff_utc.toISOString(), status: p.status, score: p.home_score !== null && p.away_score !== null ? `${p.home_score}–${p.away_score}` : null }));
+
+export async function agentHistory(userId: string, agentId: string, month: string, scope: 'all' | 'mine') {
+  return historyOf(await loadAgentPicks(userId, month, scope, agentId));
+}
+
+/** Per-agent record (each agent's final pick per match, settled after the match) and real model consumption. */
+/** month = 'YYYY-MM' (Romanian calendar): the record covers only that month; consumption always shows today, 7 days, the month and total. */
+export async function agentStats(userId: string, admin = false, month = currentMonth(), scope: 'all' | 'mine' = 'all') {
+  void admin;
+  const window = romanianMonthWindow(month === 'all' ? currentMonth() : month);
+  const picksPromise = loadAgentPicks(userId, month, scope);
+  const usagePromise = many<{ agent_id: string | null; provider: string; model_id: string; requested_model_id: string; calls: string; successful: string; failed: string; i: string | null; o: string | null; lat: string | null; today_i: string | null; today_o: string | null; week_i: string | null; week_o: string | null; month_i: string | null; month_o: string | null }>(
     `SELECT agent_id, provider, model_id, requested_model_id, count(*) AS calls, count(*) FILTER (WHERE ok) AS successful, count(*) FILTER (WHERE NOT ok) AS failed,
             sum(input_tokens) AS i, sum(output_tokens) AS o, avg(latency_ms) FILTER (WHERE ok) AS lat,
             sum(input_tokens) FILTER (WHERE ${timeCompare('created_at','>=','$3')}) AS today_i,
@@ -48,8 +60,8 @@ export async function agentStats(userId: string, admin = false, month = currentM
             sum(output_tokens) FILTER (WHERE ${timeCompare('created_at','>=','$5')} AND ${timeCompare('created_at','<','$6')}) AS month_o
      FROM model_usage_logs WHERE $2 OR job_id IN (SELECT id FROM ticket_generation_jobs WHERE user_id=$1)
      GROUP BY 1,2,3,4`, [userId, scope === 'all', new Date(new Date().toISOString().slice(0,10) + 'T00:00:00Z'), new Date(Date.now() - 7 * 86400_000), ...window]);
-  const [assignments, careerRows] = await Promise.all([
-    activeAssignments(),
+  const [picks, usage, assignments, careerRows] = await Promise.all([
+    picksPromise, usagePromise, activeAssignments(),
     many<{ agent_id: string; won: number; lost: number }>(`${finalAgentPicksCte(true)}
       SELECT agent_id,CAST(count(*) FILTER(WHERE outcome='WON') AS INTEGER) AS won,CAST(count(*) FILTER(WHERE outcome='LOST') AS INTEGER) AS lost
       FROM final_picks WHERE decision='BET_CANDIDATE' GROUP BY agent_id`, [scope === 'mine' ? userId : null]),
@@ -79,7 +91,7 @@ export async function agentStats(userId: string, admin = false, month = currentM
       hitRate: won + lost ? won / (won + lost) : null,
       avgOdds: priced.length ? priced.reduce((s, p) => s + Number(p.odds), 0) / priced.length : null,
       avgEstimated: est.length ? est.reduce((s, p) => s + Number(p.estimated_probability), 0) / est.length : null,
-      recent: mine.map((p) => ({ predictionId: String(p.id), decision: p.decision, round: p.round, model: p.model_id, fixtureId: p.fixture_id, jobId: p.job_id, match: `${p.home} – ${p.away}`, league: p.league, label: p.label ?? p.market_key ?? '', odds: p.odds === null ? null : Number(p.odds), outcome: p.outcome, at: p.created_at.toISOString(), kickoff: p.kickoff_utc.toISOString(), status: p.status, score: p.home_score !== null && p.away_score !== null ? `${p.home_score}–${p.away_score}` : null })),
+      recent: historyOf(mine),
       usage: {
         calls, failed: sum((r) => Number(r.failed)), fallback: sum((r) => (own && r.requested_model_id !== own ? Number(r.calls) : 0)),
         inTokens: sum((r) => Number(r.i ?? 0)), outTokens: sum((r) => Number(r.o ?? 0)),
@@ -105,4 +117,15 @@ export async function agentStats(userId: string, admin = false, month = currentM
 
 export function currentMonth(at = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit' }).format(at).slice(0, 7);
+}
+
+/** Custom only needs the exact community ranking, not usage logs or every history row. */
+export async function agentRanking(month = currentMonth()) {
+  const rows = await many<{ agent_id: string; won: number; lost: number; bets: number }>(`${finalAgentPicksCte()}
+    SELECT p.agent_id,CAST(count(*) FILTER(WHERE p.outcome='WON') AS INTEGER) AS won,
+      CAST(count(*) FILTER(WHERE p.outcome='LOST') AS INTEGER) AS lost,CAST(count(*) AS INTEGER) AS bets
+    FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id WHERE p.decision='BET_CANDIDATE'
+      AND ($1='all' OR (${timeCompare('f.kickoff_utc','>=','$2')} AND ${timeCompare('f.kickoff_utc','<','$3')})) GROUP BY p.agent_id`, [month, ...romanianMonthWindow(month === 'all' ? currentMonth() : month)]);
+  const byId = new Map(rows.map(r => [r.agent_id,r]));
+  return AGENTS.map(a => { const r=byId.get(a.id),won=r?.won??0,lost=r?.lost??0; return {id:a.id,won,lost,bets:r?.bets??0,hitRate:won+lost?won/(won+lost):null,editorial:a.id==='scout'||a.id==='corina'}; });
 }

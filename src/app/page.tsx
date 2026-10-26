@@ -1,4 +1,5 @@
 import { describeModel } from '@/lib/model-identities';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Activity, BarChart3, ClipboardCheck, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
@@ -25,7 +26,9 @@ import { HomeIntro, HowItWorks } from '@/components/home/home-intro';
 import { StatsView } from '@/components/stats-view';
 import { AutomationPanel } from '@/components/automation-panel';
 import { automationHealth } from '@/lib/automation';
-import { agentStats, currentMonth } from '@/lib/agent-stats';
+import { agentStats, agentRanking, currentMonth } from '@/lib/agent-stats';
+import { TabLink } from '@/components/tab-link';
+import { TabLoading } from '@/components/tab-loading';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
@@ -79,11 +82,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
           </Link>
           <nav className="order-last flex w-full justify-center gap-1 rounded-xl border border-line bg-panel p-1 sm:order-none sm:ml-auto sm:w-auto" aria-label="Secțiuni">
             {tabs.map(({ id, label, icon: Icon, badge }) => (
-              <Link key={id} href={`/?tab=${id}`} title={label} aria-label={label} aria-current={tab === id ? 'page' : undefined}
-                className={`relative flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition md:px-3 xl:px-2.5 ${tab === id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:text-text'}`}>
+              <TabLink key={id} href={`/?tab=${id}`} label={label} active={tab === id}>
                 <Icon size={16} aria-hidden /> <span className="hidden xl:inline">{label}</span>
                 {badge && <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-emerald" aria-label="analiză în curs" />}
-              </Link>
+              </TabLink>
             ))}
           </nav>
           {user.role === 'admin' && <Link href="/admin/invitations" className="text-xs text-cyan" title="Conturi și coduri de acces">Conturi</Link>}
@@ -92,6 +94,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-6">
+        <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
         {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
@@ -99,6 +102,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} />}
+        </Suspense>
       </main>
       <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-8 text-xs text-muted"><p>Rezultatele se actualizează automat după confirmarea scorului final.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
     </>
@@ -178,8 +182,8 @@ async function agentInfo() {
 }
 
 async function agentCards(): Promise<AgentCard[]> {
-  const a = await activeAssignments().catch(() => new Map());
-  const records = new Map((await allTrackRecords(VOTING_AGENTS.map((x) => x.id)).catch(() => [])).map((r) => [r.id, r.record]));
+  const [a, rows] = await Promise.all([activeAssignments().catch(() => new Map()), allTrackRecords(VOTING_AGENTS.map((x) => x.id)).catch(() => [])]);
+  const records = new Map(rows.map((r) => [r.id, r.record]));
   return VOTING_AGENTS.map((x) => {
     const r = records.get(x.id);
     return { id: x.id, name: describeModel(a.get(x.id)?.primary?.model).modelName, title: x.title, specialty: x.specialty, risk: x.risk, maxOdds: x.maxOdds, minProbability: x.minProbability, model: a.get(x.id)?.primary?.model ?? null, record: r && r.decided >= 3 ? `${r.won}/${r.decided} verzi` : null };
@@ -189,23 +193,23 @@ async function agentCards(): Promise<AgentCard[]> {
 const CUSTOM_STATUS: Record<string, string> = { QUEUED: 'în coadă', RUNNING: 'live', WAITING: 'așteaptă', PAUSED: 'pauză', COMPLETED: 'gata', INCOMPLETE: 'incomplet', NO_BET: 'NO BET', FAILED: 'eșuat' };
 
 async function CustomTab({ userId, job }: { userId: string; job?: string }) {
-  const cards = await agentCards();
   if (job && UUID.test(job)) {
     const meta = await jobMeta(userId, job);
     if (meta) {
-      const events = (await jobEvents(userId, job, 0)) ?? [];
+      const [cards, rows] = await Promise.all([agentCards(), jobEvents(userId, job, 0)]);
+      const events = rows ?? [];
       const info = Object.fromEntries(cards.map((c) => [c.id, { title: c.title, specialty: c.specialty, maxOdds: c.maxOdds, minProbability: c.minProbability, model: c.model }]));
       return <CustomLive key={job} jobId={job} initialMeta={plain(meta)} initialEvents={plain(events)} info={info} />;
     }
   }
-  const [recent, ranking] = await Promise.all([customJobs(userId, CUSTOM_LIMIT_PER_DAY), agentStats(userId)]);
+  const [cards, recent, ranking] = await Promise.all([agentCards(), customJobs(userId, CUSTOM_LIMIT_PER_DAY), agentRanking()]);
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-bold">Bilet custom</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {CUSTOM_LIMIT_PER_DAY} bilete custom pe zi.</p>
       </div>
-      <CustomForm agents={cards} topAgentIds={topSixAgentIds(ranking.agents)} remaining={Math.max(0, CUSTOM_LIMIT_PER_DAY - recent.filter((j) => j.period_key === localDate()).length)} />
+      <CustomForm agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, CUSTOM_LIMIT_PER_DAY - recent.filter((j) => j.period_key === localDate()).length)} />
       {recent.length > 0 && (
         <section>
           <h3 className="mb-2 font-display text-lg font-bold">Biletele tale custom</h3>
@@ -276,8 +280,8 @@ async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
 async function StatisticiTab({ userId, admin, month, scope }: { userId: string; admin: boolean; month?: string; scope?: string }) {
   const m = month === 'all' || /^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ? month! : currentMonth();
   const selected = scope === 'mine' ? 'mine' : 'all';
-  const { agents, totals } = await agentStats(userId, admin, m, selected);
-  return <div className="space-y-6">{admin && <AutomationPanel initial={plain(await automationHealth())} />}<StatsView agents={plain(agents)} totals={totals} month={m} scope={selected} /></div>;
+  const [{ agents, totals }, automation] = await Promise.all([agentStats(userId, admin, m, selected), admin ? automationHealth() : null]);
+  return <div className="space-y-6">{automation && <AutomationPanel initial={plain(automation)} />}<StatsView agents={agents} totals={totals} month={m} scope={selected} /></div>;
 }
 
 async function IstoricTab({ userId, ticket, fresh }: { userId: string; ticket?: string; fresh: boolean }) {

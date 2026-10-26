@@ -2,11 +2,12 @@ import type { AgentStat } from '@/lib/agent-stats';
 import { agentProgression } from '@/lib/agent-progression';
 import { AgentPredictionHistory } from './agent-prediction-history';
 import { aiCardIdentity } from '@/lib/ai-card-identity';
+import { createHash } from 'node:crypto';
 
 const money = (x: number) => x > 0 && x < .01 ? '< 0,01 $' : `${x.toFixed(2).replace('.', ',')} $`;
 const num = (x: number) => new Intl.NumberFormat('ro-RO').format(Math.round(x));
 
-export function AgentPlayerCard({ agent: a, place, monthLabel }: { agent: AgentStat; place: number; monthLabel: string }) {
+export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: { agent: AgentStat; place: number; monthLabel: string; historyScope?: { month: string; scope: 'all' | 'mine' } }) {
   const p = agentProgression(a.career, a.editorial), decided = a.won + a.lost;
   const rarity = p?.rank.id ?? 'editorial';
   const ai = aiCardIdentity(a);
@@ -42,7 +43,9 @@ export function AgentPlayerCard({ agent: a, place, monthLabel }: { agent: AgentS
         <p>{num(a.usage.calls)} apeluri · {num(a.usage.inTokens + a.usage.outTokens)} tokeni{a.usage.avgLatencyMs ? ` · ${(a.usage.avgLatencyMs / 1000).toFixed(1)} s/răspuns` : ''}{a.usage.failed ? ` · ${a.usage.failed} eșuate` : ''}</p>
         {a.ownModelShare !== null && <p>{Math.round(a.ownModelShare * 100)}% din pozițiile afișate pe modelul atribuit acum.</p>}
       </div></details>
-      {a.recent.length > 0 && <AgentPredictionHistory agent={`${displayName} · ${ai.role}`} entries={a.recent} />}
+      {a.recent.length > 0 && <AgentPredictionHistory agent={`${displayName} · ${ai.role}`} total={a.recent.length}
+        entries={historyScope ? undefined : a.recent}
+        source={historyScope ? { url: `/api/agents/${a.id}/history?month=${historyScope.month}&scope=${historyScope.scope}`, revision: createHash('sha256').update(JSON.stringify(a.recent)).digest('hex') } : undefined} />}
     </div>
   </article>;
 }
