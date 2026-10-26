@@ -2,7 +2,7 @@ import { describeModel } from '@/lib/model-identities';
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Activity, BarChart3, ClipboardCheck, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
+import { Activity, BarChart3, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
 import { MatchesView } from '@/components/matches/matches-view';
 import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
@@ -20,8 +20,7 @@ import { CUSTOM_LIMIT_PER_DAY, slotById } from '@/lib/slots';
 import { VOTING_AGENTS } from '@/lib/ai/agents';
 import { activeAssignments } from '@/lib/ai/assignments';
 import { allTrackRecords } from '@/lib/track-record';
-import { customJobs, jobQueue, reviewJobs } from '@/lib/jobs/service';
-import { ReviewBuilder } from '@/components/review/review-builder';
+import { customJobs, jobQueue } from '@/lib/jobs/service';
 import { homeThreads } from '@/lib/home-reel';
 import { HomeIntro, HowItWorks } from '@/components/home/home-intro';
 import { StatsView } from '@/components/stats-view';
@@ -39,7 +38,7 @@ import { databaseIssue } from '@/lib/database-availability';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'acasa' | 'custom' | 'verifica' | 'analiza' | 'istoric' | 'statistici' | 'meciuri';
+type Tab = 'acasa' | 'custom' | 'analiza' | 'istoric' | 'statistici' | 'meciuri';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -57,7 +56,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     return <PublicHome google={googleConfigured()} />;
   }
   // Old daily-ticket URLs remain readable through the shared archive.
-  const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'verifica' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric';
+  const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'verifica' ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric'; // "Biletul tău" was removed (27.10); old links land on Acasă
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
 
@@ -65,7 +64,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     { id: 'acasa', label: 'Acasă', icon: House },
     { id: 'istoric', label: 'Bilete create', icon: History },
     { id: 'custom', label: 'Custom', icon: SlidersHorizontal, badge: running.some((j) => j.slot.startsWith('CUSTOM_')) },
-    { id: 'verifica', label: 'Biletul tău', icon: ClipboardCheck, badge: running.some((j) => j.slot.startsWith('REVIEW_')) },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
     { id: 'meciuri', label: 'Meciuri', icon: ListOrdered },
     { id: 'statistici', label: 'Statistici', icon: BarChart3 },
@@ -99,7 +97,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
-        {tab === 'verifica' && <VerificaTab userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} />}
@@ -123,7 +120,6 @@ async function AcasaTab({ userId }: { userId: string }) {
     <HowItWorks />
     <nav aria-label="Ce vrei să faci" className="home-shortcuts">
       <Link href="/?tab=custom"><SlidersHorizontal size={22} aria-hidden /><div><h2>Creează bilet custom</h2><p>Alegi cota și meciurile. Urmărești cum decide echipa.</p></div></Link>
-      <Link href="/?tab=verifica"><ClipboardCheck size={22} aria-hidden /><div><h2>Analizează biletul tău</h2><p>Adu propriile selecții și cere verdictul agenților.</p></div></Link>
       <Link href="/?tab=statistici"><BarChart3 size={22} aria-hidden /><div><h2>Cunoaște agenții</h2><p>Modele, stiluri, verzi și roșii. Rezultatele rămân la vedere.</p></div></Link>
     </nav>
   </div>;
@@ -226,48 +222,6 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">Cotă {Number(j.target_odds)} · {j.required_legs} meciuri{j.actual_odds ? <span className="text-emerald"> → {Number(j.actual_odds).toFixed(2)}</span> : null}</p>
                     <p className="text-xs text-muted">{fmtDateTime(j.created_at.toISOString())} · {(c?.agents ?? []).length} agenți</p>
-                  </div>
-                  <span className="chip text-muted">{j.outcome_status === 'WON' ? 'câștigat' : j.outcome_status === 'LOST' ? 'pierdut' : CUSTOM_STATUS[j.status] ?? j.status}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}
-
-async function VerificaTab({ userId, job }: { userId: string; job?: string }) {
-  if (job && UUID.test(job)) {
-    const meta = await jobMeta(userId, job);
-    if (meta) {
-      const cards = await agentCards();
-      const events = (await jobEvents(userId, job, 0)) ?? [];
-      const info = Object.fromEntries(cards.map((c) => [c.id, { title: c.title, specialty: c.specialty, maxOdds: c.maxOdds, minProbability: c.minProbability, model: c.model }]));
-      return <CustomLive key={job} jobId={job} initialMeta={plain(meta)} initialEvents={plain(events)} info={info} back={{ href: '/?tab=verifica', label: '← Alt bilet la analiză' }} />;
-    }
-  }
-  const recent = await reviewJobs(userId, 9);
-  return (
-    <div className="space-y-6 pb-16 lg:pb-0">
-      <div>
-        <h1 className="font-display text-2xl font-bold">Vino cu biletul tău la analiză</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Îți faci biletul din meciurile cu cote reale, le lași tacticienilor sfaturile tale și îl trimiți la analiză. Agenții echipei îl dezbat live pe hartă, îți spun ce meci e solid, riscant sau slab, ce să înlocuiești, iar GPT-6 Luna Pro îți dă verdictul final. Biletul rămâne salvat și îl urmărim verde/roșu până la final.</p>
-      </div>
-      <ReviewBuilder />
-      {recent.length > 0 && (
-        <section>
-          <h3 className="mb-2 font-display text-lg font-bold">Biletele tale analizate</h3>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {recent.map((j) => {
-              const r = j.summary?.review;
-              const tone = j.outcome_status === 'WON' ? 'border-emerald/60' : j.outcome_status === 'LOST' ? 'border-rose/60' : '';
-              return (
-                <Link key={j.id} href={`/?tab=verifica&job=${j.id}`} className={`card-soft flex items-center gap-3 p-3 hover:border-cyan/50 ${tone}`}>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">Cotă {Number(j.target_odds)} · {j.required_legs} meciuri</p>
-                    <p className="text-xs text-muted">{fmtDateTime(j.created_at.toISOString())}{r ? ` · ✓${r.solid} ⚠${r.risky} ✗${r.weak}` : ''}</p>
                   </div>
                   <span className="chip text-muted">{j.outcome_status === 'WON' ? 'câștigat' : j.outcome_status === 'LOST' ? 'pierdut' : CUSTOM_STATUS[j.status] ?? j.status}</span>
                 </Link>
