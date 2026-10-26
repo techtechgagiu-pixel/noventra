@@ -121,3 +121,24 @@ test('model identities replace actors across public home, Custom and statistics,
   await expect(page.locator('main')).not.toContainText(actors);
   await expect(page.locator('#agent-robert')).toHaveAttribute('aria-label', /Card AI .* · Managerul de risc/);
 });
+
+test('agents above 80% on at least 10 decided picks get the hot-streak flame card', async ({ page }) => {
+  const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL || 'postgresql://postgres@localhost:5433/betmind_e2e' });
+  await db.connect();
+  try {
+    await page.goto('/auth/test-login?email=card-hot@test.local');
+    const user = (await db.query("SELECT id FROM users WHERE email='card-hot@test.local'")).rows[0].id;
+    const job = (await db.query(`INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,stage) VALUES($1,'CUSTOM_96',current_date,5,'card-hot','{}','{}','COMPLETED','DONE') RETURNING id`, [user])).rows[0].id;
+    await db.query(`INSERT INTO fixtures(id,provider,provider_id,league_id,home_team,away_team,kickoff_utc,status,content_hash)
+      SELECT 'demo:card-hot:'||$1||':'||i,'demo',i::text,'ENG1','DEMO Hot Home','DEMO Hot Away',now(),'post','card-hot' FROM generate_series(1,10) i`, [job]);
+    for (const [agent, won] of [['victor', 9], ['mihai', 8]] as const) {
+      await db.query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome,created_at)
+        SELECT $1::uuid,'demo:card-hot:'||$1::text||':'||i,$2,0,'demo',(SELECT model_id FROM agent_model_assignments WHERE agent_id=$2 AND active LIMIT 1),'v1','BET_CANDIDATE','DC:1X',1.2,'{}',CASE WHEN i<=$3 THEN 'WON' ELSE 'LOST' END,now()-interval '1 day' FROM generate_series(1,10) i`, [job, agent, won]);
+    }
+    await page.goto('/?tab=statistici&luna=all&scope=mine');
+    await expect(page.locator('#agent-victor')).toHaveAttribute('data-hot', 'true');
+    await expect(page.locator('#agent-victor .player-card-hot')).toHaveText('🔥 HOT STREAK');
+    await expect(page.locator('#agent-mihai')).not.toHaveAttribute('data-hot', 'true'); // exactly 80% is not "over 80%"
+    if (process.env.SHOTS) await page.locator('#agent-victor').screenshot({ path: `${process.env.SHOTS}/hot-card.png` });
+  } finally { await db.end(); }
+});

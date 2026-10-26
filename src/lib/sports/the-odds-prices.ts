@@ -89,6 +89,107 @@ export function parseTheOddsPrices(raw: unknown): Event[] {
 const utcDay = () => new Date().toISOString().slice(0, 10);
 const daysLeftInMonth = () => { const d = new Date(); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate() - d.getUTCDate() + 1; };
 
+// ── Extra markets, one match at a time ─────────────────────────────────────────
+// The sport endpoint lists only 1X2 and the main goal line. Everything else The Odds API has for a match
+// (both teams score, double chance, every over/under line, team goals, handicaps) comes from the event endpoint,
+// which costs credits per market. These calls share the daily allowance with the prices above, are cached 3 days
+// per match, and soonest/biggest matches go first. Only half lines (x.5) are kept: no push/void settlement needed.
+const EXTRAS = 'the-odds-api-extras';
+const EXTRA_MARKETS = 'btts,double_chance,alternate_totals,team_totals,spreads';
+const EXTRA_COST = 5;
+const MAX_EXTRAS_PER_RUN = 12;
+type ExtrasPayload = { byEvent?: Record<string, { at: string; kickoff: string; markets: MarketQuote[] }>; day?: string; usedToday?: number };
+const half = (x: number) => Number.isFinite(x) && Math.abs(x % 1) === 0.5;
+
+/** Pure: event-odds response → extra markets (median price across bookmakers, canonical keys/labels). */
+export function parseTheOddsExtras(raw: unknown, home: string, away: string): MarketQuote[] {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const homeName = String(r.home_team ?? home), awayName = String(r.away_team ?? away);
+  const prices = new Map<string, { q: Omit<MarketQuote, 'odds'>; xs: number[] }>();
+  const add = (q: Omit<MarketQuote, 'odds'>, price: number) => { if (!(price > 1.01 && price < 100)) return; const e = prices.get(q.key) ?? { q, xs: [] }; e.xs.push(price); prices.set(q.key, e); };
+  const sideOf = (name: string) => (name === homeName ? 'HOME' : name === awayName ? 'AWAY' : null);
+  for (const b of (Array.isArray(r.bookmakers) ? r.bookmakers : []) as Array<Record<string, unknown>>) {
+    for (const m of (Array.isArray(b?.markets) ? b.markets : []) as Array<Record<string, unknown>>) {
+      for (const o of (Array.isArray(m?.outcomes) ? m.outcomes : []) as Array<Record<string, unknown>>) {
+        const name = String(o.name ?? ''), price = Number(o.price), point = Number(o.point);
+        switch (m.key) {
+          case 'btts':
+            if (/^yes$/i.test(name)) add({ key: 'BTTS:YES', label: 'Ambele echipe marchează – DA', marketType: 'BTTS' }, price);
+            else if (/^no$/i.test(name)) add({ key: 'BTTS:NO', label: 'Ambele echipe marchează – NU', marketType: 'BTTS' }, price);
+            break;
+          case 'double_chance': {
+            const h = name.includes(homeName), a = name.includes(awayName), d = /draw/i.test(name);
+            if (h && d && !a) add({ key: 'DC:1X', label: `${home} sau egal (1X)`, marketType: 'DOUBLE_CHANCE' }, price);
+            else if (a && d && !h) add({ key: 'DC:X2', label: `Egal sau ${away} (X2)`, marketType: 'DOUBLE_CHANCE' }, price);
+            else if (h && a && !d) add({ key: 'DC:12', label: `${home} sau ${away} (12)`, marketType: 'DOUBLE_CHANCE' }, price);
+            break;
+          }
+          case 'alternate_totals': case 'totals':
+            if (!half(point)) break;
+            if (/^over$/i.test(name)) add({ key: `TOTAL:OVER:${point}`, label: `Peste ${point} goluri`, marketType: 'TOTAL', line: point }, price);
+            else if (/^under$/i.test(name)) add({ key: `TOTAL:UNDER:${point}`, label: `Sub ${point} goluri`, marketType: 'TOTAL', line: point }, price);
+            break;
+          case 'team_totals': {
+            const side = sideOf(String(o.description ?? '')); if (!side || !half(point)) break;
+            const team = side === 'HOME' ? home : away, dir = /^over$/i.test(name) ? 'OVER' : /^under$/i.test(name) ? 'UNDER' : null;
+            if (dir) add({ key: `TT:${side}:${dir}:${point}`, label: `${team} ${dir === 'OVER' ? 'peste' : 'sub'} ${point} goluri`, marketType: 'TEAM_TOTAL', line: point }, price);
+            break;
+          }
+          case 'spreads': {
+            const side = sideOf(name); if (!side || !half(point)) break;
+            add({ key: `AH:${side}:${point}`, label: `${side === 'HOME' ? home : away} handicap ${point > 0 ? '+' : ''}${point}`, marketType: 'HANDICAP', line: point }, price);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return [...prices.values()].map(({ q, xs }) => ({ ...q, odds: r2(median(xs)) }));
+}
+
+/** Adds every extra market The Odds API has to the given open fixtures (cached; new calls only within budget). */
+async function withTheOddsExtras(fixtures: Fixture[], events: Map<string, { sport: string; e: Event }>, prices: Payload, opts: { fetchAllowed?: boolean }) {
+  if (!events.size) return fixtures;
+  const row = await one<{ payload: ExtrasPayload }>('SELECT payload FROM sports_catalog_cache WHERE provider=$1', [EXTRAS]).catch(() => null);
+  const payload: ExtrasPayload = { byEvent: {}, ...(row?.payload ?? {}) };
+  payload.byEvent = Object.fromEntries(Object.entries(payload.byEvent ?? {}).filter(([, v]) => Date.parse(v.kickoff) > Date.now() - 3 * 3600_000));
+  if (payload.day !== utcDay()) { payload.day = utcDay(); payload.usedToday = 0; }
+  const key = process.env.ODDS_API_KEY?.trim();
+  let changed = false;
+  if (key && opts.fetchAllowed !== false) {
+    const remaining = prices.creditsRemaining ?? 500;
+    const allowance = Math.max(0, Math.floor((remaining - RESERVE) / daysLeftInMonth()));
+    const due = [...events.values()].filter(({ e }) => { const c = payload.byEvent![e.id]; return Date.parse(e.kickoff) > Date.now() && (!c || Date.now() - Date.parse(c.at) >= FRESH_MS); })
+      .sort((a, b) => Date.parse(a.e.kickoff) - Date.parse(b.e.kickoff) || rank(a.sport) - rank(b.sport));
+    let calls = 0;
+    for (const { sport, e } of due) {
+      if (calls >= MAX_EXTRAS_PER_RUN || (prices.usedToday ?? 0) + (payload.usedToday ?? 0) + EXTRA_COST > allowance) break;
+      try {
+        const url = new URL(`https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/events/${encodeURIComponent(e.id)}/odds`);
+        url.search = new URLSearchParams({ apiKey: key, regions: 'eu', markets: EXTRA_MARKETS, oddsFormat: 'decimal', dateFormat: 'iso' }).toString();
+        const res = await fetch(url, { signal: AbortSignal.timeout(10_000), cache: 'no-store' });
+        calls++; changed = true;
+        const left = res.headers.get('x-requests-remaining'), last = res.headers.get('x-requests-last');
+        if (left !== null && /^\d+(\.\d+)?$/.test(left)) prices.creditsRemaining = Number(left);
+        payload.usedToday = (payload.usedToday ?? 0) + (last !== null && Number.isFinite(Number(last)) ? Number(last) : EXTRA_COST);
+        if (!res.ok) { console.warn(JSON.stringify({ event: 'the_odds_extras_failed', status: res.status })); if (res.status === 401 || res.status === 429) break; payload.byEvent![e.id] = { at: new Date().toISOString(), kickoff: e.kickoff, markets: [] }; continue; }
+        payload.byEvent![e.id] = { at: new Date().toISOString(), kickoff: e.kickoff, markets: parseTheOddsExtras(await res.json(), e.home, e.away) };
+      } catch { console.warn(JSON.stringify({ event: 'the_odds_extras_failed', status: 'network' })); break; }
+    }
+    if (changed) await query(`INSERT INTO sports_catalog_cache(provider,payload,next_attempt_at) VALUES($1,$2,$3) ON CONFLICT(provider) DO UPDATE SET payload=$2`, [EXTRAS, JSON.stringify(payload), new Date()]).catch(() => null);
+  }
+  return fixtures.map((f) => {
+    const hit = events.get(f.id); const c = hit && payload.byEvent![hit.e.id];
+    if (!c?.markets.length || !f.odds) return f;
+    const book = `The Odds API · mediana caselor`;
+    const have = new Set(f.odds.markets.map((m) => m.key));
+    // Same team names as the fixture; markets the fixture already has (main prices) are kept as they are.
+    const extra = c.markets.filter((m) => !have.has(m.key)).map((m) => ({ ...m, bookmaker: book,
+      label: m.label.replaceAll(hit!.e.home, f.home).replaceAll(hit!.e.away, f.away) }));
+    return extra.length ? { ...f, odds: { ...f.odds, markets: [...f.odds.markets, ...extra] } } : f;
+  });
+}
+
 /** Cached Odds API events (no network). Used by the Meciuri tab for schedule-only competitions. */
 export async function cachedTheOddsEvents(): Promise<Record<string, { at: string; events: Event[] }>> {
   const row = await one<{ payload: Payload }>('SELECT payload FROM sports_catalog_cache WHERE provider=$1', [PROVIDER]).catch(() => null);
@@ -159,11 +260,15 @@ export async function withTheOddsPrices(fixtures: Fixture[], opts: { fetchAllowe
         ON CONFLICT(provider) DO UPDATE SET payload=$2`, [PROVIDER, JSON.stringify(payload), new Date()]).catch(() => null);
     }
   }
-  return fixtures.map((f) => {
+  const events = new Map<string, { sport: string; e: Event }>();
+  const merged = fixtures.map((f) => {
     if (f.status !== 'pre') return f;
     const sport = sportOf.get(f.id);
     const cached = sport ? payload.bySport![sport] : undefined;
     const e = cached?.events.find((x) => sameMatch(f, x));
-    return e ? mergeTheOdds(f, e, cached!.at) : f;
+    if (!e) return f;
+    events.set(f.id, { sport: sport!, e });
+    return mergeTheOdds(f, e, cached!.at);
   });
+  return withTheOddsExtras(merged, events, payload, opts).catch(() => merged);
 }
