@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
@@ -93,5 +93,14 @@ describe('authenticated Render → Cloudflare D1 bridge',()=>{
       const native=await withDatabase(d1Database(binding),()=>one<{config:object;created_at:Date;recovered:boolean}>('SELECT config,created_at,claim_recovered AS recovered FROM ticket_generation_jobs WHERE id=$1',[created.jobId]));
       expect(native?.created_at).toBeInstanceOf(Date);
     }finally{setAiTransportForTests(null);setFixtureProviderForTests(null);setHistoryProviderForTests(null);}
+  }));
+  it('keeps the last active job awake even with a valid lease and an otherwise empty queue',async()=>scope(async()=>{
+    const user=(await one<{id:string}>("INSERT INTO users(google_sub,email) VALUES('active-wake','active-wake@test') RETURNING id"))!;
+    const job=(await one<{id:string}>("INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,stage,lease_expires_at) VALUES($1,'CUSTOM_99','2026-10-26',3,'wake','{}','{}','RUNNING','ANALYSIS',strftime('%Y-%m-%dT%H:%M:%fZ','now','+3 minutes')) RETURNING id",[user.id]))!;
+    const realFetch=globalThis.fetch;
+    const spy=vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>String(input)==='https://example.onrender.com/api/health'?new Response('{}',{status:200}):realFetch(input,init));
+    try{
+      expect(await scheduledMaintenance('https://example.onrender.com')).toMatchObject({queued:1,wake:{status:'awake',httpStatus:200}});
+    }finally{spy.mockRestore();await query("UPDATE ticket_generation_jobs SET status='PAUSED' WHERE id=$1",[job.id]);}
   }));
 });

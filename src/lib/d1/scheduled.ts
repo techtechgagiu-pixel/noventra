@@ -8,15 +8,19 @@ export async function wakeAnalysisRunner(origin:string|undefined){
   const url=new URL('/api/health',origin);
   if(url.protocol!=='https:'||!url.hostname.endsWith('.onrender.com'))throw new Error('Invalid Render runner origin');
   try{
-    const response=await fetch(url,{signal:AbortSignal.timeout(5000),redirect:'error'});
+    // workerd rejects redirect:'error' before sending the request. Manual keeps
+    // the wake on the configured origin without following an unexpected redirect.
+    const response=await fetch(url,{signal:AbortSignal.timeout(25_000),redirect:'manual'});
     await response.body?.cancel();
-    return {status:response.ok?'awake':'starting'};
-  }catch{return {status:'starting'};}
+    return {status:response.ok?'awake':'starting',httpStatus:response.status};
+  }catch(error){return {status:'starting',reason:error instanceof Error?`${error.name}: ${error.message.slice(0,180)}`:'network_error'};}
 }
 
 export async function scheduledMaintenance(runner:string|undefined){
   await query('DELETE FROM d1_bridge_nonces WHERE expires_at<$1',[Date.now()]);
-  const queued=await one<{n:number}>("SELECT count(*) AS n FROM ticket_generation_jobs WHERE status IN ('QUEUED','WAITING') OR (status='RUNNING' AND julianday(lease_expires_at)<julianday('now'))");
+  // Keep the runner awake for its final active jobs too: outgoing AI requests
+  // alone do not prevent a Free web service from spinning down.
+  const queued=await one<{n:number}>("SELECT count(*) AS n FROM ticket_generation_jobs WHERE status IN ('QUEUED','WAITING','RUNNING')");
   const wake=queued?.n?await wakeAnalysisRunner(runner):{status:'idle'};
   return {queued:queued?.n??0,wake};
 }
