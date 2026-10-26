@@ -17,8 +17,9 @@ export function JobQueue({ initial, onlyCustom = false }: { initial: QueueItem[]
 
   useEffect(() => {
     let stop = false;
-    const load = async () => { try { const r = await api<{ queue: QueueItem[] }>('/api/queue'); if (!stop) setItems(r.queue); } catch { /* keep last state */ } };
-    const t = setInterval(load, active ? 4000 : 20000);
+    // Hidden tabs never poll; an idle queue is checked once a minute (each poll is a database read).
+    const load = async () => { if (document.visibilityState !== 'visible') return; try { const r = await api<{ queue: QueueItem[] }>('/api/queue'); if (!stop) setItems(r.queue); } catch { /* keep last state */ } };
+    const t = setInterval(load, active ? 6000 : 60_000);
     setNow(Date.now());
     const c = setInterval(() => setNow(Date.now()), 1000);
     return () => { stop = true; clearInterval(t); clearInterval(c); };

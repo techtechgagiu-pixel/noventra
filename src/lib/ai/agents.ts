@@ -7,7 +7,7 @@ import type { ModelRef } from './router';
 export type VotingAgentId = 'victor' | 'andrei' | 'mihai' | 'alex' | 'diana' | 'robert' | 'ioana' | 'radu' | 'elena' | 'cosmin' | 'hantu' | 'becali' | 'ilie' | 'sumudica' | 'petrescu' | 'stoica' | 'prunea' | 'porumboiu' | 'ianis' | 'dragusin' | 'man' | 'tamas' | NewAiAgentId;
 export type AgentId = VotingAgentId | 'scout' | 'corina';
 
-export const PROMPT_VERSION = 'v5.3-model-identities';
+export const PROMPT_VERSION = 'v5.4-research-brief';
 
 export type AgentDefinition = {
   id: AgentId;
@@ -29,6 +29,7 @@ const COMMON = `Ești un analist într-o echipă de agenți AI (modele cu roluri
 SARCINA: pentru fiecare meci, alege selecția cea mai SIGURĂ bine susținută de date dintre piețele disponibile — sau NO_BET dacă niciuna nu este convingătoare. Biletele se construiesc din multe selecții cu cote mici și probabilitate mare, nu din câteva cote mari. O selecție intră pe bilet doar dacă o susține un număr minim de agenți (pragul îl primești în mesaj); dacă Claude Haiku 5.5 și GPT-6 Luna Pro (cei mai prudenți) o refuză amândoi, pragul crește.
 FLUX: pentru fiecare meci dai pronosticul tău principal și până la 2 alternative (ideal alte tipuri de pariu: rezultat, goluri, ambele marchează, reprize, cornere). Pronosticurile susținute de cel puțin pragul de agenți formează lista scurtă; din ea CREIERUL echipei alege pronosticul ideal pentru bilet, urmărind atât șansa de câștig, cât și varietatea biletului.
 PRUDENȚĂ: între două selecții corecte, alegi pe cea cu probabilitatea mai mare (de ex. șansă dublă în loc de victorie, peste 1.5 în loc de peste 2.5). INTERZIS: orice pronostic „sub” (sub X goluri pe meci sau pe o echipă) — aceste piețe nu există pentru tine. Fiecare agent are o cotă maximă și o probabilitate minimă proprii; un vot în afara lor NU este numărat — respectă-ți caracterul.
+DOSARUL DE CERCETARE (researchBrief, adus de Omul de știri): ultimele 5 meciuri directe, ultimele 5 ale gazdelor acasă și ale oaspeților în deplasare, clasamentul, titularii (când sunt anunțați), absențele și problemele financiare din presă. Ține cont de el la fiecare meci: o absență importantă, o criză financiară sau un istoric direct clar contra selecției tale scad probabilitatea; „n/d” înseamnă lipsă de date, nu un fapt.
 Reguli obligatorii:
 - Folosești EXCLUSIV datele din mesaj (dosarul SCOUT, calculele motorului statistic, cotele observate). Nu inventezi accidentări, loturi, xG, știri, motivații sau cote.
 - Datele lipsă rămân lipsă și le menționezi, dar lipsa xG, a loturilor sau a accidentărilor este normală pentru această sursă și NU este singură un motiv de NO_BET.
@@ -291,7 +292,7 @@ export const ScoutOutputSchema = z.preprocess(wrap('fixtures'), z.object({
   fixtures: z.array(z.object({ fixtureId, summary: text(900), keyObservations: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, 5) : v), shortList) })).min(1),
 }));
 
-export const INITIAL_SCHEMA_TEXT = `{"predictions":[{"fixtureId":"<id exact>","decision":"BET_CANDIDATE|NO_BET","marketKey":"<key din markets sau null>","estimatedProbability":0.0-1.0 sau null,"confidence":0-100,"risk":"LOW|MEDIUM|HIGH","evidence":["max 4 dovezi din date"],"counterarguments":["..."],"missingData":["..."],"failureReasons":["cum poate eșua"],"rationale":"1-3 propoziții","alternatives":[{"marketKey":"<altă key din markets>","estimatedProbability":0.0-1.0,"reason":"de ce"}]}]} — câte un element pentru FIECARE meci primit; "alternatives" = încă 0–2 pronosticuri pe care le susții, de preferat de ALT TIP decât cel principal.`;
+export const INITIAL_SCHEMA_TEXT = `{"predictions":[{"fixtureId":"<id exact>","decision":"BET_CANDIDATE|NO_BET","marketKey":"<key din markets sau null>","estimatedProbability":0.0-1.0 sau null,"confidence":0-100,"risk":"LOW|MEDIUM|HIGH","evidence":["max 3 dovezi scurte (sub 15 cuvinte)"],"counterarguments":["max 2, scurte"],"missingData":["max 2, scurte"],"failureReasons":["max 2: cum poate eșua"],"rationale":"1-2 propoziții, sub 45 de cuvinte","alternatives":[{"marketKey":"<altă key din markets>","estimatedProbability":0.0-1.0,"reason":"sub 12 cuvinte"}]}]} — câte un element pentru FIECARE meci primit; fii concis — textul lung costă și nu adaugă voturi; "alternatives" = încă 0–2 pronosticuri pe care le susții, de preferat de ALT TIP decât cel principal.`;
 export const DEBATE_SCHEMA_TEXT = `{"revisions":[{"fixtureId":"<id>","decision":"BET_CANDIDATE|NO_BET","marketKey":"<key sau null>","estimatedProbability":0.0-1.0 sau null,"confidence":0-100,"risk":"LOW|MEDIUM|HIGH","changed":true|false,"objection":"obiecția ta principală față de alt agent (numește-l)","response":"cum răspunzi obiecțiilor primite","rationale":"poziția finală, 1-3 propoziții"}]} — câte un element pentru FIECARE meci primit.`;
 export const BrainOutputSchema = z.preprocess(wrap('decisions'), z.object({
   decisions: z.array(z.object({ fixtureId: z.string(), choice: z.string().nullable().default(null), backup: z.string().nullable().default(null), reason: z.string().max(600).default('') })).min(1),

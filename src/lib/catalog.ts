@@ -1,9 +1,10 @@
-import { many, dialect } from './db';
+import { many, one, dialect } from './db';
 import { loadFixtures } from './sports/fixtures';
 import { localDate } from './time';
-import type { Fixture } from './sports/types';
+import type { Fixture, MarketQuote } from './sports/types';
 import { theOddsCatalog } from './sports/the-odds-catalog';
 import { mergeInformationalMatches } from './sports/informational-matches';
+import { cachedTheOddsEvents } from './sports/the-odds-prices';
 
 /**
  * Every fixture the sources publish for the next days, shared by the "Meciuri" tab and the custom-ticket league picker.
@@ -90,6 +91,16 @@ export async function matchList(userId: string, scope: 'all' | 'mine' = 'all', i
   });
   const leagues = (data?.leagues ?? []).map((l) => ({ id: l.id, name: l.name, country: l.country, top10: l.top10, count: rows.filter((r) => r.leagueId === l.id).length }));
   const merged = mergeInformationalMatches(rows, additional.fixtures);
+  // Schedule-only competitions: show The Odds API prices when they are cached (no new credits spent here).
+  if (includeInformational && merged.some((m) => m.source === 'the-odds-api')) {
+    const events = new Map<string, Awaited<ReturnType<typeof cachedTheOddsEvents>>[string]['events'][number]>(Object.values(await cachedTheOddsEvents().catch(() => ({}))).flatMap((c) => c.events.map((e) => [`the-odds-api:${e.id}`, e] as [string, typeof e])));
+    for (const m of merged) {
+      const e = m.source === 'the-odds-api' ? events.get(m.id) : undefined;
+      if (!e) continue;
+      const p = (k: string) => e.markets.find((x) => x.key === k)?.odds ?? null;
+      m.odds = { home: p('1X2:HOME'), draw: p('1X2:DRAW'), away: p('1X2:AWAY'), markets: e.markets.length, bookmaker: `The Odds API · mediana a ${e.books} case` };
+    }
+  }
   for (const m of merged) {
     if (!leagues.some((l) => l.id === m.leagueId)) leagues.push({ id: m.leagueId, name: m.league, country: m.country, top10: false, count: 0 });
   }
@@ -97,4 +108,19 @@ export async function matchList(userId: string, scope: 'all' | 'mine' = 'all', i
   for (const m of merged) counts.set(m.leagueId, (counts.get(m.leagueId) ?? 0) + 1);
   return { rows: merged, leagues: leagues.map((l) => ({ ...l, count: counts.get(l.id) ?? 0 })), refreshing: refreshing || additional.source.refreshing,
     scope, updatedAt: at ? new Date(at).toISOString() : null, errors: (data?.errors ?? []).length, additionalSource: additional.source };
+}
+
+/** All stored markets for one match (Meciuri: expand a row). Reads the last saved prices only. */
+export async function matchMarkets(id: string): Promise<{ bookmaker: string | null; observedAt: string | null; markets: MarketQuote[] }> {
+  if (id.startsWith('the-odds-api:')) {
+    for (const c of Object.values(await cachedTheOddsEvents().catch(() => ({})))) {
+      const e = c.events.find((x) => `the-odds-api:${x.id}` === id);
+      if (e) return { bookmaker: `The Odds API · mediana a ${e.books} case`, observedAt: c.at, markets: e.markets.map((m) => ({ ...m, bookmaker: m.bookmaker ?? 'The Odds API' })) };
+    }
+    return { bookmaker: null, observedAt: null, markets: [] };
+  }
+  const row = await one<{ bookmaker: string; markets: MarketQuote[] | string; observed_at: Date | string }>('SELECT bookmaker, markets, observed_at FROM odds_snapshots WHERE fixture_id=$1 ORDER BY observed_at DESC, id DESC LIMIT 1', [id]);
+  if (!row) return { bookmaker: null, observedAt: null, markets: [] };
+  const markets = (typeof row.markets === 'string' ? JSON.parse(row.markets) : row.markets) as MarketQuote[];
+  return { bookmaker: row.bookmaker, observedAt: new Date(row.observed_at).toISOString(), markets: markets.map((m) => ({ ...m, bookmaker: m.bookmaker ?? row.bookmaker })) };
 }

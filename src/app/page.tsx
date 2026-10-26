@@ -7,6 +7,7 @@ import { MatchesView } from '@/components/matches/matches-view';
 import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
 import { ResultsRefresh } from '@/components/results-refresh';
+import { FeedbackButton } from '@/components/feedback-button';
 import { many } from '@/lib/db';
 import { jobEvents, jobMeta, listTickets, ticketDetail } from '@/lib/views';
 import { TicketView, type TicketData } from '@/components/ticket-view';
@@ -89,6 +90,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
             ))}
           </nav>
           {user.role === 'admin' && <Link href="/admin/invitations" className="text-xs text-cyan" title="Conturi și coduri de acces">Conturi</Link>}
+          {user.role === 'admin' && <Link href="/admin/feedback" className="text-xs text-gold" title="Ideile trimise de utilizatori">Sugestii</Link>}
           <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
         </div>
       </header>
@@ -104,7 +106,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} />}
         </Suspense>
       </main>
-      <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-8 text-xs text-muted"><p>Rezultatele se actualizează automat după confirmarea scorului final.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
+      <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-8 text-xs text-muted"><p>Rezultatele și scorurile live de pe bilete se actualizează automat la 10 minute.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
+      <FeedbackButton />
     </>
   );
 }

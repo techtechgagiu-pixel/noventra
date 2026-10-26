@@ -136,7 +136,7 @@ export async function settlePending() {
     const due = await many<{ fixture_id: string; kickoff_utc: Date; league_id: string; status: string }>(
       `SELECT DISTINCT f.id AS fixture_id, f.kickoff_utc, f.league_id, f.status, f.results_checked_at FROM fixtures f
        WHERE ${timeCompare('f.kickoff_utc','<=',SQL_NOW())} AND f.provider='espn'
-       AND ((f.status NOT IN ('post','cancelled') AND (f.results_checked_at IS NULL OR ${timeCompare('f.results_checked_at','<',SQL_AGO(5,'minutes'))})) OR (f.status='post' AND ${timeCompare('f.kickoff_utc','>',SQL_AGO(48,'hours'))} AND (f.results_checked_at IS NULL OR ${timeCompare('f.results_checked_at','<',SQL_AGO(30,'minutes'))}))) AND (
+       AND ((f.status NOT IN ('post','cancelled') AND (f.results_checked_at IS NULL OR ${timeCompare('f.results_checked_at','<',SQL_AGO(10,'minutes'))})) OR (f.status='post' AND ${timeCompare('f.kickoff_utc','>',SQL_AGO(48,'hours'))} AND (f.results_checked_at IS NULL OR ${timeCompare('f.results_checked_at','<',SQL_AGO(30,'minutes'))}))) AND (
          EXISTS (SELECT 1 FROM final_decisions d JOIN tickets t ON t.job_id=d.job_id WHERE d.fixture_id=f.id AND d.outcome='QUALIFIED' AND t.generation_status='INCOMPLETE' AND (f.status<>'postponed' OR ${timeCompare('f.kickoff_utc','>',SQL_AGO(48,'hours'))})) OR
          EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING') OR
          EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.outcome IS NULL) OR

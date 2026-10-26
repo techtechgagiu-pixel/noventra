@@ -23,7 +23,7 @@ export function SlotCards({ initial }: { initial: Slot[] }) {
   useEffect(() => {
     const active = slots.some((s) => s.job && !s.ticket);
     if (!active) return;
-    const t = setInterval(refresh, 8000);
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 10_000);
     return () => clearInterval(t);
   }, [slots, refresh]);
 

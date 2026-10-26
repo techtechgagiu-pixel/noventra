@@ -61,13 +61,13 @@ test('confirmed outcomes automatically change level and rank on an open card wit
     const fixture = `demo:card-refresh:${job}:15`;
     await db.query("UPDATE fixtures SET status='post',home_score=1,away_score=0 WHERE id=$1", [fixture]);
     await db.query("UPDATE agent_predictions SET outcome='WON' WHERE job_id=$1 AND fixture_id=$2", [job, fixture]);
-    await page.clock.runFor(61_000);
+    await page.clock.runFor(601_000);
     await expect(card).toHaveAttribute('data-rarity', 'super');
     await expect(card.locator('.player-card-level')).toContainText('315 XP');
     await expect(card.locator('.player-card-level strong')).toHaveText('04');
     await db.query("UPDATE fixtures SET home_score=0,away_score=1 WHERE id=$1", [fixture]);
     await db.query("UPDATE agent_predictions SET outcome='LOST' WHERE job_id=$1 AND fixture_id=$2", [job, fixture]);
-    await page.clock.runFor(61_000);
+    await page.clock.runFor(601_000);
     await expect(card).toHaveAttribute('data-rarity', 'elite');
     await expect(card.locator('.player-card-level')).toContainText('270 XP');
     await expect(card.locator('.player-card-level strong')).toHaveText('03');

@@ -86,14 +86,17 @@ export function cleanAgentText<T>(text: T): T {
   }).replace(old, (name) => modelAgentName(PLACEHOLDERS[name])) as T;
 }
 
-/** Clean generated prose; leave identifiers, model IDs, team names and sourced headlines intact. */
-export function cleanPayload<T>(value: T, depth = 0): T {
+/** Clean generated prose; leave identifiers, model IDs, team names and sourced headlines intact.
+ * Only strings under a prose key are rewritten: agent id lists (e.g. custom.agents: ["hantu","becali"]) must stay ids,
+ * otherwise the live map loses the selected agents whose ids look like old display names. */
+const PROSE = /^(rationale|objection|response|reason|note|overall|advice|failureReasons|evidence|summary|keyObservations|consequence|lines|commentary|text)$/;
+export function cleanPayload<T>(value: T, depth = 0, prose = false): T {
   if (depth > 12 || value === null || value === undefined) return value;
-  if (typeof value === 'string') return cleanAgentText(value);
-  if (Array.isArray(value)) return value.map((v) => cleanPayload(v, depth + 1)) as T;
+  if (typeof value === 'string') return prose ? cleanAgentText(value) : value;
+  if (Array.isArray(value)) return value.map((v) => cleanPayload(v, depth + 1, prose)) as T;
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {};
-    for (const [k,v] of Object.entries(value as Record<string, unknown>)) out[k] = /^(rationale|objection|response|reason|note|overall|advice|failureReasons|evidence|summary|keyObservations|consequence|lines|commentary|text)$/.test(k) ? cleanPayload(v,depth+1) : v && typeof v === 'object' ? cleanPayload(v,depth+1) : v;
+    for (const [k,v] of Object.entries(value as Record<string, unknown>)) out[k] = cleanPayload(v, depth + 1, prose || PROSE.test(k));
     return out as T;
   }
   return value;

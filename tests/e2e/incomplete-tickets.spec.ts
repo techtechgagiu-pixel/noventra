@@ -36,7 +36,7 @@ test('incomplete archive and detail show validated matches and refresh their res
     await expect(picks).toContainText('✗ Nu a intrat');
     await expect(page.getByText('BILET CÂȘTIGAT',{exact:false})).toHaveCount(0);
     await db.query("UPDATE fixtures SET status='post',home_score=0,away_score=1 WHERE id='demo:incomplete-ui-2'");
-    await page.clock.runFor(61_000);
+    await page.clock.runFor(601_000);
     await expect(picks.getByText('✗ Nu a intrat',{exact:true})).toHaveCount(2);
     await expect(page.getByText('Bilet incomplet',{exact:true})).toBeVisible();
     const after = await (await page.request.get('/api/test/stats')).json();
