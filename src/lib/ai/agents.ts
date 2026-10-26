@@ -215,43 +215,80 @@ export function systemPrompt(agent: AgentDefinition) {
 }
 
 // ── Schemas ────────────────────────────────────────────────────
-const shortList = z.array(z.string().max(400)).max(6).default([]);
+// Models phrase the same answer in many shapes ("75%", 0.8 for confidence, "medium", "mediu", a sentence longer than
+// the limit). These normalisers only change the FORM of a value the model actually gave — never invent one — so
+// answers are no longer thrown away for formatting while the meaning stays checked.
+const num = (v: unknown) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v.replace('%', '').replace(',', '.').trim()) : v);
+const probability = z.preprocess((v) => {
+  if (v === undefined || v === null || v === '') return null;
+  const n = num(v);
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  const p = n > 1 && n <= 100 ? n / 100 : n;
+  return p >= 0 && p <= 1 ? p : null;
+}, z.number().min(0).max(1).nullable()).default(null);
+const confidence = z.preprocess((v) => {
+  const n = num(v);
+  if (typeof n !== 'number' || !Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, n > 0 && n <= 1 ? n * 100 : n));
+}, z.number().min(0).max(100)).default(0);
+const RISK: Record<string, 'LOW' | 'MEDIUM' | 'HIGH'> = { low: 'LOW', scazut: 'LOW', redus: 'LOW', mic: 'LOW', medium: 'MEDIUM', moderate: 'MEDIUM', moderat: 'MEDIUM', mediu: 'MEDIUM', mid: 'MEDIUM', high: 'HIGH', ridicat: 'HIGH', mare: 'HIGH', crescut: 'HIGH' };
+const risk = z.preprocess((v) => {
+  if (typeof v === 'number') return v <= 33 ? 'LOW' : v <= 66 ? 'MEDIUM' : 'HIGH';
+  const k = String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  return RISK[k] ?? RISK[k.split(/[^a-z]/)[0]] ?? 'HIGH';
+}, z.enum(['LOW', 'MEDIUM', 'HIGH'])).default('HIGH');
+const text = (max: number) => z.preprocess((v) => (v === undefined || v === null ? '' : typeof v === 'string' ? v.slice(0, max) : JSON.stringify(v).slice(0, max)), z.string().max(max)).default('');
+const shortList = z.preprocess((v) => {
+  const items = Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v];
+  return items.filter((x) => x !== null && x !== undefined && x !== '').map((x) => (typeof x === 'string' ? x : JSON.stringify(x)).slice(0, 400)).slice(0, 6);
+}, z.array(z.string().max(400)).max(6)).default([]);
+const decision = z.preprocess((v) => {
+  const k = String(v ?? '').toUpperCase().replace(/[\s-]+/g, '_');
+  return k === 'BET' || k === 'BET_CANDIDATE' || k === 'CANDIDATE' ? 'BET_CANDIDATE' : k === 'NO_BET' || k === 'NOBET' || k === 'NO' || k === 'SKIP' ? 'NO_BET' : v;
+}, z.enum(['BET_CANDIDATE', 'NO_BET']));
+const fixtureId = z.preprocess((v) => (typeof v === 'number' ? String(v) : v), z.string());
+const marketKey = z.preprocess((v) => (typeof v === 'string' && v.trim() ? v.trim() : null), z.string().nullable()).default(null);
+const objects = (v: unknown) => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : v);
 export const PredictionSchema = z.object({
-  fixtureId: z.string(),
-  decision: z.enum(['BET_CANDIDATE', 'NO_BET']),
-  marketKey: z.string().nullable().default(null),
-  estimatedProbability: z.number().min(0).max(1).nullable().default(null),
-  confidence: z.number().min(0).max(100).default(0),
-  risk: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('HIGH'),
+  fixtureId,
+  decision,
+  marketKey,
+  estimatedProbability: probability,
+  confidence,
+  risk,
   evidence: shortList,
   counterarguments: shortList,
   missingData: shortList,
   failureReasons: shortList,
-  rationale: z.string().max(900).default(''),
+  rationale: text(900),
   /** Up to two more selections the agent also backs (ideally other market types). */
-  alternatives: z.array(z.object({ marketKey: z.string(), estimatedProbability: z.number().min(0).max(1).nullable().default(null), reason: z.string().max(300).default('') })).max(3).default([]),
+  alternatives: z.preprocess((v) => (Array.isArray(v) ? v.filter((a) => a && typeof a === 'object' && typeof (a as { marketKey?: unknown }).marketKey === 'string' && (a as { marketKey: string }).marketKey.trim()).slice(0, 3) : []),
+    z.array(z.object({ marketKey: z.string(), estimatedProbability: probability, reason: text(300) })).max(3)).default([]),
 });
-const wrap = (key: string) => (v: unknown) => (Array.isArray(v) ? { [key]: v } : v && typeof v === 'object' && !(key in (v as object)) && 'fixtureId' in (v as object) ? { [key]: [v] } : v);
+const wrap = (key: string) => (v: unknown) => {
+  const shaped = Array.isArray(v) ? { [key]: v } : v && typeof v === 'object' && !(key in (v as object)) && 'fixtureId' in (v as object) ? { [key]: [v] } : v;
+  return shaped && typeof shaped === 'object' && Array.isArray((shaped as Record<string, unknown>)[key]) ? { ...(shaped as object), [key]: objects((shaped as Record<string, unknown>)[key]) } : shaped;
+};
 export const InitialOutputSchema = z.preprocess(wrap('predictions'), z.object({ predictions: z.array(PredictionSchema).min(1) }));
 export type Prediction = z.infer<typeof PredictionSchema>;
 
 export const RevisionSchema = z.object({
-  fixtureId: z.string(),
-  decision: z.enum(['BET_CANDIDATE', 'NO_BET']),
-  marketKey: z.string().nullable().default(null),
-  estimatedProbability: z.number().min(0).max(1).nullable().default(null),
-  confidence: z.number().min(0).max(100).default(0),
-  risk: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('HIGH'),
-  changed: z.boolean().default(false),
-  objection: z.string().max(600).default(''),
-  response: z.string().max(600).default(''),
-  rationale: z.string().max(900).default(''),
+  fixtureId,
+  decision,
+  marketKey,
+  estimatedProbability: probability,
+  confidence,
+  risk,
+  changed: z.preprocess((v) => v === true || v === 'true' || v === 1, z.boolean()).default(false),
+  objection: text(600),
+  response: text(600),
+  rationale: text(900),
 });
 export const DebateOutputSchema = z.preprocess(wrap('revisions'), z.object({ revisions: z.array(RevisionSchema).min(1) }));
 export type Revision = z.infer<typeof RevisionSchema>;
 
 export const ScoutOutputSchema = z.preprocess(wrap('fixtures'), z.object({
-  fixtures: z.array(z.object({ fixtureId: z.string(), summary: z.string().max(900), keyObservations: z.array(z.string().max(400)).max(5).default([]) })).min(1),
+  fixtures: z.array(z.object({ fixtureId, summary: text(900), keyObservations: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, 5) : v), shortList) })).min(1),
 }));
 
 export const INITIAL_SCHEMA_TEXT = `{"predictions":[{"fixtureId":"<id exact>","decision":"BET_CANDIDATE|NO_BET","marketKey":"<key din markets sau null>","estimatedProbability":0.0-1.0 sau null,"confidence":0-100,"risk":"LOW|MEDIUM|HIGH","evidence":["max 4 dovezi din date"],"counterarguments":["..."],"missingData":["..."],"failureReasons":["cum poate eșua"],"rationale":"1-3 propoziții","alternatives":[{"marketKey":"<altă key din markets>","estimatedProbability":0.0-1.0,"reason":"de ce"}]}]} — câte un element pentru FIECARE meci primit; "alternatives" = încă 0–2 pronosticuri pe care le susții, de preferat de ALT TIP decât cel principal.`;

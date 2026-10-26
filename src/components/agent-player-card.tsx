@@ -41,7 +41,8 @@ export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: {
         {!a.bets && a.usage.failed > 0 && !a.editorial && <p className="text-gold">Niciun pronostic valid salvat. {a.usage.failed} apeluri au eșuat; abținerile nu sunt voturi NO BET.</p>}
         <p>{money(a.usage.costToday)} azi · {money(a.usage.cost7d)} în 7 zile · {money(a.usage.costMonth)} {monthLabel} · {money(a.usage.costTotal)} total</p>
         <p>{num(a.usage.calls)} apeluri · {num(a.usage.inTokens + a.usage.outTokens)} tokeni{a.usage.avgLatencyMs ? ` · ${(a.usage.avgLatencyMs / 1000).toFixed(1)} s/răspuns` : ''}{a.usage.failed ? ` · ${a.usage.failed} eșuate` : ''}</p>
-        {a.ownModelShare !== null && <p>{Math.round(a.ownModelShare * 100)}% din pozițiile afișate pe modelul atribuit acum.</p>}
+        {a.ownModelShare !== null && <p>{Math.round(a.ownModelShare * 100)}% din pozițiile acestui rol au fost date de modelul atribuit acum.</p>}
+        {!a.editorial && a.excluded && a.excluded.won + a.excluded.lost > 0 && <p>Necontabilizate: {a.excluded.won} V / {a.excluded.lost} R{a.excluded.otherModel ? ` · ${a.excluded.otherModel} de la alt model (rezervă sau atribuire veche)` : ''}{a.excluded.afterKickoff ? ` · ${a.excluded.afterKickoff} salvate după start` : ''}. Clasamentul ia doar modelul actual, înainte de meci.</p>}
       </div></details>
       {a.recent.length > 0 && <AgentPredictionHistory agent={`${displayName} · ${ai.role}`} total={a.recent.length}
         entries={historyScope ? undefined : a.recent}

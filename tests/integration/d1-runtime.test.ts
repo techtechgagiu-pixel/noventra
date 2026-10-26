@@ -78,7 +78,9 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     await query("INSERT INTO fixtures(id,provider,provider_id,league_id,home_team,away_team,kickoff_utc,status,content_hash) VALUES('demo:d1','demo','d1','DEMO','A','B','2026-10-31T22:30:00Z','post','demo')");
     const makeJob = async (slot: string) => (await one<{ id: string }>("INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config) VALUES($1,$2,'2026-10-25',5,'demo','{}') RETURNING id", [user.id, slot]))!.id;
     const a = await makeJob('CUSTOM_1'), b = await makeJob('CUSTOM_2');
-    const pick = (job: string, round: number, decision: string, outcome: string | null, at: string) => query("INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome,created_at) VALUES($1,'demo:d1','robert',$2,'demo','demo','v1',$3,'1X2:HOME',1.5,'{}',$4,$5)", [job, round, decision, outcome, at]);
+    const { activeAssignments } = await import('@/lib/ai/assignments');
+    const model = (await activeAssignments()).get('robert')!.primary.model;
+    const pick = (job: string, round: number, decision: string, outcome: string | null, at: string) => query("INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome,created_at) VALUES($1,'demo:d1','robert',$2,'demo',$6,'v1',$3,'1X2:HOME',1.5,'{}',$4,$5)", [job, round, decision, outcome, at, model]);
     await pick(a, 0, 'BET_CANDIDATE', 'WON', '2026-10-20T08:00:00Z');
     await pick(b, 0, 'BET_CANDIDATE', 'WON', '2026-10-21T08:00:00Z');
     await pick(b, 1, 'BET_CANDIDATE', 'LOST', '2026-10-21T09:00:00Z');

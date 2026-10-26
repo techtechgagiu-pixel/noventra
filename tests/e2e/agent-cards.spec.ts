@@ -10,7 +10,7 @@ test('compact agent cards preserve career across month filters, editorial roles 
     const user = (await db.query("SELECT id FROM users WHERE email='cards@test.local'")).rows[0].id;
     const job = (await db.query(`INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,stage) VALUES($1,'CUSTOM_98',current_date,5,'cards','{}','{}','COMPLETED','DONE') RETURNING id`, [user])).rows[0].id;
     await db.query(`INSERT INTO fixtures(id,provider,provider_id,league_id,home_team,away_team,kickoff_utc,status,home_score,away_score,content_hash) VALUES('demo:card-career','demo','card-career','ENG1','DEMO Card Home','DEMO Card Away','2026-10-22T10:00:00Z','post',1,0,'card-career')`);
-    await db.query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome) VALUES($1,'demo:card-career','robert',0,'demo','demo','v1','BET_CANDIDATE','DC:1X',1.2,'{}','WON')`, [job]);
+    await db.query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome,created_at) VALUES($1,'demo:card-career','robert',0,'demo',(SELECT model_id FROM agent_model_assignments WHERE agent_id='robert' AND active LIMIT 1),'v1','BET_CANDIDATE','DC:1X',1.2,'{}','WON','2026-10-21T10:00:00Z')`, [job]);
   } finally { await db.end(); }
   await page.goto('/?tab=statistici&luna=all');
   const before = await (await page.request.get('/api/test/stats')).json();
@@ -49,8 +49,8 @@ test('confirmed outcomes automatically change level and rank on an open card wit
     const job = (await db.query(`INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,stage) VALUES($1,'CUSTOM_97',current_date,5,'card-refresh','{}','{}','COMPLETED','DONE') RETURNING id`, [user])).rows[0].id;
     await db.query(`INSERT INTO fixtures(id,provider,provider_id,league_id,home_team,away_team,kickoff_utc,status,content_hash)
       SELECT 'demo:card-refresh:'||$1||':'||i,'demo',i::text,'ENG1','DEMO Card Home','DEMO Card Away',now(),'pre','card-refresh' FROM generate_series(1,15) i`, [job]);
-    await db.query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome)
-      SELECT $1::uuid,'demo:card-refresh:'||$1::text||':'||i,'robert',0,'demo','demo','v1','BET_CANDIDATE','DC:1X',1.2,'{}',CASE WHEN i<=11 THEN 'WON' WHEN i<=14 THEN 'LOST' ELSE NULL END FROM generate_series(1,15) i`, [job]);
+    await db.query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome,created_at)
+      SELECT $1::uuid,'demo:card-refresh:'||$1::text||':'||i,'robert',0,'demo',(SELECT model_id FROM agent_model_assignments WHERE agent_id='robert' AND active LIMIT 1),'v1','BET_CANDIDATE','DC:1X',1.2,'{}',CASE WHEN i<=11 THEN 'WON' WHEN i<=14 THEN 'LOST' ELSE NULL END,now()-interval '1 day' FROM generate_series(1,15) i`, [job]);
     await page.clock.install();
     await page.goto('/?tab=statistici&luna=all&scope=mine');
     const card = page.locator('#agent-robert');

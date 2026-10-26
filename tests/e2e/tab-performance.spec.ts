@@ -8,7 +8,7 @@ test('statistics fetches a history only when expanded, retries errors and preser
     const user=(await db.query("SELECT id FROM users WHERE email='lazy-history@test.local'")).rows[0].id;
     const job=(await db.query("INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,stage) VALUES($1,'CUSTOM_98',current_date,5,'lazy-history','{}','{}','COMPLETED','DONE') RETURNING id",[user])).rows[0].id;
     await db.query("INSERT INTO fixtures(id,provider,provider_id,league_id,home_team,away_team,kickoff_utc,status,home_score,away_score,content_hash) VALUES('demo:lazy-history','demo','lazy-history','ENG1','DEMO lazy home','DEMO lazy away',now(),'post',2,0,'lazy-history')");
-    await db.query("INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome) VALUES($1,'demo:lazy-history','robert',0,'demo','demo','v1','BET_CANDIDATE','1X2:HOME',1.5,'{}','WON')",[job]);
+    await db.query("INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome,created_at) VALUES($1,'demo:lazy-history','robert',0,'demo',(SELECT model_id FROM agent_model_assignments WHERE agent_id='robert' AND active LIMIT 1),'v1','BET_CANDIDATE','1X2:HOME',1.5,'{}','WON',now()-interval '1 day')",[job]);
     let requests=0;
     await page.route('**/api/agents/robert/history?*',async route=>{
       requests++;

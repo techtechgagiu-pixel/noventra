@@ -1,3 +1,4 @@
+import { jsonrepair } from 'jsonrepair';
 import { z } from 'zod';
 import { config } from '../config';
 import { many, query, dialect, SQL_NOW, timeCompare, isD1 } from '../db';
@@ -68,6 +69,9 @@ function retryAfter(res: Response, body: string) {
   return 30_000;
 }
 
+/** OpenRouter models whose endpoint rejects `reasoning.enabled=false` (learned at runtime, e.g. GLM 5.3 Flash). */
+const reasoningRequired = new Set<string>(['z-ai/glm-5.3-flash']);
+
 async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: string, apiKey: string): Promise<RawResult> {
   const body: Record<string, unknown> = {
     model: ref.model,
@@ -82,7 +86,7 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
   if (ref.provider === 'openrouter') {
     // Mandatory-reasoning models cannot disable thinking. Use their lowest supported effort,
     // omit reasoning text and leave room for JSON; reasoning still consumes billed output tokens.
-    const effort = NEW_AI_PROFILES.find((a) => a.model === ref.model)?.reasoningEffort;
+    const effort = NEW_AI_PROFILES.find((a) => a.model === ref.model)?.reasoningEffort ?? (reasoningRequired.has(ref.model) ? 'low' : undefined);
     body.reasoning = effort ? { effort, exclude: true } : { enabled: false };
     body.max_completion_tokens = Math.min(8000, Math.max(Number(body.max_completion_tokens) || 0, 4000));
   }
@@ -94,17 +98,36 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
     reservation=await reservePaidCall(ref.model,amount,config.openRouterDailyUsd);
     if(!reservation)throw new BudgetExceededError('Plafonul zilnic OpenRouter este rezervat de apelurile în desfășurare.');
   }
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(ref.provider === 'openrouter' ? 120_000 : 90_000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(ref.provider === 'openrouter' ? 120_000 : 90_000),
+    });
+  } catch (error) {
+    if (reservation) { const { recordPaidCall } = await import('../d1/ai-budget'); await recordPaidCall(reservation, 0).catch(() => {}); }
+    throw error;
+  }
   const text = await res.text();
   rememberLimits(ref, res);
+  // A refused call costs nothing: release its budget reservation instead of holding it until the day ends.
+  if (!res.ok && reservation) { const { recordPaidCall } = await import('../d1/ai-budget'); await recordPaidCall(reservation, 0).catch(() => {}); reservation = null; }
   if (res.status === 413 || /request too large|reduce your message size/i.test(text)) throw new ProviderUnavailableError(ref.provider, `Cerere prea mare pentru limita ${ref.model}.`);
   if (res.status === 429) throw new RateLimitError(ref.provider, retryAfter(res, text), /per day|daily|TPD|RPD/i.test(text));
+  // The OpenRouter key itself reached the spending limit set on openrouter.ai: every paid model fails until it is raised.
+  if (ref.provider === 'openrouter' && (res.status === 403 || res.status === 402) && /key limit exceeded|insufficient credits|more credits/i.test(text)) {
+    const e = new RateLimitError('openrouter', 15 * 60_000, false);
+    e.message = 'Cheia OpenRouter a atins limita de cost setată pe openrouter.ai; agentul folosește modelul de rezervă până se mărește limita.';
+    throw e;
+  }
   if (res.status === 404 || res.status === 400 && /model/i.test(text) && /not (found|exist)|decommissioned/i.test(text)) throw new ProviderUnavailableError(ref.provider, `Model indisponibil: ${ref.model}`);
+  if (ref.provider === 'openrouter' && res.status === 400 && /reasoning is mandatory/i.test(text) && !reasoningRequired.has(ref.model)) {
+    // Some endpoints cannot switch thinking off: remember it and retry once with the lowest effort, reasoning hidden.
+    reasoningRequired.add(ref.model);
+    return callOpenAiCompatible(ref, input, baseUrl, apiKey);
+  }
   if (!res.ok) throw new ProviderUnavailableError(ref.provider, `${ref.provider} ${res.status}: ${text.slice(0, 300)}`);
   const json = JSON.parse(text) as { model?: string; choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
   if(reservation){
@@ -176,8 +199,12 @@ async function rawCall(ref: ModelRef, input: CallInput): Promise<RawResult> {
 function extractJson(text: string): unknown {
   const trimmed = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
   try { return JSON.parse(trimmed); } catch { /* fall through */ }
-  const start = trimmed.indexOf('{'), end = trimmed.lastIndexOf('}');
-  if (start >= 0 && end > start) return JSON.parse(trimmed.slice(start, end + 1));
+  const start = trimmed.search(/[{[]/), end = Math.max(trimmed.lastIndexOf('}'), trimmed.lastIndexOf(']'));
+  const body = start >= 0 ? trimmed.slice(start, end > start ? end + 1 : undefined) : trimmed;
+  try { return JSON.parse(body); } catch { /* fall through */ }
+  // Small models often emit near-JSON (trailing commas, a cut-off last element, unquoted keys): repair it
+  // syntactically. The schema still validates every field, so nothing is invented.
+  try { return JSON.parse(jsonrepair(start >= 0 ? trimmed.slice(start) : trimmed)); } catch { /* fall through */ }
   throw new Error('Răspunsul nu conține JSON.');
 }
 

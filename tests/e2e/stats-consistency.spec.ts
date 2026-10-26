@@ -10,7 +10,7 @@ test('archive filters, agent history and every statistics view use the same save
   for(let i=0;i<17;i++){
    const id=`demo:stats-sync:${i}`,out=i<12?'WON':i<16?'LOST':null;
    await db.query(`INSERT INTO fixtures(id,provider,provider_id,league_id,home_team,away_team,kickoff_utc,status,home_score,away_score,content_hash) VALUES($1,'demo',$1,'ENG1',$2,'DEMO Away',now()+($3::int * interval '1 day'),$4,$5,$6,'stats-sync')`,[id,`DEMO Stats ${i}`,out?-1:1,out?'post':'pre',out==='WON'?2:out===null?null:0,out==='LOST'?1:out===null?null:0]);
-   await db.query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,estimated_probability,payload,outcome) VALUES($1,$2,'robert',0,'demo','demo','v1','BET_CANDIDATE','1X2:HOME',1.5,0.7,$3,$4)`,[job,id,JSON.stringify({marketLabel:`DEMO Stats ${i} câștigă`}),out]);
+   await db.query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,estimated_probability,payload,outcome,created_at) VALUES($1,$2,'robert',0,'demo',(SELECT model_id FROM agent_model_assignments WHERE agent_id='robert' AND active LIMIT 1),'v1','BET_CANDIDATE','1X2:HOME',1.5,0.7,$3,$4,now()-interval '3 days')`,[job,id,JSON.stringify({marketLabel:`DEMO Stats ${i} câștigă`}),out]);
   }
   const before=await(await page.request.get('/api/test/stats')).json();
   const stats=await(await page.request.get('/api/statistics?month=all&scope=all')).json();

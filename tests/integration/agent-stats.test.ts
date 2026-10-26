@@ -5,13 +5,17 @@ import { topSixAgentIds } from '@/lib/agent-ranking';
 import { agentTrackRecord, allTrackRecords } from '@/lib/track-record';
 import { persistFixtures } from '@/lib/sports/fixtures';
 import { closePool, resetDb, makeUser, demoFixtures } from './helpers';
+import { activeAssignments } from '@/lib/ai/assignments';
+
+/** Statistics count a role's CURRENT model only, so test picks are made by robert's assigned model. */
+const robertModel = async () => (await activeAssignments()).get('robert')!.primary.model;
 
 beforeEach(resetDb);
 afterAll(closePool);
 async function pick(user: string, fixture: string, at: string, round: number, decision: string, outcome: string | null, existingJob?: string) {
   const count = await one<{ n: number }>('SELECT count(*)::int AS n FROM ticket_generation_jobs WHERE user_id=$1', [user]);
   const job = existingJob ?? (await one<{ id: string }>(`INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,stage) VALUES ($1,$2,current_date,5,'test','{}','{}','COMPLETED','DONE') RETURNING id`, [user, `CUSTOM_${(count?.n ?? 0) + 1}`]))!.id;
-  await query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome,created_at) VALUES ($1,$2,'robert',$3,'demo','demo','v1',$4,$5,1.5,'{}',$6,$7)`, [job, fixture, round, decision, decision === 'NO_BET' ? null : '1X2:HOME', outcome, at]);
+  await query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome,created_at) VALUES ($1,$2,'robert',$3,'demo',$8,'v1',$4,$5,1.5,'{}',$6,$7)`, [job, fixture, round, decision, decision === 'NO_BET' ? null : '1X2:HOME', outcome, at, await robertModel()]);
   return job;
 }
 
@@ -64,7 +68,7 @@ it('does not silently cap the display record at 200 matches',async()=>{
   const user=await makeUser();const fs=demoFixtures(205);await persistFixtures(fs);
   const job=await pick(user,fs[0].id,'2026-10-20T08:00:00Z',0,'BET_CANDIDATE','WON');
   await query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome)
-    SELECT $1,id,'robert',0,'demo','demo','v1','BET_CANDIDATE','1X2:HOME',1.5,'{}','WON' FROM fixtures WHERE id<>$2`,[job,fs[0].id]);
+    SELECT $1,id,'robert',0,'demo',$3,'v1','BET_CANDIDATE','1X2:HOME',1.5,'{}','WON' FROM fixtures WHERE id<>$2`,[job,fs[0].id,await robertModel()]);
   expect((await allTrackRecords(['robert']))[0].record).toMatchObject({decided:205,won:205});
   expect((await agentStats(user,false,'all')).agents.find((a)=>a.id==='robert')).toMatchObject({bets:205,won:205,recent:expect.any(Array)});
   expect(await agentHistory(user,'robert','all','all')).toHaveLength(205);
@@ -87,7 +91,7 @@ it('keeps the lightweight Custom ranking identical to Statistics including pendi
   const user=await makeUser();const fs=demoFixtures(3).map(f=>({...f,kickoff:'2026-10-24T12:00:00Z'}));await persistFixtures(fs);
   const job=await pick(user,fs[0].id,'2026-10-20T08:00:00Z',0,'BET_CANDIDATE','WON');
   await pick(user,fs[1].id,'2026-10-20T09:00:00Z',0,'BET_CANDIDATE',null,job);
-  await query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome) VALUES($1,$2,'victor',0,'demo','demo','v1','BET_CANDIDATE','1X2:HOME',1.5,'{}','WON')`,[job,fs[2].id]);
+  await query(`INSERT INTO agent_predictions(job_id,fixture_id,agent_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload,outcome) VALUES($1,$2,'victor',0,'demo',$3,'v1','BET_CANDIDATE','1X2:HOME',1.5,'{}','WON')`,[job,fs[2].id,(await activeAssignments()).get('victor')!.primary.model]);
   for(const month of ['2026-10','2026-11','all']) {
     const stats=(await agentStats(user,false,month)).agents;
     const ranking=await agentRanking(month);
