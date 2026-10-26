@@ -84,7 +84,7 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     await pick(a, 0, 'BET_CANDIDATE', 'WON', '2026-10-20T08:00:00Z');
     await pick(b, 0, 'BET_CANDIDATE', 'WON', '2026-10-21T08:00:00Z');
     await pick(b, 1, 'BET_CANDIDATE', 'LOST', '2026-10-21T09:00:00Z');
-    expect((await agentStats(user.id, false, '2026-10')).agents.find(a => a.id === 'robert')).toMatchObject({ bets: 0, career: { won: 0, lost: 1 } });
+    expect((await agentStats(user.id, false, '2026-10')).agents.find(a => a.id === 'robert')).toMatchObject({ bets: 0, career: { won: 0, lost: 0 } });
     expect((await agentStats(user.id, false, '2026-11')).agents.find(a => a.id === 'robert')).toMatchObject({ bets: 1, won: 0, lost: 1 });
     expect(await agentTrackRecord('robert')).toMatchObject({ decided: 1, won: 0 });
     expect((await allTrackRecords(['robert'], { month: '2026-11' }))[0].record).toMatchObject({ decided: 1, won: 0 });

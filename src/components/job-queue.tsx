@@ -39,7 +39,7 @@ export function JobQueue({ initial, onlyCustom = false }: { initial: QueueItem[]
         {list.map((i) => {
           const live = ACTIVE.includes(i.status);
           const pct = i.status === 'QUEUED' ? 0 : !live ? 100 : i.batches ? Math.min(98, Math.round(((i.batch - 1) / i.batches) * 100 + 100 / i.batches / 2)) : 5;
-          const href = i.custom ? `/?tab=custom&job=${i.id}` : i.review ? `/?tab=verifica&job=${i.id}` : !live && i.ticketId ? `/?tab=istoric&ticket=${i.ticketId}` : `/?tab=analiza&job=${i.id}`;
+          const href = i.custom ? `/?tab=custom&job=${i.id}` : !live && i.ticketId ? `/?tab=istoric&ticket=${i.ticketId}` : `/?tab=analiza&job=${i.id}`;
           const tone = i.status === 'PAUSED' || i.status === 'WAITING' ? 'text-gold' : i.status === 'RUNNING' ? 'text-emerald' : i.status === 'QUEUED' ? 'text-cyan' : i.generation === 'COMPLETED' ? 'text-emerald' : 'text-muted';
           return (
             <li key={i.id}>

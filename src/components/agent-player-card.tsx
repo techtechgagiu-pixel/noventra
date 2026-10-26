@@ -5,8 +5,8 @@ import { aiCardIdentity } from '@/lib/ai-card-identity';
 import { createHash } from 'node:crypto';
 
 const money = (x: number) => x > 0 && x < .01 ? '< 0,01 $' : `${x.toFixed(2).replace('.', ',')} $`;
-/** "Hot streak": over 80% green picks on at least HOT_MIN_DECIDED decided picks (a 6/6 start is not a streak). */
-export const HOT_MIN_DECIDED = 10;
+/** "Hot streak": every voting agent over 80% green picks (user decision 27.10: all of them, no minimum sample). */
+export const HOT_MIN_DECIDED = 1;
 export const isHot = (a: Pick<AgentStat, 'editorial' | 'won' | 'lost'>) => !a.editorial && a.won + a.lost >= HOT_MIN_DECIDED && a.won / (a.won + a.lost) > 0.8;
 const num = (x: number) => new Intl.NumberFormat('ro-RO').format(Math.round(x));
 
@@ -34,7 +34,7 @@ export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: {
     <div className="player-card-body">
       {!a.editorial ? <>
         <dl className="player-card-results"><div><dt>Verzi</dt><dd className="text-emerald">{a.won}</dd></div><div><dt>Roșii</dt><dd className="text-rose">{a.lost}</dd></div><div><dt>În așteptare</dt><dd>{a.pending}</dd></div></dl>
-        <div className="player-card-xp"><div><span>Nivel {p!.level} → {p!.level + 1}</span><span>{p!.progress}/100 XP</span></div><div className="player-card-xp-track" role="progressbar" aria-label={`Progres nivel ${displayName} · ${ai.role}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={p!.progress}><span style={{ width: `${p!.progress}%` }} /></div><p>Carieră: <span className="text-emerald">{p!.won} V</span> / <span className="text-rose">{p!.lost} R</span><span>+30 / −15 XP</span></p></div>
+        <div className="player-card-xp"><div><span>Nivel {p!.level} → {p!.level + 1}</span><span>{p!.progress}/100 XP</span></div><div className="player-card-xp-track" role="progressbar" aria-label={`Progres nivel ${displayName} · ${ai.role}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={p!.progress}><span style={{ width: `${p!.progress}%` }} /></div><p>{historyScope?.month === 'all' ? 'Carieră: ' : `În ${monthLabel} (se resetează pe 1): `}<span className="text-emerald">{p!.won} V</span> / <span className="text-rose">{p!.lost} R</span><span>+30 / −15 XP</span></p></div>
       </> : <p className="player-card-editorial">{a.id === 'corina' ? 'Decizie editorială: știri, surse și contradicții; fără voturi.' : 'Cercetare și context; fără pronosticuri proprii.'}</p>}
       <details className="player-card-details"><summary>Detalii și consum</summary><div className="space-y-2 pt-2 text-[11px] text-muted">
       {ai && a.character && <div className="player-ai-character">

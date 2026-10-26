@@ -32,7 +32,7 @@ test('home explains the product; saved tickets, old daily links and replay still
 
   // The optional overview remains available without the retired daily-slot tile.
   await page.goto('/?tab=acasa');
-  await expect(page.getByRole('navigation', { name: 'Ce vrei să faci' }).getByRole('link')).toHaveCount(3);
+  await expect(page.getByRole('navigation', { name: 'Ce vrei să faci' }).getByRole('link')).toHaveCount(2);
   await expect(page.getByRole('group', { name: 'Etapele dezbaterii' })).toBeVisible();
   // Replay: no AI calls, no new jobs, no generate requests.
   const before = await (await page.request.get('/api/test/stats')).json();
@@ -108,27 +108,12 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   expect(errors.filter((e) => !/favicon|404/.test(e))).toEqual([]);
 });
 
-test('your own ticket: build from real prices → agents review it live → verdict and advice', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message));
+test('the "Biletul tău" tab is gone and its old links land on the home page', async ({ page }) => {
   await page.goto('/auth/test-login?email=e2e@test.local');
   await page.goto('/?tab=verifica');
-  await expect(page.getByRole('heading', { name: 'Vino cu biletul tău la analiză' })).toBeVisible();
-  const cards = page.getByRole('region', { name: 'Meciuri disponibile' }).locator('article');
-  await expect(cards.first()).toBeVisible({ timeout: 30_000 });
-  await cards.nth(0).getByRole('button', { pressed: false }).first().click();
-  await cards.nth(1).getByRole('button', { pressed: false }).nth(1).click();
-  await page.getByPlaceholder(/Ex\.: cred că/).fill('Gazdele sunt în formă.');
-  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/review-builder.png`, fullPage: true });
-  await page.getByRole('button', { name: /TRIMITE LA ANALIZĂ/ }).click();
-  await expect(page).toHaveURL(/tab=verifica&job=[0-9a-f-]{36}/, { timeout: 30_000 });
-  await expect(page.getByRole('region', { name: 'Verdictul echipei' })).toContainText('GPT-6 Luna Pro', { timeout: 90_000 });
-  await expect(page.getByRole('link', { name: 'VEZI BILETUL' })).toBeVisible({ timeout: 30_000 });
-  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/review-live.png`, fullPage: true });
-  await page.getByRole('link', { name: 'VEZI BILETUL' }).click();
-  await expect(page.getByText('Verdictul echipei · sfaturile creierului')).toBeVisible();
-  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/review-ticket.png`, fullPage: true });
-  expect(errors).toEqual([]);
+  await expect(page.getByRole('link', { name: /Biletul tău/ })).toHaveCount(0);
+  await expect(page.getByText('Analizează biletul tău')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /Creează bilet custom/ }).first()).toBeVisible();
 });
 
 test('statistics tab: per-agent record and consumption', async ({ page }) => {

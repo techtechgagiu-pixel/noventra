@@ -122,7 +122,7 @@ test('model identities replace actors across public home, Custom and statistics,
   await expect(page.locator('#agent-robert')).toHaveAttribute('aria-label', /Card AI .* · Managerul de risc/);
 });
 
-test('agents above 80% on at least 10 decided picks get the hot-streak flame card', async ({ page }) => {
+test('agents above 80% get the hot-streak flame card', async ({ page }) => {
   const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL || 'postgresql://postgres@localhost:5433/betmind_e2e' });
   await db.connect();
   try {

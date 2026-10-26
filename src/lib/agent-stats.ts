@@ -70,8 +70,11 @@ export async function agentStats(userId: string, admin = false, month = currentM
     picksPromise, usagePromise, activeAssignments(),
     many<{ agent_id: string; model_id: string; won: number; lost: number }>(`${finalAgentPicksCte(true)}
       SELECT p.agent_id,p.model_id,CAST(count(*) FILTER(WHERE p.outcome='WON') AS INTEGER) AS won,CAST(count(*) FILTER(WHERE p.outcome='LOST') AS INTEGER) AS lost
-      FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id WHERE p.decision='BET_CANDIDATE' AND ${timeCompare('p.created_at','<','f.kickoff_utc')} GROUP BY p.agent_id,p.model_id`, [scope === 'mine' ? userId : null]),
+      FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id WHERE p.decision='BET_CANDIDATE' AND ${timeCompare('p.created_at','<','f.kickoff_utc')}
+        AND ($2='all' OR (${timeCompare('f.kickoff_utc','>=','$3')} AND ${timeCompare('f.kickoff_utc','<','$4')})) GROUP BY p.agent_id,p.model_id`, [scope === 'mine' ? userId : null, month, ...window]),
   ]);
+  // Card progression (rank, colour, level, XP) restarts on the 1st of every month (user decision 27.10): it counts the
+  // selected month's matches only; "all" shows the whole history.
   // A role is judged only by its CURRENT model, on picks saved before kickoff: the same agent keeps the same pattern.
   const ownOf = (agentId: string) => assignments.get(agentId)?.primary.model ?? OPENROUTER_MODELS[agentId]?.model ?? null;
   const career = new Map<string, { won: number; lost: number }>();

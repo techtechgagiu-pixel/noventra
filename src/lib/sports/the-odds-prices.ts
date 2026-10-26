@@ -97,7 +97,11 @@ const daysLeftInMonth = () => { const d = new Date(); return new Date(Date.UTC(d
 const EXTRAS = 'the-odds-api-extras';
 const EXTRA_MARKETS = 'btts,double_chance,alternate_totals,team_totals,spreads';
 const EXTRA_COST = 5;
-const MAX_EXTRAS_PER_RUN = 12;
+const MAX_EXTRAS_PER_RUN = 40;
+/** Matches starting within this window get all their markets even beyond the daily allowance (user decision 27.10:
+ * tomorrow's matches complete everywhere), as long as at least SOON_FLOOR credits stay for the regular price refreshes. */
+const SOON_MS = 36 * 3600_000;
+const SOON_FLOOR = 150;
 type ExtrasPayload = { byEvent?: Record<string, { at: string; kickoff: string; markets: MarketQuote[] }>; day?: string; usedToday?: number };
 const half = (x: number) => Number.isFinite(x) && Math.abs(x % 1) === 0.5;
 
@@ -163,7 +167,10 @@ async function withTheOddsExtras(fixtures: Fixture[], events: Map<string, { spor
       .sort((a, b) => Date.parse(a.e.kickoff) - Date.parse(b.e.kickoff) || rank(a.sport) - rank(b.sport));
     let calls = 0;
     for (const { sport, e } of due) {
-      if (calls >= MAX_EXTRAS_PER_RUN || (prices.usedToday ?? 0) + (payload.usedToday ?? 0) + EXTRA_COST > allowance) break;
+      if (calls >= MAX_EXTRAS_PER_RUN) break;
+      const soon = Date.parse(e.kickoff) - Date.now() <= SOON_MS;
+      const withinDaily = (prices.usedToday ?? 0) + (payload.usedToday ?? 0) + EXTRA_COST <= allowance;
+      if (!(withinDaily || (soon && (prices.creditsRemaining ?? 0) - EXTRA_COST >= SOON_FLOOR))) { if (soon) continue; break; }
       try {
         const url = new URL(`https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/events/${encodeURIComponent(e.id)}/odds`);
         url.search = new URLSearchParams({ apiKey: key, regions: 'eu', markets: EXTRA_MARKETS, oddsFormat: 'decimal', dateFormat: 'iso' }).toString();
@@ -240,7 +247,8 @@ export async function withTheOddsPrices(fixtures: Fixture[], opts: { fetchAllowe
     const stale = [...needed].filter(([sport]) => { const c = payload.bySport![sport]; return !c || Date.now() - Date.parse(c.at) >= FRESH_MS; })
       .sort((a, b) => b[1] - a[1] || rank(a[0]) - rank(b[0]));
     for (const [sport] of stale) {
-      if ((payload.usedToday ?? 0) + COST > allowance) break;
+      const soonComp = (byLeague[sport]?.fixtures ?? []).some((x) => { const d = Date.parse(x.kickoff) - Date.now(); return d > 0 && d <= SOON_MS; });
+      if ((payload.usedToday ?? 0) + COST > allowance && !(soonComp && (payload.creditsRemaining ?? remaining) - COST >= SOON_FLOOR)) continue;
       try {
         const url = new URL(`https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/odds`);
         url.search = new URLSearchParams({ apiKey: key, regions: 'eu', markets: 'h2h,totals', oddsFormat: 'decimal', dateFormat: 'iso' }).toString();
