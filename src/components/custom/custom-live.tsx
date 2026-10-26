@@ -56,7 +56,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
       )}
       <AgentMap ref={map} events={events} target={meta.target} info={info} onProgress={onProgress} />
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
-        <span>Așezați în teren după risc: prudenții în apărare, vânătorii de cote în atac. Mircea Lucescu (portar) e creierul care alege pronosticul final.</span>
+        <span>Așezați în teren după risc: prudenții în apărare, vânătorii de cote în atac. GPT-6 Luna Pro (portar) e creierul care alege pronosticul final.</span>
         {behind ? <span className="chip text-cyan">harta redă discuția…</span> : null}
       </div>
       {done && meta.ticketId && (
@@ -93,8 +93,8 @@ function ReviewVerdict({ events, upTo }: { events: NexusEvent[]; upTo: number })
       </ul>
       {advice && (
         <div className="mt-4 flex gap-3">
-          <img src="/agents/robert.webp" alt="" className="h-10 w-10 shrink-0 rounded-full border-2 border-gold object-cover" />
-          <div className="text-sm"><p className="font-bold text-gold">Mircea Lucescu · creierul echipei</p><p className="mt-1 leading-relaxed">{advice.payload.overall}</p>
+          <img src="/ai-portraits/robert-v1.webp" alt="" className="h-10 w-10 shrink-0 rounded-full border-2 border-gold object-cover" />
+          <div className="text-sm"><p className="font-bold text-gold">GPT-6 Luna Pro · creierul echipei</p><p className="mt-1 leading-relaxed">{advice.payload.overall}</p>
             <ul className="mt-2 space-y-1">{(advice.payload.advice ?? []).map((a: string, i: number) => <li key={i} className="flex gap-2"><span className="text-gold">→</span><span>{a}</span></li>)}</ul></div>
         </div>
       )}

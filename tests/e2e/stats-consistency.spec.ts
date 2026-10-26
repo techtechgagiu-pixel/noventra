@@ -25,12 +25,12 @@ test('archive filters, agent history and every statistics view use the same save
   expect(personal).toMatchObject({bets:17,won:12,lost:4,pending:1,avgOdds:1.5});
   expect(personal.avgEstimated).toBeCloseTo(0.7,8);
   await page.goto('/?tab=statistici&luna=all&scope=all');
-  const card=page.getByRole('region',{name:'Agenții'}).locator('article').filter({hasText:'Mircea Lucescu'});
+  const card=page.locator('#agent-robert');
   await card.getByText(/Pronosticuri și rezultate/).click();
-  await card.getByLabel('Rezultate Mircea Lucescu').selectOption('WON');
+  await card.getByLabel(/^Rezultate .* · Managerul de risc/).selectOption('WON');
   await expect(card.getByRole('option',{name:`Verzi (${a.won})`,exact:true})).toHaveCount(1);
   await expect(card.locator('li')).toHaveCount(Math.min(a.won,8));
-  await card.getByRole('button',{name:'Pagina următoare Mircea Lucescu'}).click();
+  await card.getByRole('button',{name:/^Pagina următoare .* · Managerul de risc$/}).click();
   await expect(card).toContainText(`9–${Math.min(a.won,16)} din ${a.won}`);
   await page.goto('/?tab=istoric');
   const allTickets=(await(await page.request.get('/api/tickets')).json()).tickets;

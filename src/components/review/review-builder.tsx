@@ -122,7 +122,7 @@ export function ReviewBuilder() {
       <button onClick={send} disabled={busy || !slip.length} className="btn btn-primary w-full px-6 py-3 disabled:opacity-50">{busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} aria-hidden />} {busy ? 'Verific cotele…' : 'TRIMITE LA ANALIZĂ'}</button>
       <div className="flex items-center gap-2 text-[11px] text-muted">
         <div className="flex -space-x-2">{['victor', 'andrei', 'alex', 'robert', 'becali'].map((a) => <img key={a} src={AGENT_META[a]?.img} alt="" className="h-6 w-6 rounded-full border-2 border-ink object-cover" />)}</div>
-        <span>Agenții echipei îl analizează meci cu meci; Mircea Lucescu îți dă verdictul și sfaturile.</span>
+        <span>Agenții echipei îl analizează meci cu meci; GPT-6 Luna Pro îți dă verdictul și sfaturile.</span>
       </div>
     </div>
   );

@@ -1,27 +1,99 @@
-/**
- * Early analyses (before the agents got their personas) mention the old placeholder names in their own text:
- * "Alex și Elena propun…". On screen we show today's names instead. A name already followed by a surname
- * (e.g. "Mihai Stoica", "Radu Drăgușin") is left alone.
- */
-const OLD: Record<string, string> = {
-  Victor: 'Mircea Sandu', Andrei: 'Gheorghe Hagi', Mihai: 'Gică Popescu', Alex: 'Adrian Mutu', Diana: 'Răzvan Raț',
-  Robert: 'Mircea Lucescu', Ioana: 'Cristi Chivu', Radu: 'Răzvan Lucescu', Elena: 'Dumitru Dragomir', Cosmin: 'Anghel Iordănescu',
-};
-const RE = new RegExp(`(?<![\\p{L}])(${Object.keys(OLD).join('|')})(?![\\p{L}])(?!\\s+\\p{Lu})`, 'gu');
+import { modelAgentName } from './model-identities';
 
+// Old names are aliases for rendering archived generated text only. IDs/data stay intact.
+const ALIASES: Record<string,string> = {
+  "Mircea Sandu": "victor",
+  "Gheorghe Hagi": "andrei",
+  "Gică Popescu": "mihai",
+  "Adrian Mutu": "alex",
+  "Răzvan Raț": "diana",
+  "Mircea Lucescu": "robert",
+  "Cristi Chivu": "ioana",
+  "Răzvan Lucescu": "radu",
+  "Dumitru Dragomir": "elena",
+  "Anghel Iordănescu": "cosmin",
+  "Ștucan": "hantu",
+  "Gigi Becali": "becali",
+  "Ilie Dumitrescu": "ilie",
+  "Marius Șumudică": "sumudica",
+  "Dan Petrescu": "petrescu",
+  "Mihai Stoica": "stoica",
+  "Florin Prunea": "prunea",
+  "Adrian Porumboiu": "porumboiu",
+  "Ianis Hagi": "ianis",
+  "Radu Drăgușin": "dragusin",
+  "Dennis Man": "man",
+  "Gabriel Tamaș": "tamas",
+  "Corina Caragea": "corina",
+  "SCOUT": "scout",
+  "Nova": "nova",
+  "Sigma": "sigma",
+  "Atlas": "atlas",
+  "Argus": "argus",
+  "Orion": "orion",
+  "Prisma": "prisma",
+  "Mnemos": "mnemos",
+  "Nexus": "nexus",
+  "Vector": "vector",
+  "Fulger": "fulger",
+  "Hanțu": "hantu",
+  "Hantu": "hantu",
+  "Stucan": "hantu",
+  "M. Lucescu": "robert",
+  "R. Lucescu": "radu",
+  "I. Hagi": "ianis",
+  "Sandu": "victor",
+  "Hagi": "andrei",
+  "Popescu": "mihai",
+  "Mutu": "alex",
+  "Raț": "diana",
+  "Lucescu": "robert",
+  "Chivu": "ioana",
+  "Dragomir": "elena",
+  "Iordănescu": "cosmin",
+  "Becali": "becali",
+  "Dumitrescu": "ilie",
+  "Șumudică": "sumudica",
+  "Petrescu": "petrescu",
+  "Stoica": "stoica",
+  "Prunea": "prunea",
+  "Porumboiu": "porumboiu",
+  "Drăgușin": "dragusin",
+  "Tamaș": "tamas",
+  "Corina": "corina"
+};
+const PLACEHOLDERS: Record<string,string> = {
+  "Victor": "victor",
+  "Andrei": "andrei",
+  "Mihai": "mihai",
+  "Alex": "alex",
+  "Diana": "diana",
+  "Robert": "robert",
+  "Ioana": "ioana",
+  "Radu": "radu",
+  "Elena": "elena",
+  "Cosmin": "cosmin"
+};
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const full = new RegExp(`(?<![\\p{L}])(${Object.keys(ALIASES).sort((a,b) => b.length-a.length).map(escape).join('|')})(?![\\p{L}])`, 'giu');
+const old = new RegExp(`(?<![\\p{L}])(${Object.keys(PLACEHOLDERS).join('|')})(?![\\p{L}])(?!\\s+\\p{Lu})`, 'gu');
+const folded = Object.fromEntries(Object.entries(ALIASES).map(([name,id]) => [name.toLocaleLowerCase('ro'),id]));
 export function cleanAgentText<T>(text: T): T {
   if (typeof text !== 'string' || !text) return text;
-  return text.replace(RE, (m) => OLD[m] ?? m).replace(/Hanțu|Hantu|HANȚU|HANTU/g, 'Ștucan') as T;
+  return text.replace(full, (name, _capture, offset: number, source: string) => {
+    if (!name.includes(' ') && /^\s+\p{Lu}/u.test(source.slice(offset + name.length))) return name;
+    return modelAgentName(folded[name.toLocaleLowerCase('ro')]);
+  }).replace(old, (name) => modelAgentName(PLACEHOLDERS[name])) as T;
 }
 
-/** Deep-cleans the free-text fields of a stored payload (rationale, objection, response, reasons, advice…). */
+/** Clean generated prose; leave identifiers, model IDs, team names and sourced headlines intact. */
 export function cleanPayload<T>(value: T, depth = 0): T {
-  if (depth > 4 || value === null || value === undefined) return value;
+  if (depth > 12 || value === null || value === undefined) return value;
   if (typeof value === 'string') return cleanAgentText(value);
   if (Array.isArray(value)) return value.map((v) => cleanPayload(v, depth + 1)) as T;
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = /^(rationale|objection|response|reason|note|overall|advice|failureReasons|evidence|summary|keyObservations|consequence|lines)$/.test(k) ? cleanPayload(v, depth + 1) : v && typeof v === 'object' ? cleanPayload(v, depth + 1) : v;
+    for (const [k,v] of Object.entries(value as Record<string, unknown>)) out[k] = /^(rationale|objection|response|reason|note|overall|advice|failureReasons|evidence|summary|keyObservations|consequence|lines|commentary|text)$/.test(k) ? cleanPayload(v,depth+1) : v && typeof v === 'object' ? cleanPayload(v,depth+1) : v;
     return out as T;
   }
   return value;

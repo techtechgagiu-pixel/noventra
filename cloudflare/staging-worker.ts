@@ -5,6 +5,7 @@ import { withDatabase } from '../src/lib/db';
 import { d1Database } from '../src/lib/d1/client';
 import { databaseBridge } from '../src/lib/d1/bridge';
 import { scheduledMaintenance, scheduledSettlementPage, wakeAnalysisRunner } from '../src/lib/d1/scheduled';
+import { validationGate } from '../src/lib/d1/validation-gate';
 
 /** Bounded deterministic result checks; AI execution stays on Render. */
 export class SettlementWorkflow extends WorkflowEntrypoint<Primul11Env,{scheduledAt:number}> {
@@ -26,6 +27,8 @@ export class SettlementWorkflow extends WorkflowEntrypoint<Primul11Env,{schedule
 }
 export default {
   async fetch(request:Request,env:Primul11Env,ctx:ExecutionContext):Promise<Response>{
+    const denied=validationGate(request,String(env.BETMIND_RUNTIME),(env as Primul11Env & {VALIDATION_SECRET?:string}).VALIDATION_SECRET);
+    if(denied)return denied;
     const path=new URL(request.url).pathname;
     if(path==='/_internal/database')return databaseBridge(request,env.DB,env.D1_BRIDGE_SECRET??'');
     return withDatabase(d1Database(env.DB),async()=>{

@@ -2,6 +2,7 @@ import { setFixtureProviderForTests } from '../sports/fixtures';
 import { setHistoryProviderForTests } from '../scout/history';
 import { setAiTransportForTests, type ModelRef, type CallInput } from '../ai/router';
 import type { Fixture, HistoricalMatch } from '../sports/types';
+import { AGENTS, systemPrompt } from '../ai/agents';
 
 // DEMO-only fakes for automated tests. Activated solely when BETMIND_TEST_MODE=1 on localhost.
 /** DEMO fixtures (synthetic, labelled). Kickoffs are in the future relative to real time. */
@@ -27,7 +28,7 @@ export function installFakes(fixtures: Fixture[], ai: FakeAi) {
   setFixtureProviderForTests(async (_l, days) => ({ fixtures: fixtures.filter((f) => days.includes(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(new Date(f.kickoff)))), errors: [] }));
   setHistoryProviderForTests((_f, side) => history(8, side === 'home'));
   setAiTransportForTests(async (ref: ModelRef, input: CallInput) => {
-    const agent = /Ești ([A-ZȘ]+)/.exec(input.system)?.[1]?.toLowerCase() ?? 'scout';
+    const agent = AGENTS.find((a) => systemPrompt(a) === input.system)?.id ?? 'other';
     const ids = [...input.user.matchAll(/"fixtureId":"([^"]+)"/g)].map((m) => m[1]);
     const unique = [...new Set(ids)];
     ai.calls.push({ ref, stage: input.user.startsWith('Runda') ? 'DEBATE' : agent === 'scout' ? 'SCOUT' : 'INITIAL' });

@@ -543,7 +543,8 @@ export class MapScene {
       if (f.id === BRAIN && on && L.mode === 'wide') { ctx.font = `700 9px ${this.font}`; ctx.fillStyle = C.gold; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('CREIER', p.x, p.y - r - 6); }
       // Name
       ctx.font = `600 ${r < 24 ? 10 : 11}px ${this.font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = on ? C.text : C.muted; ctx.fillText(on ? (f.id === BRAIN && L.mode === 'tall' ? `🧠 ${NAME(f.id)}` : NAME(f.id)) : `${NAME(f.id)} · bancă`, p.x, p.y + r + 6);
+      const label = on ? (f.id === BRAIN && L.mode === 'tall' ? `🧠 ${NAME(f.id)}` : NAME(f.id)) : `${NAME(f.id)} · bancă`;
+      ctx.fillStyle = on ? C.text : C.muted; ctx.fillText(fit(ctx, label, L.mode === 'wide' ? 120 : 86), p.x, p.y + r + 6);
       ctx.restore();
     }
     // Speech bubbles on top of everything (newest few only, so the map stays readable on a phone)

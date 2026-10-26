@@ -29,7 +29,7 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
   };
 }
 
-/** ȘTUCAN's facts: only real headlines (indexed), prices in his band and standings — no statistics. */
+/** Nemotron 3.5 Super VL's facts: only real headlines (indexed), prices in his band and standings — no statistics. */
 export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
   const n = s.news ?? { home: [], away: [], errors: [] };
   let i = 0;
@@ -45,7 +45,7 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
   };
 }
 
-/** Atlas cross-checks sourced news with statistics; Ștucan keeps his news-only role. */
+/** Atlas cross-checks sourced news with statistics; Nemotron 3.5 Super VL keeps his news-only role. */
 export function factsForAgent(id: string, s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
   if (id === 'hantu') return newsFacts(s, band);
   const facts = agentFacts(s, band);

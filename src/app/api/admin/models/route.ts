@@ -1,3 +1,4 @@
+import { describeModel } from '@/lib/model-identities';
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { fail, json, requireAdmin, sameOrigin } from '@/lib/http';
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
      JOIN tickets t ON t.id=s.ticket_id AND t.job_id=p.job_id
      WHERE p.decision='BET_CANDIDATE' AND s.outcome IN ('WON','LOST') GROUP BY p.agent_id, p.model_id`,
   );
-  return json({ agents: AGENTS.map((x) => ({ id: x.id, name: x.name, assignment: a.get(x.id) ?? null })), stats, history, evaluated, pricing: 'Planuri gratuite Groq/Gemini: cost estimat 0 USD; limitele furnizorului se aplică.' });
+  return json({ agents: AGENTS.map((x) => ({ id: x.id, name: describeModel(a.get(x.id)?.primary?.model).modelName, assignment: a.get(x.id) ?? null })), stats, history, evaluated, pricing: 'Planuri gratuite Groq/Gemini: cost estimat 0 USD; limitele furnizorului se aplică.' });
 }
 
 const Body = z.object({ agentId: z.string(), provider: z.enum(['groq', 'gemini', 'openrouter']), model: z.string().min(2).max(120), fallbackProvider: z.enum(['groq', 'gemini', 'openrouter']).nullable().optional(), fallbackModel: z.string().max(120).nullable().optional(), reason: z.string().min(3).max(300) });
