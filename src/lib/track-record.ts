@@ -1,6 +1,7 @@
 import { many, dialect, timeCompare } from './db';
 import { finalAgentPicksCte } from './final-agent-picks';
 import { romanianMonthWindow } from './time';
+import { sameModel } from './calibration';
 
 /**
  * "Training" without fine-tuning: every agent pick is settled after the match (WON/LOST/VOID),
@@ -16,15 +17,16 @@ export type TrackRecord = {
   buckets: Array<{ label: string; n: number; won: number }>;
 };
 
-export async function agentTrackRecord(agentId: string, limit = 80): Promise<TrackRecord | null> {
-  const rows = await many<{ outcome: 'WON' | 'LOST'; odds: string | null; estimated_probability: string | null }>(
+/** The agent's own feedback: only picks made by `model` (its current model) before kickoff, when given. */
+export async function agentTrackRecord(agentId: string, limit = 80, model?: string): Promise<TrackRecord | null> {
+  const rows = await many<{ outcome: 'WON' | 'LOST'; odds: string | null; estimated_probability: string | null; model_id: string }>(
     `${finalAgentPicksCte()}
-     SELECT p.outcome,p.odds,p.estimated_probability FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id
-     WHERE p.agent_id=$1 AND p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST')
+     SELECT p.outcome,p.odds,p.estimated_probability,p.model_id FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id
+     WHERE p.agent_id=$1 AND p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST') AND ${timeCompare('p.created_at', '<', 'f.kickoff_utc')}
      ORDER BY f.kickoff_utc DESC,p.id DESC LIMIT $2`,
-    [agentId, limit],
+    [agentId, model ? limit * 4 : limit],
   );
-  return recordOf(agentId, rows);
+  return recordOf(agentId, (model ? rows.filter((r) => sameModel(r.model_id, model)) : rows).slice(0, limit));
 }
 
 function recordOf(agentId: string, rows: Array<{ outcome: string; odds: string | null; estimated_probability: string | null }>): TrackRecord | null {

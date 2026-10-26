@@ -4,6 +4,7 @@ import { dateRange, localDate, yyyymmdd } from '../time';
 import { espnLeagueDay, espnMatchDays } from './espn';
 import { lpfFixtures } from './lpf';
 import type { Fixture, League } from './types';
+import { withTheOddsPrices } from './the-odds-prices';
 
 export type FixtureProvider = (leagues: League[], days: string[]) => Promise<{ fixtures: Fixture[]; errors: string[] }>;
 
@@ -98,7 +99,10 @@ export async function loadFixtures(startDate: string, days: number, opts: { top1
   }
   const leagues = await getLeagues({ top10Only: opts.top10Only ?? true });
   const window = dateRange(startDate, days);
-  const { fixtures, errors } = await activeProvider()(leagues, window);
+  const provided = await activeProvider()(leagues, window);
+  const { errors } = provided;
+  // Fixtures without any price at ESPN/LPF get The Odds API prices when available (cached, credit-budgeted).
+  const fixtures = g.__bmFixtureOverride ? provided.fixtures : await withTheOddsPrices(provided.fixtures).catch(() => provided.fixtures);
   if (opts.persist !== false) await persistFixtures(fixtures);
   return { fixtures, errors, leagues, days: window, fetchedAt: new Date().toISOString() };
 }
