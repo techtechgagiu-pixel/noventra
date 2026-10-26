@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-26T13:59:32.886826+00:00",
+  "workerVersion": "bba7c57d-4ea2-4c2f-9e5d-0da3a10161ff",
+  "codeCommit": "cc8c94c",
+  "metrics": {
+    "custom": {
+      "beforeSamples": 2,
+      "afterSamples": 4,
+      "beforeMedianFirstByteMs": 1413.0,
+      "afterMedianFirstByteMs": 185.0,
+      "beforeMedianFullResponseMs": 1415.0,
+      "afterMedianFullResponseMs": 744.5,
+      "beforeDecodedHtmlBytes": 86341,
+      "afterDecodedHtmlBytes": 87958
+    },
+    "statistici": {
+      "beforeSamples": 2,
+      "afterSamples": 4,
+      "beforeMedianFirstByteMs": 1259.0,
+      "afterMedianFirstByteMs": 153.0,
+      "beforeMedianFullResponseMs": 1273.0,
+      "afterMedianFullResponseMs": 1038.0,
+      "beforeDecodedHtmlBytes": 3135478,
+      "afterDecodedHtmlBytes": 316893
+    }
+  },
+  "validation": {
+    "unitAndIntegration": 207,
+    "browser": 21,
+    "realD1ScopesCompared": 15,
+    "historyParityChecks": 6,
+    "anonymousHistory": 401,
+    "privateTabRedirect": 307,
+    "realAiCalls": 0
+  },
+  "measurement": "Authenticated HTTP responses from one client, body fully read; bytes are decoded HTML. Network and cold startup vary; not a browser paint metric or a load test."
+}
