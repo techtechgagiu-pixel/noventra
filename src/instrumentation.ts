@@ -1,4 +1,5 @@
 export async function register() {
+  if(process.env.BETMIND_MAINTENANCE==='1')return;
   // A request-scoped Worker cannot own the Node service's interval loops.
   // Cloudflare preparation must never resume production jobs accidentally.
   if (process.env.BETMIND_RUNTIME?.startsWith('cloudflare')) return;

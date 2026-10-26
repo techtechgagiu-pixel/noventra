@@ -6,10 +6,13 @@ import { d1Database } from '../src/lib/d1/client';
 import { databaseBridge } from '../src/lib/d1/bridge';
 import { scheduledMaintenance, scheduledSettlementPage, wakeAnalysisRunner } from '../src/lib/d1/scheduled';
 import { validationGate } from '../src/lib/d1/validation-gate';
+import { maintenanceGate } from '../src/lib/d1/maintenance-gate';
+const maintenanceEnabled=(env:Primul11Env)=>(env as Primul11Env & {BETMIND_MAINTENANCE?:string}).BETMIND_MAINTENANCE==='1';
 
 /** Bounded deterministic result checks; AI execution stays on Render. */
 export class SettlementWorkflow extends WorkflowEntrypoint<Primul11Env,{scheduledAt:number}> {
   async run(_event:WorkflowEvent<{scheduledAt:number}>,step:WorkflowStep){
+    if(maintenanceEnabled(this.env))return {status:'maintenance'};
     const maintenance=await step.do('maintenance',{retries:{limit:2,delay:'5 seconds'},timeout:'30 seconds'},()=>withDatabase(d1Database(this.env.DB),()=>scheduledMaintenance(this.env.ANALYSIS_RUNNER_URL)));
     let pages=0,moreWork=false;
     for(let page=0;page<30;page++){
@@ -27,10 +30,16 @@ export class SettlementWorkflow extends WorkflowEntrypoint<Primul11Env,{schedule
 }
 export default {
   async fetch(request:Request,env:Primul11Env,ctx:ExecutionContext):Promise<Response>{
+    const paused=await maintenanceGate(request,maintenanceEnabled(env),(env as Primul11Env & {MAINTENANCE_SECRET?:string}).MAINTENANCE_SECRET);
+    if(paused)return paused;
     const denied=validationGate(request,String(env.BETMIND_RUNTIME),(env as Primul11Env & {VALIDATION_SECRET?:string}).VALIDATION_SECRET);
     if(denied)return denied;
     const path=new URL(request.url).pathname;
     if(path==='/_internal/database')return databaseBridge(request,env.DB,env.D1_BRIDGE_SECRET??'');
+    if(String(env.BETMIND_RUNTIME)==='cloudflare-production'&&!maintenanceEnabled(env)&&new URL(request.url).hostname.endsWith('.workers.dev')&&path!=='/api/health'){
+      const canonical=new URL(request.url);canonical.host=new URL(env.APP_BASE_URL).host;
+      return Response.redirect(canonical.toString(),307);
+    }
     return withDatabase(d1Database(env.DB),async()=>{
       const response=await nextWorker.fetch(request,env,ctx);
       // The catalog is shared in D1; refresh it on the runner when requested and stale.
@@ -38,11 +47,13 @@ export default {
         ctx.waitUntil(wakeAnalysisRunner(env.ANALYSIS_RUNNER_URL));
       }
       const out=new Response(response.body,response);
-      out.headers.set('X-Robots-Tag','noindex, nofollow');
+      if(String(env.BETMIND_RUNTIME)!=='cloudflare-production')out.headers.set('X-Robots-Tag','noindex, nofollow');
+      out.headers.set('X-Primul11-Runtime','cloudflare');
       return out;
     });
   },
   async scheduled(controller:ScheduledController,env:Primul11Env){
+    if(maintenanceEnabled(env))return;
     const result=await env.SETTLEMENT.createBatch({instances:[{id:`settlement-${Math.floor(controller.scheduledTime/300_000)}`,params:{scheduledAt:controller.scheduledTime}}]});
     if(result.errors.some(error=>error.code!==10405))throw new Error('Could not schedule settlement workflow');
   },

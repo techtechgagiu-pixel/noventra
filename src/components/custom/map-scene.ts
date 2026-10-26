@@ -136,6 +136,11 @@ export class MapScene {
 
   setTarget(t: number) { this.target = t; }
   pending() { return this.queue.length; }
+  /** Keep the transcript current while its canvas is outside the viewport. */
+  flush() {
+    while(this.queue.length){const item=this.queue.shift()!;this.apply(item.e,false);this.hooks.onProgress?.(item.e.seq);}
+    this.nextAt=0;
+  }
   fps() { return this.fpsAcc.value; }
 
   start() {
@@ -353,7 +358,10 @@ export class MapScene {
   // ── Drawing ────────────────────────────────────────────────────────────
   private draw(t: number) {
     const { ctx, L } = this;
-    if (!L) return;
+    // ResizeObserver can report a hidden/unmounting container with zero width.
+    // Its pitch has negative dimensions until layout returns; Canvas rejects
+    // the resulting negative circle radius and would stop the animation loop.
+    if (!L || L.pitch.w <= 0 || L.pitch.h <= 0) return;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     if (!this.bg) this.bg = this.renderBackground();
     ctx.drawImage(this.bg, 0, 0, L.w, L.h);

@@ -106,3 +106,17 @@ Pentru un rând valid al cărui INSERT depășește 100 KB, textul este împăr�
 - [Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/)
 - [D1 pricing și cota zilnică, inclusiv indexuri/importuri](https://developers.cloudflare.com/d1/platform/pricing/)
+
+## Trecerea controlată pe domeniul existent
+
+Configurația `wrangler.production.jsonc` pregătește Workerul `primul11-app` și baza goală `primul11-production-20261026` /`8ec1fe52-2f39-46d4-9c8b-22271a5c3d4a`. Baseline0001 este aplicat; datele finale nu se presupun importate. Workerul de rezervă este accesibil pe workers.dev în mod mentenanță, fără domeniul principal și fără Cron. Cheile sunt în secretele Cloudflare, fără credențiale PostgreSQL în Worker.
+
+`BETMIND_MAINTENANCE=1` blochează interfața/API-urile înainte de autentificare și împiedică pornirea workerului Node sau executarea programării Cloudflare. Bridge-ul păstrează propriul HMAC și rămâne disponibil pentru pregătire. Health-ul Node rămâne accesibil, dar nu reîmprospătează catalogul în mentenanță. După activarea pauzei pe Render se așteaptă oprirea instanței anterioare (drain+shutdown), se verifică absența scrierilor și abia apoi se exportă snapshotul final.
+
+Mentenanța Cloudflare poate fi deschisă pentru verificare prin `/_migration/unlock`, cu o cheie temporară privată (`MAINTENANCE_SECRET`). Cookie-ul semnat expiră după o oră, este HttpOnly/Secure/SameSite=Lax și NU oferă sesiune de aplicație sau drepturi admin. Formularul refuză POST de altă origine. Aceasta permite verificarea Google OAuth pe același callback deja înregistrat, `https://primul11.noventra.ro/auth/callback`, cât ceilalți vizitatori văd pagina temporară de migrare.
+
+La trecere, Render folosește `BETMIND_DATABASE=d1-http`, bridge-ul Workerului de producție și cheia sa separată. `BETMIND_RUNNER_ONLY=1` ascunde interfața de la originea directă onrender.com, păstrând `/api/health`. Clienții cu DNS vechi pentru domeniul principal pot folosi temporar aceeași aplicație pe Render cu aceeași bază D1; nu scriu în vechiul PostgreSQL. În Cloudflare, aliasul workers.dev redirecționează paginile spre domeniul canonic după scoaterea mentenanței; bridge-ul HMAC rămâne pe alias pentru runner.
+
+După importul final recitit și comparat, se aplică migrările0002–0007, se conectează runnerul, se verifică Google OAuth real și drepturile, apoi se scoate mentenanța și se activează Cron la5minute. Se păstrează sursa Neon și backupurile; nu se șterge nimic ca parte a mutării. Întoarcerea după scrieri D1 necesită reconcilierea datelor noi.
+
+Verificarea pregătirii a identificat și corectat două erori ale hărții: desenul unui teren cu dimensiuni negative la ascunderea panoului și blocarea chatului când harta ieșea din viewport. Un test separat verifică mesajele primite în timp ce harta nu este vizibilă.

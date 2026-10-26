@@ -20,6 +20,7 @@ export const AgentMap = forwardRef<AgentMapHandle, Props>(function AgentMap({ ev
   const scene = useRef<MapScene | null>(null);
   const fed = useRef(0);
   const progress = useRef(0);
+  const visible = useRef(false);
   const [hover, setHover] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,7 +33,11 @@ export const AgentMap = forwardRef<AgentMapHandle, Props>(function AgentMap({ ev
     size();
     const ro = new ResizeObserver(size); ro.observe(w);
     // Draw only while visible: the browser already pauses rAF in background tabs.
-    const io = new IntersectionObserver(([en]) => (en.isIntersecting ? s.start() : s.stop()), { threshold: 0.01 }); io.observe(c);
+    const io = new IntersectionObserver(([en]) => {
+      visible.current=en.isIntersecting;
+      if(en.isIntersecting)s.start();
+      else {s.stop();if(!autoplay)s.flush();}
+    }, { threshold: 0.01 }); io.observe(c);
     // Sync the chat with what the map has played, ~10 times per second (no per-frame React work).
     let shown = 0;
     const tick = setInterval(() => { if (progress.current !== shown) { shown = progress.current; onProgress(shown); } }, 100);
@@ -52,7 +57,8 @@ export const AgentMap = forwardRef<AgentMapHandle, Props>(function AgentMap({ ev
     const s = scene.current; if (!s || autoplay) return;
     const fresh = events.filter((e) => e.seq > fed.current);
     if (!fresh.length) return;
-    if (fed.current === 0) {
+    if(!visible.current){s.flush();s.push(fresh,false);}
+    else if (fed.current === 0) {
       // First feed: old history appears instantly, the last ~20 s are animated.
       const cutoff = Date.now() - 20_000;
       const old = fresh.filter((e) => Date.parse(e.createdAt) < cutoff);
