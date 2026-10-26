@@ -50,3 +50,23 @@ describe('The Odds API as main price source', () => {
     expect(kept).toHaveLength(18); expect(kept[0].key).toBe('K7');
   });
 });
+
+describe('The Odds API extra markets', () => {
+  it('parses every extra market at the median price, half lines only', async () => {
+    const { parseTheOddsExtras } = await import('@/lib/sports/the-odds-prices');
+    const bk = (o: Record<string, Array<Record<string, unknown>>>) => ({ markets: Object.entries(o).map(([key, outcomes]) => ({ key, outcomes })) });
+    const raw = { home_team: 'Bochum', away_team: 'Mainz', bookmakers: [
+      bk({ btts: [{ name: 'Yes', price: 1.7 }, { name: 'No', price: 2.1 }], double_chance: [{ name: 'Bochum or Draw', price: 1.9 }, { name: 'Draw or Mainz', price: 1.2 }, { name: 'Bochum or Mainz', price: 1.25 }],
+        alternate_totals: [{ name: 'Over', point: 1.5, price: 1.25 }, { name: 'Over', point: 2, price: 1.5 }], team_totals: [{ name: 'Over', description: 'Mainz', point: 0.5, price: 1.15 }], spreads: [{ name: 'Mainz', point: -1.5, price: 3.1 }] }),
+      bk({ btts: [{ name: 'Yes', price: 1.8 }], alternate_totals: [{ name: 'Over', point: 1.5, price: 1.27 }] }),
+    ] };
+    const by = Object.fromEntries(parseTheOddsExtras(raw, 'VfL Bochum', 'Mainz').map((m) => [m.key, m]));
+    expect(by['BTTS:YES'].odds).toBe(1.75);
+    expect(by['DC:X2']).toMatchObject({ odds: 1.2, label: 'Egal sau Mainz (X2)' });
+    expect(by['DC:1X'].label).toBe('VfL Bochum sau egal (1X)');
+    expect(by['TOTAL:OVER:1.5'].odds).toBe(1.26);
+    expect(by['TOTAL:OVER:2']).toBeUndefined();
+    expect(by['TT:AWAY:OVER:0.5'].odds).toBe(1.15);
+    expect(by['AH:AWAY:-1.5'].odds).toBe(3.1);
+  });
+});

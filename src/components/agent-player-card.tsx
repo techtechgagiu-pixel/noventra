@@ -5,6 +5,9 @@ import { aiCardIdentity } from '@/lib/ai-card-identity';
 import { createHash } from 'node:crypto';
 
 const money = (x: number) => x > 0 && x < .01 ? '< 0,01 $' : `${x.toFixed(2).replace('.', ',')} $`;
+/** "Hot streak": over 80% green picks on at least HOT_MIN_DECIDED decided picks (a 6/6 start is not a streak). */
+export const HOT_MIN_DECIDED = 10;
+export const isHot = (a: Pick<AgentStat, 'editorial' | 'won' | 'lost'>) => !a.editorial && a.won + a.lost >= HOT_MIN_DECIDED && a.won / (a.won + a.lost) > 0.8;
 const num = (x: number) => new Intl.NumberFormat('ro-RO').format(Math.round(x));
 
 export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: { agent: AgentStat; place: number; monthLabel: string; historyScope?: { month: string; scope: 'all' | 'mine' } }) {
@@ -13,7 +16,9 @@ export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: {
   const ai = aiCardIdentity(a);
   const portrait = ai.portrait;
   const displayName = ai.modelName;
-  return <article id={`agent-${a.id}`} className="agent-player-card player-card-ai" data-agent-id={a.id} data-rarity={rarity} aria-label={`Card AI ${displayName} · ${ai.role}`}>
+  const hot = isHot(a);
+  return <article id={`agent-${a.id}`} className="agent-player-card player-card-ai" data-agent-id={a.id} data-rarity={rarity} data-hot={hot ? 'true' : undefined} aria-label={`Card AI ${displayName} · ${ai.role}${hot ? ' · hot streak' : ''}`}>
+    {hot && <><span className="player-card-flames" aria-hidden /><span className="player-card-hot" title={`Peste 80% reușită: ${a.won} din ${decided} verzi`}>🔥 HOT STREAK</span></>}
     <header className="player-card-face">
       <div className="player-card-topline"><span>{a.editorial ? 'Redacția' : `#${place} în clasament`}</span><span className="player-rarity">{p?.rank.name ?? 'Editorial'}</span></div>
       <div className="player-card-portrait-row">
