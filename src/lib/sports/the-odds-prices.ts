@@ -87,6 +87,12 @@ const daysLeftInMonth = () => { const d = new Date(); return new Date(Date.UTC(d
 export async function withTheOddsPrices(fixtures: Fixture[], opts: { fetchAllowed?: boolean } = {}): Promise<Fixture[]> {
   const missing = fixtures.filter((f) => f.status === 'pre' && (!f.odds || !f.odds.markets.some((m) => m.marketType === '1X2')));
   if (!missing.length) return fixtures;
+  // Keep the free schedule (used to find each fixture's competition) current; it refreshes in the background.
+  if (process.env.ODDS_API_KEY?.trim() && opts.fetchAllowed !== false) {
+    const { theOddsCatalog } = await import('./the-odds-catalog');
+    const { localDate } = await import('../time');
+    await theOddsCatalog(localDate(), 8).catch(() => null);
+  }
   const catalog = await one<{ payload: { byLeague?: Record<string, { fixtures: InformationalMatch[] }>; creditsRemaining?: number | null } }>('SELECT payload FROM sports_catalog_cache WHERE provider=$1', [CATALOG]).catch(() => null);
   const byLeague = catalog?.payload.byLeague ?? {};
   // Which competitions hold the fixtures that need prices (from the free schedule already cached).
