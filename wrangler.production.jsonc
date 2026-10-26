@@ -7,11 +7,12 @@
   "compatibility_flags":["nodejs_compat","global_fetch_strictly_public"],
   "workers_dev":true,
   "preview_urls":false,
+  "routes":[{"pattern":"primul11.noventra.ro","custom_domain":true,"zone_id":"41a96fd65b90bad4363d703974490317"}],
   "assets":{"directory":".open-next/assets","binding":"ASSETS"},
   "d1_databases":[{"binding":"DB","database_name":"primul11-production-20261026","database_id":"8ec1fe52-2f39-46d4-9c8b-22271a5c3d4a","migrations_dir":"cloudflare/d1/migrations"}],
   "workflows":[{"binding":"SETTLEMENT","name":"primul11-results","class_name":"SettlementWorkflow"}],
-  "triggers":{"crons":[]},
+  "triggers":{"crons":["*/5 * * * *"]},
   "limits":{"cpu_ms":3000},
   "observability":{"enabled":true,"head_sampling_rate":0.1},
-  "vars":{"BETMIND_RUNTIME":"cloudflare-production","BETMIND_DATABASE":"d1","BETMIND_DISABLE_WORKER":"1","BETMIND_MAINTENANCE":"1","APP_TIMEZONE":"Europe/Bucharest"}
+  "vars":{"BETMIND_RUNTIME":"cloudflare-production","BETMIND_DATABASE":"d1","BETMIND_DISABLE_WORKER":"1","BETMIND_MAINTENANCE":"0","APP_TIMEZONE":"Europe/Bucharest"}
 }

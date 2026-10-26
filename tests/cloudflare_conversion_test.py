@@ -42,6 +42,30 @@ def snapshot(root, orphan=False, payload='{"integer":9007199254740993}'):
 
 
 class ConversionTests(unittest.TestCase):
+    def test_import_survives_independent_d1_transaction_chunks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source, output = Path(temp) / 'source', Path(temp) / 'target'
+            snapshot(source)
+            catalog = json.loads((source/'catalog.json').read_text())
+            manifest = json.loads((source/'manifest.json').read_text())
+            # Children deliberately precede parents in the source catalog.
+            catalog['tables'].reverse()
+            manifest['tables'].reverse()
+            raw = json.dumps(catalog).encode()
+            (source/'catalog.json').write_bytes(raw)
+            manifest['catalogSha256'] = hashlib.sha256(raw).hexdigest()
+            (source/'manifest.json').write_text(json.dumps(manifest))
+            converter.convert(source, output)
+            db = sqlite3.connect(':memory:')
+            db.execute('PRAGMA foreign_keys=ON')
+            db.executescript((output/'schema.sql').read_text())
+            for statement in (output/'data-only.sql').read_text().splitlines():
+                db.execute(statement)
+                db.commit()
+            self.assertEqual(db.execute('SELECT count(*) FROM visits').fetchone()[0], 1)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+            db.close()
+
     def test_exact_data_utc_bigint_json_and_lease_reset(self):
         with tempfile.TemporaryDirectory() as temp:
             source, output = Path(temp) / 'source', Path(temp) / 'target'

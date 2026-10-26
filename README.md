@@ -1,6 +1,7 @@
 # PRIMUL 11 (formerly BETMIND SIX · NEXUS 5.0)
 
-> Access updated 2026-10-21: **invitation codes, no accounts or Google login.** The permanent admin code reuses the owner
+> Production updated 2026-10-26: **Cloudflare Workers + D1; existing Render Free analysis runner.** See [deployment](docs/DEPLOYMENT.md) and [cutover evidence](docs/cloudflare-production.json).
+> Access: Google login for ordinary users plus invitation codes. Administration requires the permanent code. The permanent admin code reuses the owner
 > identity (`OWNER_EMAIL`, default the first `ADMIN_EMAILS` entry) and preserves its archive. Visitors receive individual
 > codes valid for exactly 168 hours from issue, with their own tickets and analyses. `/admin/invitations` issues/revokes codes.
 > Production requires `OWNER_ACCESS_CODE_HASH` (SHA-256 of the uppercase code without spaces or hyphens). Plaintext codes

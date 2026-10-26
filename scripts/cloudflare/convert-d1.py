@@ -168,6 +168,31 @@ def lines(file):
         yield from source
 
 
+def import_order(tables):
+    """D1 may commit import chunks separately, so parents must precede children."""
+    pending = {table['name']: table for table in tables}
+    ordered, done = [], set()
+    while pending:
+        ready = []
+        for name, table in pending.items():
+            parents = set()
+            for constraint in table['constraints']:
+                if constraint['type'] == 'f':
+                    match = re.search(r'REFERENCES (?:"([^"]+)"|([a-z_]+))\(', constraint['definition'])
+                    if not match:
+                        raise ValueError('Unsupported foreign key dependency')
+                    parents.add(match.group(1) or match.group(2))
+            if parents <= done:
+                ready.append(name)
+        if not ready:
+            raise ValueError('Cyclic or missing foreign key dependency')
+        for name in ready:
+            ordered.append(name)
+            done.add(name)
+            del pending[name]
+    return ordered
+
+
 def convert(source, output):
     source, output = Path(source), Path(output)
     manifest = json.loads((source / 'manifest.json').read_text())
@@ -190,15 +215,17 @@ def convert(source, output):
     try:
         connection.executescript(sql)
         (output / 'schema.sql').write_text(sql)
-        # Deferred FKs allow the catalog's alphabetical table order, including
-        # children inserted before parents (sessions -> invitation_codes -> users).
-        # Foreign keys are checked explicitly before any import is marked ready.
+        # Keep deferred checks for local conversion, but emit parents first because
+        # remote D1 import chunks may commit independently. Explicitly verify FKs
+        # before marking any import ready.
         with (output / 'import.sql').open('w') as dump, (output / 'data-only.sql').open('w') as data_dump:
             os.chmod(output / 'import.sql', 0o600)
             os.chmod(output / 'data-only.sql', 0o600)
             data_dump.write('PRAGMA defer_foreign_keys=ON;\n')
             dump.write('PRAGMA defer_foreign_keys=ON;\n' + sql)
-            for table, entry, data in zip(catalog['tables'], manifest['tables'], checked):
+            entries = {table['name']: (table, entry, data) for table, entry, data in zip(catalog['tables'], manifest['tables'], checked)}
+            for name in import_order(catalog['tables']):
+                table, entry, data = entries[name]
                 prefix = 'INSERT INTO ' + qi(table['name']) + ' (' + ','.join(qi(c['name']) for c in table['columns']) + ') VALUES ('
                 placeholders = 'INSERT INTO ' + qi(table['name']) + ' VALUES (' + ','.join('?' for _ in table['columns']) + ')'
                 count = 0
