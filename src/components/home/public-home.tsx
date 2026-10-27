@@ -8,10 +8,10 @@ export function PublicHome({ google, unavailable = false }: { google: boolean; u
   const migrationPreview = process.env.BETMIND_RUNTIME === 'cloudflare-preview';
   const agents = Object.entries(AGENT_META);
   return <>
-    <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/95">
+    <header className="app-header">
       {migrationPreview && <p role="status" className="border-b border-cyan/30 bg-cyan/10 px-4 py-2 text-center text-xs text-cyan">Previzualizare pentru migrare · doar prezentarea este activă. Biletele și autentificarea nu sunt încă disponibile aici.</p>}
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-        <Link href="/" aria-label="Primul 11 — Acasă" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight"><img src="/logo.svg" alt="" className="h-9 w-9" /><span className="hidden sm:inline">PRIMUL <span className="text-cyan">11</span></span></Link>
+        <Link href="/" aria-label="Primul 11 — Acasă" className="flex items-center gap-2.5"><img src="/logo.svg" alt="" className="h-8 w-8" /><span className="app-wordmark">PRIMUL <b>11</b></span></Link>
         <GoogleSignIn configured={google} label="Conectează-te cu Google" compact />
       </div>
     </header>

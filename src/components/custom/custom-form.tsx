@@ -101,21 +101,21 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
         <div className="card p-4">
           <label htmlFor="target" className="text-xs font-semibold text-muted">Cota dorită</label>
           <input id="target" type="number" inputMode="decimal" min={1.2} max={1000} step={0.1} value={target} onChange={(e) => setTarget(Number(e.target.value) || 0)}
-            className="mt-2 w-full rounded-xl border border-line bg-ink px-3 py-2.5 font-display text-2xl font-bold tabular text-text outline-none focus:border-cyan" />
+            className="board-num mt-2 w-full rounded-lg border border-line bg-ink px-3 py-1.5 text-[2.6rem] outline-none focus:border-cyan" />
           <div className="mt-2 flex flex-wrap gap-1.5">{TARGETS.map((t) => <button key={t} onClick={() => setTarget(t)} className={`chip ${target === t ? 'text-cyan' : 'text-muted'}`}>{t}</button>)}</div>
         </div>
         <div className="card p-4">
           <p className="text-xs font-semibold text-muted">Din câte meciuri</p>
           <div className="mt-2 flex items-center gap-2">
             <button aria-label="Mai puține meciuri" onClick={() => setLegs((l) => Math.max(1, l - 1))} className="btn btn-ghost h-11 w-11"><Minus size={16} /></button>
-            <output className="flex-1 text-center font-display text-3xl font-bold tabular" aria-live="polite">{legs}</output>
+            <output className="flex-1 text-center font-display text-[2.6rem] font-bold leading-none tabular" aria-live="polite">{legs}</output>
             <button aria-label="Mai multe meciuri" onClick={() => setLegs((l) => Math.min(15, l + 1))} className="btn btn-ghost h-11 w-11"><Plus size={16} /></button>
           </div>
-          <p className="mt-2 text-xs text-muted">Biletul va avea exact {legs} {legs === 1 ? 'meci' : 'meciuri'}.</p>
+          <p className="mt-2 text-xs text-muted">Biletul pornește de la {legs} {legs === 1 ? 'meci' : 'meciuri'}; dacă cotele sigure nu ajung la țintă, echipa adaugă meciuri deja validate.</p>
         </div>
         <div className="card p-4">
           <p className="text-xs font-semibold text-muted">Media de cotă pe meci</p>
-          <p className={`mt-2 font-display text-3xl font-bold tabular ${tooLow || tooHigh ? 'text-rose' : risk.c}`}>≈ {Number.isFinite(perLeg) ? perLeg.toFixed(2) : '—'}</p>
+          <p className={`mt-2 font-display text-[2.6rem] font-bold leading-none tabular ${tooLow || tooHigh ? 'text-rose' : risk.c}`}>≈ {Number.isFinite(perLeg) ? perLeg.toFixed(2) : '—'}</p>
           <p className="mt-1 text-xs text-muted">{tooLow ? 'Prea mică — pune mai puține meciuri.' : tooHigh ? 'Prea mare — pune mai multe meciuri.' : <>Pentru cota {target} din {legs} {legs === 1 ? 'meci' : 'meciuri'}. Cotele selecțiilor pot diferi.</>}</p>
 
         </div>

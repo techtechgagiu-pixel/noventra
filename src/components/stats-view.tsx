@@ -20,7 +20,7 @@ export function StatsView({ agents, totals, month, scope = 'all' }: { agents: Ag
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-display text-[1.9rem] font-bold leading-tight tracking-tight">Statistici</h1>
+        <h1 className="page-title">Statistici</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">Ultima poziție a fiecărui agent pe fiecare meci, fără dublarea analizelor repetate. Luna se referă la data meciului. Rata și mediile folosesc doar selecțiile decise (verde/roșu), inclusiv cele rămase în afara biletelor. Data analizei este afișată separat.</p>
         <p className="stats-ai-note">Modele AI cu roluri, stiluri și limite de risc diferite. Portretele sunt ilustrative. Fiecare rol își păstrează istoricul și poate folosi un model de rezervă; rezultatele nu sunt cumulate între roluri.</p>
         <nav aria-label="Sfera statisticilor" className="mt-3 flex gap-2"><Link href={`/?tab=statistici&luna=${month}&scope=all${identityQuery}`} aria-current={scope === 'all' ? 'page' : undefined} className={`chip ${scope === 'all' ? 'text-cyan' : 'text-muted'}`}>Toată comunitatea</Link><Link href={`/?tab=statistici&luna=${month}&scope=mine${identityQuery}`} aria-current={scope === 'mine' ? 'page' : undefined} className={`chip ${scope === 'mine' ? 'text-cyan' : 'text-muted'}`}>Analizele mele</Link></nav>

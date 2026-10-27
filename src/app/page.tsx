@@ -76,31 +76,33 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
   return (
     <>
       {['acasa', 'istoric', 'statistici'].includes(tab) && <ResultsRefresh />}
-      <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
-          <Link href="/" aria-label="Acasă" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
-            <img src="/logo.svg" alt="" className="h-9 w-9" />
-            <span className="hidden sm:inline">PRIMUL <span className="text-cyan">11</span></span>
-            <span className="rounded-md border border-gold/60 bg-gold/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold">Beta</span>
+      <header className="app-header">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4">
+          <Link href="/" aria-label="Acasă" className="flex items-center gap-2.5 py-3">
+            <img src="/logo.svg" alt="" className="h-8 w-8" />
+            <span className="app-wordmark">PRIMUL <b>11</b></span>
+            <span className="rounded border border-gold/50 px-1.5 py-px text-[10px] font-semibold text-gold">beta</span>
           </Link>
-          <nav className="order-last flex w-full justify-center gap-1 rounded-xl border border-line bg-panel p-1 sm:order-none sm:ml-auto sm:w-auto" aria-label="Secțiuni">
+          <nav className="app-tabs md:ml-auto" aria-label="Secțiuni">
             {tabs.map(({ id, label, icon: Icon, badge }) => (
               <TabLink key={id} href={`/?tab=${id}`} label={label} active={tab === id}>
-                <Icon size={16} aria-hidden /> <span className="hidden xl:inline">{label}</span>
-                {badge && <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-emerald" aria-label="analiză în curs" />}
+                <Icon size={17} aria-hidden /> <span className="md:hidden lg:inline">{label}</span>
+                {badge && <span className="app-tab-dot" aria-label="analiză în curs" />}
               </TabLink>
             ))}
           </nav>
-          {user.role === 'admin' && <Link href="/admin/invitations" className="text-xs text-cyan" title="Conturi și coduri de acces">Conturi</Link>}
-          {user.role === 'admin' && <Link href="/admin/feedback" className="text-xs text-gold" title="Ideile trimise de utilizatori">Sugestii</Link>}
-          <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
+          <div className="ml-auto flex items-center gap-3 md:ml-2">
+            {user.role === 'admin' && <Link href="/admin/invitations" className="text-xs text-muted hover:text-text" title="Conturi și coduri de acces">Conturi</Link>}
+            {user.role === 'admin' && <Link href="/admin/feedback" className="text-xs text-muted hover:text-text" title="Ideile trimise de utilizatori">Sugestii</Link>}
+            <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
+          </div>
         </div>
       </header>
 
       {slowAi && <div role="status" className="mx-auto mt-3 max-w-6xl px-4"><p className="rounded-xl border border-gold/50 bg-gold/10 px-4 py-2.5 text-sm text-gold">
         {user.role === 'admin' ? 'Creditele OpenRouter s-au terminat: agenții lucrează acum pe modelele gratuite de rezervă (Gemini, Groq) — merge, dar mai încet. Încarcă credite pe openrouter.ai → Credits și modelele plătite revin singure în cel mult 30 de minute.' : 'Analizele merg mai încet acum; biletele în lucru se completează singure, poți închide pagina.'}
       </p></div>}
-      <main className="mx-auto max-w-6xl px-4 pb-24 pt-6">
+      <main className="app-main mx-auto max-w-6xl px-4 pb-24 pt-8">
         <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
         {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
@@ -110,7 +112,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} />}
         </Suspense>
       </main>
-      <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-8 text-xs text-muted"><p>Rezultatele și scorurile live de pe bilete se actualizează automat la 10 minute.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
+      <footer className="app-footer mx-auto max-w-6xl space-y-1 px-4 pb-28 md:pb-10"><p>Rezultatele și scorurile live de pe bilete se actualizează automat la 10 minute.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
       <FeedbackButton />
     </>
   );
@@ -212,7 +214,7 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl font-bold">Bilet custom</h1>
+        <h1 className="page-title">Bilet custom</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {CUSTOM_LIMIT_PER_DAY} bilete custom pe zi.</p>
       </div>
       <CustomForm agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, CUSTOM_LIMIT_PER_DAY - recent.filter((j) => j.period_key === localDate()).length)} />

@@ -68,8 +68,9 @@ export function autoFormation(active: Set<string> | null): Record<string, Spot> 
   });
   return out;
 }
-const CONFETTI = ['#34d399', '#e8c26a', '#5ee7f7', '#fb7185', '#a78bfa', '#eef2fb'];
-const C = { cyan: '#5ee7f7', emerald: '#34d399', gold: '#e8c26a', rose: '#fb7185', violet: '#a78bfa', muted: '#94a3c4', text: '#eef2fb', lime: '#84cc16', line: '#22325a' };
+const CONFETTI = ['#7fdc6c', '#ffe36e', '#ffbe3d', '#ff6150', '#8fd0ff', '#eef5ec'];
+// Floodlit-pitch palette (matches the site): amber data, chalk text, football result colours.
+const C = { cyan: '#ffbe3d', emerald: '#7fdc6c', gold: '#ffe36e', rose: '#ff6150', violet: '#8fd0ff', muted: '#a3bcad', text: '#eef5ec', lime: '#c8f07a', line: '#275341' };
 const NAME = (id: string) => AGENT_META[id]?.short ?? AGENT_META[id]?.name ?? id;
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -447,11 +448,11 @@ export class MapScene {
     // Drifting dust + radar sweep from the centre circle
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for (const d of this.dust) { ctx.fillStyle = `rgba(94,231,247,${d.a * 0.35})`; ctx.fillRect(L.pitch.x + d.x * L.pitch.w, L.pitch.y + d.y * L.pitch.h, 1.5, 1.5); }
+    for (const d of this.dust) { ctx.fillStyle = `rgba(238,245,236,${d.a * 0.3})`; ctx.fillRect(L.pitch.x + d.x * L.pitch.w, L.pitch.y + d.y * L.pitch.h, 1.5, 1.5); }
     if (!this.reducedMotion && 'createConicGradient' in ctx) {
       const cx = L.pitch.x + L.pitch.w / 2, cy = L.pitch.y + L.pitch.h / 2; const ang = (t / 4000) * Math.PI * 2;
       const g = (ctx as CanvasRenderingContext2D).createConicGradient(ang, cx, cy);
-      g.addColorStop(0, 'rgba(94,231,247,0.10)'); g.addColorStop(0.08, 'rgba(94,231,247,0)'); g.addColorStop(1, 'rgba(94,231,247,0)');
+      g.addColorStop(0, 'rgba(255,236,190,0.08)'); g.addColorStop(0.08, 'rgba(255,236,190,0)'); g.addColorStop(1, 'rgba(255,236,190,0)');
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, Math.max(L.pitch.w, L.pitch.h) * 0.6, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
@@ -473,25 +474,25 @@ export class MapScene {
     const g = c.getContext('2d')!;
     g.scale(this.dpr, this.dpr);
     const bg = g.createLinearGradient(0, 0, 0, L.h);
-    bg.addColorStop(0, '#071026'); bg.addColorStop(1, '#050a18');
+    bg.addColorStop(0, '#0e2419'); bg.addColorStop(1, '#0a1a12');
     g.fillStyle = bg; g.fillRect(0, 0, L.w, L.h);
     // Hex-ish dot grid
-    g.fillStyle = 'rgba(94,231,247,0.06)';
+    g.fillStyle = 'rgba(238,245,236,0.05)';
     for (let y = 8; y < L.h; y += 18) for (let x = (Math.floor(y / 18) % 2) * 9 + 4; x < L.w; x += 18) g.fillRect(x, y, 1, 1);
     // Pitch
     const P = L.pitch; const wide = L.mode === 'wide';
     const field = g.createRadialGradient(P.x + P.w / 2, P.y + P.h / 2, 10, P.x + P.w / 2, P.y + P.h / 2, Math.max(P.w, P.h) * 0.7);
-    field.addColorStop(0, 'rgba(20,60,80,0.55)'); field.addColorStop(1, 'rgba(8,22,40,0.55)');
+    field.addColorStop(0, 'rgba(36,96,58,0.6)'); field.addColorStop(1, 'rgba(14,44,28,0.6)');
     roundRect(g, P.x, P.y, P.w, P.h, 14); g.fillStyle = field; g.fill();
     // Mown stripes
     const stripes = 10;
-    for (let i = 0; i < stripes; i += 2) { g.fillStyle = 'rgba(94,231,247,0.025)'; if (wide) g.fillRect(P.x + (i * P.w) / stripes, P.y, P.w / stripes, P.h); else g.fillRect(P.x, P.y + (i * P.h) / stripes, P.w, P.h / stripes); }
-    g.strokeStyle = 'rgba(94,231,247,0.22)'; g.lineWidth = 1.2;
+    for (let i = 0; i < stripes; i += 2) { g.fillStyle = 'rgba(238,245,236,0.03)'; if (wide) g.fillRect(P.x + (i * P.w) / stripes, P.y, P.w / stripes, P.h); else g.fillRect(P.x, P.y + (i * P.h) / stripes, P.w, P.h / stripes); }
+    g.strokeStyle = 'rgba(238,245,236,0.3)'; g.lineWidth = 1.4;
     roundRect(g, P.x + 6, P.y + 6, P.w - 12, P.h - 12, 10); g.stroke();
     const cx = P.x + P.w / 2, cy = P.y + P.h / 2; const cr = Math.min(P.w, P.h) * 0.13;
     g.beginPath(); if (wide) { g.moveTo(cx, P.y + 6); g.lineTo(cx, P.y + P.h - 6); } else { g.moveTo(P.x + 6, cy); g.lineTo(P.x + P.w - 6, cy); } g.stroke();
     g.beginPath(); g.arc(cx, cy, cr, 0, Math.PI * 2); g.stroke();
-    g.beginPath(); g.arc(cx, cy, 2.5, 0, Math.PI * 2); g.fillStyle = 'rgba(94,231,247,0.4)'; g.fill();
+    g.beginPath(); g.arc(cx, cy, 2.5, 0, Math.PI * 2); g.fillStyle = 'rgba(238,245,236,0.55)'; g.fill();
     // Penalty boxes
     const boxD = (wide ? P.w : P.h) * 0.14, boxW = (wide ? P.h : P.w) * 0.46, sixD = boxD * 0.4, sixW = boxW * 0.45;
     const box = (atStart: boolean, d: number, wv: number) => {
@@ -502,12 +503,12 @@ export class MapScene {
     // Arena panels
     g.lineWidth = 1;
     const panel = (r: { x: number; y: number; w: number; h: number }, title: string, color: string) => {
-      roundRect(g, r.x, r.y, r.w, r.h, 12); g.fillStyle = 'rgba(15,26,53,0.72)'; g.fill(); g.strokeStyle = 'rgba(34,50,90,0.9)'; g.stroke();
-      g.fillStyle = color; g.font = `700 10px ${this.font}`; g.textBaseline = 'top'; g.fillText(title, r.x + 10, r.y + 7);
+      roundRect(g, r.x, r.y, r.w, r.h, 10); g.fillStyle = 'rgba(14,36,25,0.82)'; g.fill(); g.strokeStyle = 'rgba(39,83,65,0.95)'; g.stroke();
+      g.fillStyle = color; g.font = `600 11px ${this.font}`; g.textBaseline = 'top'; g.fillText(title, r.x + 10, r.y + 7);
     };
-    panel(L.queue, 'INTRARE · MECIURI', 'rgba(148,163,196,0.9)');
-    panel(L.active, 'ÎN ANALIZĂ / DEZBATERE', 'rgba(94,231,247,0.9)');
-    panel(L.tray, 'BILETUL', 'rgba(52,211,153,0.95)');
+    panel(L.queue, 'Meciuri la intrare', 'rgba(163,188,173,0.95)');
+    panel(L.active, 'În analiză și dezbatere', 'rgba(255,190,61,0.95)');
+    panel(L.tray, 'Biletul', 'rgba(127,220,108,0.95)');
     return c;
   }
 
@@ -550,7 +551,7 @@ export class MapScene {
       const a = L.agents[ids[i]], b = L.agents[ids[j]]; const d = Math.hypot(a.x - b.x, a.y - b.y);
       if (d > Math.max(L.pitch.w, L.pitch.h) * 0.2) continue;
       const act = Math.max(this.agents.get(ids[i])!.activity, this.agents.get(ids[j])!.activity);
-      ctx.strokeStyle = `rgba(94,231,247,${0.05 + act * 0.12})`;
+      ctx.strokeStyle = `rgba(238,245,236,${0.05 + act * 0.12})`;
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
     // Live work lines: analysing agents ↔ fixtures in play
@@ -626,7 +627,7 @@ export class MapScene {
         ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = enter;
       }
       // Disc + portrait
-      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fillStyle = '#0f1a35'; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fillStyle = '#112b20'; ctx.fill();
       const img = this.portrait(f.id, r - 2);
       if (img) ctx.drawImage(img, p.x - (r - 2), p.y - (r - 2), (r - 2) * 2, (r - 2) * 2);
       else { ctx.fillStyle = accent; ctx.font = `700 ${Math.round(r * 0.7)}px ${this.font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(NAME(f.id).slice(0, 2).toUpperCase(), p.x, p.y); }
@@ -664,7 +665,7 @@ export class MapScene {
       ctx.font = `600 11px ${this.font}`;
       const w = Math.min(ctx.measureText(a.bubble.text).width + 16, 220); const h = 22;
       const bx = clamp(p.x - w / 2, 4, L.w - w - 4); const by = p.y - r - 14 - h - (1 - Math.min(1, age * 5)) * 6 - (f.id === BRAIN ? 10 : 0);
-      roundRect(ctx, bx, by, w, h, 8); ctx.fillStyle = 'rgba(6,11,24,0.92)'; ctx.fill(); ctx.strokeStyle = hexA(a.bubble.color, 0.9); ctx.lineWidth = 1; ctx.stroke();
+      roundRect(ctx, bx, by, w, h, 6); ctx.fillStyle = 'rgba(8,22,15,0.93)'; ctx.fill(); ctx.strokeStyle = hexA(a.bubble.color, 0.9); ctx.lineWidth = 1; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(clamp(p.x, bx + 8, bx + w - 8) - 4, by + h); ctx.lineTo(clamp(p.x, bx + 8, bx + w - 8), by + h + 5); ctx.lineTo(clamp(p.x, bx + 8, bx + w - 8) + 4, by + h); ctx.fillStyle = hexA(a.bubble.color, 0.9); ctx.fill();
       ctx.fillStyle = C.text; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText(fit(ctx, a.bubble.text, w - 14), bx + 8, by + h / 2 + 0.5);
@@ -711,7 +712,7 @@ export class MapScene {
     const x = P.x + P.w / 2, y = c.big ? P.y + P.h / 2 : P.y + 46;
     const w = ctx.measureText(c.text).width + 32, h = size + 18;
     if (c.big) { const s = this.glowSprite(c.color); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.45 * fade; ctx.drawImage(s, x - w * 0.7, y - h * 1.6, w * 1.4, h * 3.2); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = fade; }
-    roundRect(ctx, x - w / 2, y - h / 2, w, h, h / 2); ctx.fillStyle = 'rgba(6,11,24,0.82)'; ctx.fill(); ctx.strokeStyle = hexA(c.color, 0.9); ctx.lineWidth = c.big ? 2 : 1.2; ctx.stroke();
+    roundRect(ctx, x - w / 2, y - h / 2, w, h, 8); ctx.fillStyle = 'rgba(8,22,15,0.86)'; ctx.fill(); ctx.strokeStyle = hexA(c.color, 0.9); ctx.lineWidth = c.big ? 2 : 1.2; ctx.stroke();
     ctx.fillStyle = c.color; ctx.fillText(c.text, x, y + 1);
     ctx.restore();
   }
@@ -727,7 +728,7 @@ export class MapScene {
       const w = this.fxWidth(f); const x = f.pos.x, y = f.pos.y;
       const flash = f.flash ? Math.max(0, 1 - (t - f.flash) / 700) : 0;
       if (f.state === 'QUEUED') {
-        const h = 18; roundRect(ctx, x, y - h / 2, w, h, 9); ctx.fillStyle = 'rgba(20,33,66,0.95)'; ctx.fill(); ctx.strokeStyle = 'rgba(148,163,196,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+        const h = 18; roundRect(ctx, x, y - h / 2, w, h, 6); ctx.fillStyle = 'rgba(22,53,40,0.95)'; ctx.fill(); ctx.strokeStyle = 'rgba(163,188,173,0.35)'; ctx.lineWidth = 1; ctx.stroke();
         ctx.fillStyle = C.muted; ctx.font = `600 9.5px ${this.font}`; ctx.textAlign = 'center'; ctx.fillText(L.mode === 'wide' ? fit(ctx, `${teamShort(f.home)} – ${teamShort(f.away)}`, w - 8) : `${code(f.home)}·${code(f.away)}`, x + w / 2, y + 0.5);
         continue;
       }
@@ -747,13 +748,13 @@ export class MapScene {
       // Active card
       const h = 44;
       const col = f.state === 'DEBATE' ? C.gold : f.state === 'VOTING' ? C.violet : C.cyan;
-      roundRect(ctx, x, y - h / 2, w, h, 10); ctx.fillStyle = 'rgba(15,26,53,0.96)'; ctx.fill();
+      roundRect(ctx, x, y - h / 2, w, h, 8); ctx.fillStyle = 'rgba(17,43,32,0.97)'; ctx.fill();
       ctx.strokeStyle = hexA(flash > 0 ? f.flashColor : col, 0.5 + flash * 0.5 + (f.state === 'DEBATE' ? Math.sin(t / 200) * 0.15 : 0)); ctx.lineWidth = 1.2 + flash * 1.5; ctx.stroke();
       ctx.textAlign = 'left'; ctx.fillStyle = C.text; ctx.font = `700 ${L.mode === 'wide' ? 11 : 10}px ${this.font}`;
       if (L.mode === 'wide') ctx.fillText(fit(ctx, `${teamShort(f.home)} – ${teamShort(f.away)}`, w - 16), x + 8, y - 8);
       else { ctx.fillText(fit(ctx, teamShort(f.home), w - 10), x + 6, y - 11); ctx.fillText(fit(ctx, teamShort(f.away), w - 10), x + 6, y + 1); }
       ctx.font = `700 9px ${this.font}`; ctx.fillStyle = col;
-      const label = f.state === 'RESEARCH' ? 'DATE + ISTORIC' : f.state === 'ANALYSIS' ? 'ANALIZĂ' : f.state === 'DEBATE' ? 'DEZBATERE' : 'VOT · CREIER';
+      const label = f.state === 'RESEARCH' ? 'Date și istoric' : f.state === 'ANALYSIS' ? 'Analiză' : f.state === 'DEBATE' ? 'Dezbatere' : 'Vot la creier';
       if (L.mode === 'wide') ctx.fillText(`${label}${f.votes ? ` · ${f.votes}` : ''}`, x + 8, y + 9);
       else ctx.fillText(fit(ctx, `${label}${f.votes ? ` ${f.votes}` : ''}`, w - 10), x + 6, y + 13);
       if (f.state === 'RESEARCH' || f.state === 'ANALYSIS') { const s = (t / 900) % 1; ctx.fillStyle = hexA(col, 0.5); ctx.fillRect(x + 8, y + h / 2 - 3, (w - 16) * s, 1.5); }
@@ -777,17 +778,17 @@ export class MapScene {
     ctx.save();
     ctx.font = `600 9px ${this.font}`; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
     // Data sources
-    for (const [p, label, col] of [[L.src, 'DATE · COTE · ISTORIC', C.cyan], [L.news, 'PRESĂ', C.lime]] as const) {
+    for (const [p, label, col] of [[L.src, 'Date, cote, istoric', C.cyan], [L.news, 'Presă', C.lime]] as const) {
       const s = this.glowSprite(col); ctx.globalAlpha = 0.5 + Math.sin(t / 500) * 0.15; ctx.drawImage(s, p.x - 14, p.y - 14, 28, 28); ctx.globalAlpha = 1;
       ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
       ctx.fillStyle = hexA(col, 0.9); ctx.fillText(label, p.x + 9, p.y - 4);
     }
-    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(148,163,196,0.55)';
+    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(163,188,173,0.5)';
     ctx.fillText(`${this.fpsAcc.value || '—'} FPS`, L.pitch.x + L.pitch.w - 10, L.pitch.y + L.pitch.h - 16);
     if (this.banner) {
       ctx.font = `700 11px ${this.font}`; ctx.textAlign = 'center';
       const w = ctx.measureText(this.banner.text).width + 24; const x = L.pitch.x + L.pitch.w / 2 - w / 2, y = L.pitch.y + 12;
-      roundRect(ctx, x, y, w, 22, 11); ctx.fillStyle = 'rgba(6,11,24,0.9)'; ctx.fill(); ctx.strokeStyle = this.banner.color; ctx.stroke();
+      roundRect(ctx, x, y, w, 22, 6); ctx.fillStyle = 'rgba(8,22,15,0.92)'; ctx.fill(); ctx.strokeStyle = this.banner.color; ctx.stroke();
       ctx.fillStyle = this.banner.color; ctx.textBaseline = 'middle'; ctx.fillText(this.banner.text, x + w / 2, y + 11.5);
     }
     ctx.restore();
