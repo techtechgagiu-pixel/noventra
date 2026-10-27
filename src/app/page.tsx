@@ -8,7 +8,7 @@ import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
 import { ResultsRefresh } from '@/components/results-refresh';
 import { FeedbackButton } from '@/components/feedback-button';
-import { many } from '@/lib/db';
+import { many, one, timeCompare, SQL_AGO } from '@/lib/db';
 import { jobEvents, jobMeta, listTickets, ticketDetail } from '@/lib/views';
 import { TicketView, type TicketData } from '@/components/ticket-view';
 import { TicketArchive } from '@/components/ticket-archive';
@@ -59,6 +59,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
   const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'verifica' ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric'; // "Biletul tău" was removed (27.10); old links land on Acasă
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
+  // When the OpenRouter account runs out of credits the agents fall back to slow free models: say so plainly.
+  const creditsOut = await one<{ n: number }>(
+    `SELECT count(*) AS n FROM model_usage_logs WHERE ${timeCompare('created_at', '>', SQL_AGO(20, 'minutes'))} AND (error LIKE 'openrouter 402%' OR error LIKE 'Cheia OpenRouter a atins%')`).catch(() => null);
+  const slowAi = (creditsOut?.n ?? 0) > 0;
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof Ticket; badge?: boolean }> = [
     { id: 'acasa', label: 'Acasă', icon: House },
@@ -93,6 +97,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         </div>
       </header>
 
+      {slowAi && <div role="status" className="mx-auto mt-3 max-w-6xl px-4"><p className="rounded-xl border border-gold/50 bg-gold/10 px-4 py-2.5 text-sm text-gold">
+        {user.role === 'admin' ? 'Creditele OpenRouter s-au terminat: agenții merg acum pe modele gratuite, mult mai încet, iar biletele se termină greu. Încarcă credite pe openrouter.ai → Credits și analizele revin la viteza normală singure.' : 'Analizele merg mai încet acum; biletele în lucru se completează singure, poți închide pagina.'}
+      </p></div>}
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-6">
         <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
