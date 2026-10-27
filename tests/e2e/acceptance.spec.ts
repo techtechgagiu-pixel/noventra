@@ -84,7 +84,7 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
   await page.getByRole('button', { name: 'Mai puține meciuri' }).click();
   await page.locator('summary').filter({ hasText: 'Echipa de agenți' }).click();
-  await page.getByRole('button', { name: 'Toți', exact: true }).click();
+  await page.getByRole('button', { name: /^Primul 11/ }).click();
   await page.locator('summary').filter({ hasText: 'Interval și ligi' }).click();
   await page.getByRole('button', { name: /Ligi.*Toate ligile/ }).click();
   await page.getByRole('option', { name: /Premier League/ }).first().click();

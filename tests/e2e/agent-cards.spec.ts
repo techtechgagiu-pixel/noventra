@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import pg from 'pg';
 
-test('compact agent cards preserve career across month filters, editorial roles and mobile layout', async ({ page }) => {
+test('compact agent cards: whole career in "De la început", a fresh card in a month without picks, editorial roles and mobile layout', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto('/auth/test-login?email=cards@test.local');
   const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL || 'postgresql://postgres@localhost:5433/betmind_e2e' });
@@ -31,7 +31,7 @@ test('compact agent cards preserve career across month filters, editorial roles 
   await expect(corina).toContainText('Editorial');
   await expect(corina.getByRole('progressbar')).toHaveCount(0);
   await page.getByRole('link', { name: 'septembrie 2026', exact: true }).click();
-  await expect(card.locator('.player-card-level')).toHaveText(career);
+  await expect(card.locator('.player-card-level')).toHaveText('Nivel010 XP'); // cards restart every month
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(card).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);

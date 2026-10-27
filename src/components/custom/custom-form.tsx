@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Minus, Plus, Sparkles, Trophy } from 'lucide-react';
 import { AGENT_META, api } from '@/lib/format';
-import { CUSTOM_LIMIT_PER_DAY, customPolicy, customThreshold } from '@/lib/slots';
+import { CUSTOM_LIMIT_PER_DAY, MAX_CUSTOM_AGENTS, customPolicy, customThreshold } from '@/lib/slots';
 import { LeaguePicker, type LeagueOption } from '@/components/matches/league-picker';
 import type { MatchRow } from '@/lib/catalog';
 
@@ -14,7 +14,7 @@ const pick = (...ids: string[]) => (a: AgentCard[]) => a.filter((x) => ids.inclu
 /** Ready-made teams: by risk profile, by story (generations, roles) and by method. The user can still tick freely. */
 const GROUPS: Array<{ label: string; hint: string; ids: (a: AgentCard[]) => string[] }> = [
   { label: 'Noua echipă AI (10)', hint: 'Cele zece modele noi, fiecare cu un rol distinct', ids: pick(...NEW_AI_PROFILES.map((a) => a.id)) },
-  { label: 'Toți', hint: 'Toată echipa, toate opiniile', ids: (a) => a.map((x) => x.id) },
+  { label: 'Primul 11', hint: 'Unsprezece profiluri diferite: prudenți, tacticieni, oameni de cifre și contrarieni', ids: pick('robert', 'victor', 'andrei', 'mihai', 'alex', 'ioana', 'cosmin', 'hantu', 'porumboiu', 'nova', 'sigma') },
   { label: 'Prudenții', hint: 'Cote mici, probabilitate mare', ids: (a) => a.filter((x) => x.maxOdds <= 1.7).map((x) => x.id) },
   { label: 'Echilibrații', hint: 'Cote medii, risc moderat', ids: (a) => a.filter((x) => x.maxOdds > 1.7 && x.maxOdds < 2).map((x) => x.id) },
   { label: 'Vânătorii de cote', hint: 'Acceptă cote mari', ids: (a) => a.filter((x) => x.maxOdds >= 2).map((x) => x.id) },
@@ -81,7 +81,13 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const topSix = topAgentIds.filter((id) => agents.some((a) => a.id === id));
   const topSixReady = topSix.length === 6;
   const topSixActive = topSixReady && chosen.length === 6 && topSix.every((id) => chosen.includes(id));
-  const toggle = (id: string) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
+  const [limitHit, setLimitHit] = useState(false);
+  const toggle = (id: string) => setChosen((c) => {
+    if (c.includes(id)) { setLimitHit(false); return c.filter((x) => x !== id); }
+    if (c.length >= MAX_CUSTOM_AGENTS) { setLimitHit(true); return c; }
+    return [...c, id];
+  });
+  const pickTeam = (ids: string[]) => { setLimitHit(ids.length > MAX_CUSTOM_AGENTS); setChosen(ids.slice(0, MAX_CUSTOM_AGENTS)); };
 
   async function create() {
     if (inFlight.current) return;
@@ -160,22 +166,24 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <button onClick={() => setChosen([])} className="ml-auto chip text-muted hover:text-text">Golește</button>
         </div>
         <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible" role="group" aria-label="Echipe gata făcute">
-          <button type="button" aria-pressed={topSixActive} disabled={!topSixReady || busy} onClick={() => setChosen(topSix)}
+          <button type="button" aria-pressed={topSixActive} disabled={!topSixReady || busy} onClick={() => pickTeam(topSix)}
             title="Primii șase agenți din Statistici · luna curentă · toată comunitatea"
             className={`chip shrink-0 disabled:opacity-50 ${topSixActive ? 'border-gold text-gold' : 'text-gold hover:text-text'}`}>
             <Trophy size={13} aria-hidden /> Top 6
           </button>
           {GROUPS.map((g) => {
             const ids = g.label.startsWith('Surpriză') ? null : g.ids(agents);
-            const active = !!ids && ids.length === chosen.length && ids.every((id) => chosen.includes(id));
+            const capped = ids?.slice(0, MAX_CUSTOM_AGENTS);
+            const active = !!capped && capped.length === chosen.length && capped.every((id) => chosen.includes(id));
             return (
-              <button key={g.label} title={g.hint} aria-pressed={active} onClick={() => setChosen(ids ?? g.ids(agents))}
+              <button key={g.label} title={g.hint} aria-pressed={active} onClick={() => pickTeam(ids ?? g.ids(agents))}
                 className={`chip shrink-0 ${active ? 'border-cyan text-cyan' : 'text-muted hover:text-text'}`}>
-                {g.label}{ids && <span aria-hidden className="ml-1 tabular opacity-60">{ids.length}</span>}
+                {g.label}{ids && <span aria-hidden className="ml-1 tabular opacity-60">{Math.min(ids.length, MAX_CUSTOM_AGENTS)}</span>}
               </button>
             );
           })}
         </div>
+        <p className={`mb-2 text-xs ${limitHit ? 'text-gold' : 'text-muted'}`} role={limitHit ? 'status' : undefined}>Maximum {MAX_CUSTOM_AGENTS} agenți pe bilet ({chosen.length}/{MAX_CUSTOM_AGENTS} aleși){limitHit ? ' — scoate un agent ca să alegi altul; din echipele mari se iau primii 11.' : '.'} Creierul echipei se adaugă automat.</p>
         <p className="mb-3 text-xs text-muted">{topSixReady ? 'Top 6 selectează primii șase agenți din Statistici: luna curentă, toată comunitatea. Se actualizează odată cu rezultatele; poți modifica echipa după selectare.' : 'Top 6 devine disponibil când cel puțin șase agenți au rezultate decise în luna curentă.'}</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {agents.map((a) => {

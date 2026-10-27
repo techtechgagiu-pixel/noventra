@@ -192,6 +192,7 @@ describe('custom ticket', () => {
     installFakes(demoFixtures(8, () => ({ home: 1.4, draw: 4.2, away: 6.5, dc: 1.1 })), ai);
     const u = await makeUser();
     await expect(createCustomJob(u, { target: 2, legs: 2, agents: ['alex'], leagues: ['NOPE1'] })).rejects.toThrow(/Ligile/);
+    await expect(createCustomJob(u, { target: 2, legs: 2, agents: ['victor','andrei','mihai','alex','diana','ioana','radu','elena','cosmin','hantu','becali','ilie'] })).rejects.toThrow(/maximum 11 agenți/);
     const { jobId } = await createCustomJob(u, { target: 2, legs: 2, agents: ['andrei', 'alex', 'ioana'], leagues: ['ESP1', 'GER1'] });
     await drain(jobId);
     const order = await one<{ candidate_order: Array<{ fixtureId: string }> }>('SELECT candidate_order FROM ticket_generation_jobs WHERE id=$1', [jobId]);

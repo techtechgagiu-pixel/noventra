@@ -56,6 +56,8 @@ export type CustomConfig = { target: number; legs: number; agents: string[]; win
   /** League ids the user ticked; absent = every league. */
   leagues?: string[] };
 export const CUSTOM_LIMIT_PER_DAY = 20;
+/** User decision 27.10: at most 11 agents per custom ticket (the brain is always added on top). */
+export const MAX_CUSTOM_AGENTS = 11;
 /** Votes a selection needs from a team of n agents: 1 (≤3), 2 (4–6), then ~27% (3 of 12, 6 of 22). */
 export const customThreshold = (n: number) => (n <= 3 ? 1 : n <= 6 ? 2 : Math.max(3, Math.round(n * 0.27)));
 export const isCustomSlot = (id: string) => /^CUSTOM_\d+$/.test(id);
