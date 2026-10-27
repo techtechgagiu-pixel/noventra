@@ -672,11 +672,23 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
   }))).flat();
 }
 
+/** Upper bound for a custom ticket that needs extra matches to reach its target. */
+const MAX_CUSTOM_LEGS = 20;
+
 async function tryOptimize(job: JobRow) {
   const slot = slotById(job.slot);
   const policy = jobPolicy(job);
   const cands = await qualifiedCandidates(job);
-  return { cands, result: optimizeTicket({ candidates: cands, target: Number(job.target_odds), requiredLegs: job.config.custom ? job.config.custom.legs : slot ? slot.requiredLegs : Number(job.target_odds) >= 50 ? 12 : null, tolerance: config.limits.targetTolerance, avoidFixtures: new Set(job.config.avoidFixtures ?? []), minLegs: policy.minLegs, maxLegs: policy.maxLegs, maxLegOdds: policy.maxOdds }) };
+  const requiredLegs = job.config.custom ? job.config.custom.legs : slot ? slot.requiredLegs : Number(job.target_odds) >= 50 ? 12 : null;
+  const base = { candidates: cands, target: Number(job.target_odds), tolerance: config.limits.targetTolerance, avoidFixtures: new Set(job.config.avoidFixtures ?? []), maxLegOdds: policy.maxOdds };
+  const result = optimizeTicket({ ...base, requiredLegs, minLegs: policy.minLegs, maxLegs: policy.maxLegs });
+  // Custom tickets (user decision 27.10): when the chosen number of matches cannot reach the target with the safe
+  // prices the agents validated, add more validated matches (up to MAX_CUSTOM_LEGS) instead of leaving it incomplete.
+  if (result.status !== 'COMPLETED' && job.config.custom && requiredLegs && cands.length > requiredLegs) {
+    const wider = optimizeTicket({ ...base, requiredLegs: null, minLegs: requiredLegs, maxLegs: Math.min(MAX_CUSTOM_LEGS, cands.length) });
+    if (wider.status === 'COMPLETED') return { cands, result: { ...wider, reason: `${wider.reason} Am adăugat ${wider.legs.length - requiredLegs} meciuri peste cele ${requiredLegs} alese, ca să atingem ținta cu cote sigure.` } };
+  }
+  return { cands, result };
 }
 
 async function build(job: JobRow) {
