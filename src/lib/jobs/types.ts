@@ -23,6 +23,8 @@ export type BatchStep = 'FETCH' | 'SCOUT' | 'STATS' | 'INITIAL' | 'DEBATE1' | 'D
 
 export type Checkpoint = {
   phase: 'DISCOVER' | 'BATCH' | 'BUILD' | 'DONE';
+  /** Completion attempt (requestedAt) already tried with the validated selections only. */
+  optimizedFirstFor?: string;
   batchIndex: number;
   batchStep: BatchStep;
   batches: string[][];

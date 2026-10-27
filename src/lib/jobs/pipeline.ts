@@ -732,6 +732,15 @@ export async function runJobSlice(job: JobRow, budgetMs = 50_000) {
   const cp = job.checkpoint;
   // Each agent's measured bias (current model, pre-kickoff, settled picks); cached, so this is cheap per slice.
   await loadCalibrations(new Map([...(await activeAssignments())].map(([id, a]) => [id, a.primary.model]))).catch(() => null);
+  // Finishing an incomplete ticket: first try to build it from the selections the agents already validated (more
+  // matches allowed). That needs no AI at all, so a ticket can finish even while every model is busy or out of quota.
+  const attemptKey = job.config.completion?.requestedAt;
+  if (attemptKey && !job.config.review && cp.phase !== 'BUILD' && cp.phase !== 'DONE' && cp.optimizedFirstFor !== attemptKey) {
+    cp.optimizedFirstFor = attemptKey;
+    const { result } = await tryOptimize(job).catch(() => ({ result: null }));
+    if (result?.status === 'COMPLETED') cp.phase = 'BUILD';
+    await save(job);
+  }
   while (Date.now() < deadline) {
     if (cp.phase === 'DISCOVER') { await discover(job); continue; }
     if (cp.phase === 'BUILD') { if (job.config.review) await buildReview(job); else await build(job); return 'DONE'; }

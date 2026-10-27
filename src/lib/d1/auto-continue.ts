@@ -11,9 +11,10 @@ import { transitionD1Job } from './job-mutations';
  *     team, new fixtures), at most MAX_COMPLETIONS attempts per ticket, one new start per pass, never two at once.
  * Only state transitions are written here; the AI work itself still runs on the runner within the same daily cap.
  */
-export const MAX_AUTO_RESUMES = 3;
+export const MAX_AUTO_RESUMES = 6;
 export const MAX_COMPLETIONS = 3;
-const QUOTA = /cota zilnic|plafon|buget|budget|epuizat|limita ai zilnic/i;
+const QUOTA = /cota zilnic|plafon|buget|budget|epuizat|limita ai zilnic|limita pentru azi|credite/i;
+const RESERVE_COUNT = 7; // free reserve models (router.RESERVE_MODELS)
 
 type Row = { id: string; user_id: string; config: string | Record<string, unknown>; last_error: string | null; updated_at: string; last_event_seq: number };
 const parse = (c: Row['config']) => (typeof c === 'string' ? JSON.parse(c) : c) as Record<string, unknown> & { completion?: { attempt?: number; requestedAt?: string }; autoResumes?: number; review?: unknown };
@@ -23,18 +24,25 @@ export async function autoContinueJobs(now = new Date()) {
   const dayStart = `${now.toISOString().slice(0, 10)}T00:00:00.000Z`;
   const paused = await many<Row>(`SELECT id,user_id,config,last_error,updated_at,last_event_seq FROM ticket_generation_jobs
     WHERE status='PAUSED' AND julianday(created_at)>julianday('now','-3 days') ORDER BY updated_at LIMIT 10`);
+  // Is any model usable now? OpenRouter (credits back) or at least one free reserve whose daily quota has reset.
+  const blocked = paused.length ? await many<{ model_key: string }>("SELECT model_key FROM model_health WHERE julianday(exhausted_until)>julianday('now')").catch(() => []) : [];
+  const openRouterOk = !blocked.some((b) => b.model_key === 'openrouter:*');
+  const reservesOk = blocked.filter((b) => /^(gemini|groq):/.test(b.model_key)).length < RESERVE_COUNT;
+  const modelsAvailable = openRouterOk || reservesOk;
   for (const j of paused) {
     const cfg = parse(j.config);
     const count = cfg.autoResumes ?? 0;
     if (count >= MAX_AUTO_RESUMES) continue;
     const quota = QUOTA.test(j.last_error ?? '');
-    const ready = quota ? Date.parse(j.updated_at) < Date.parse(dayStart) : Date.now() - Date.parse(j.updated_at) > 20 * 60_000;
+    const quiet = Date.now() - Date.parse(j.updated_at);
+    // Quota pauses: after the daily reset, or as soon as some model is free again (checked at most every 30 min).
+    const ready = quota ? (Date.parse(j.updated_at) < Date.parse(dayStart) && modelsAvailable) || (quiet > 30 * 60_000 && modelsAvailable) : quiet > 20 * 60_000;
     if (!ready) continue;
     const ok = await transitionD1Job({
       text: `UPDATE ticket_generation_jobs SET status='QUEUED',next_run_at=${SQL_NOW()},attempt_count=0,last_error=NULL,lease_owner=NULL,lease_expires_at=NULL,config=$3,last_event_seq=last_event_seq+1
         WHERE id=$1 AND status='PAUSED' AND last_event_seq=$2 RETURNING id`,
       params: [j.id, j.last_event_seq, JSON.stringify({ ...cfg, autoResumes: count + 1 })],
-    }, j.id, { type: 'JOB_RESUMED', stage: 'QUEUED', payload: { by: 'automat', note: quota ? 'Plafonul zilnic s-a resetat: analiza continuă automat de unde a rămas.' : 'Analiza continuă automat după o pauză.' } }).catch(() => null);
+    }, j.id, { type: 'JOB_RESUMED', stage: 'QUEUED', payload: { by: 'automat', note: quota ? 'Modelele AI sunt din nou disponibile: analiza continuă automat de unde a rămas.' : 'Analiza continuă automat după o pauză.' } }).catch(() => null);
     if (ok) result.resumed++;
   }
 

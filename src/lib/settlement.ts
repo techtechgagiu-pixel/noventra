@@ -1,4 +1,4 @@
-import { many, query, dialect, isD1, SQL_NOW, SQL_AGO, timeCompare } from './db';
+import { many, one, query, dialect, isD1, SQL_NOW, SQL_AGO, timeCompare } from './db';
 import { espnLeagueDay, espnSummary } from './sports/espn';
 import { getLeagues, persistFixtures } from './sports/fixtures';
 import { localDate, yyyymmdd } from './time';
@@ -160,6 +160,21 @@ export async function settlePending() {
       const fixtures = await espnLeagueDay(league, yyyymmdd(date), SETTLEMENT_INTERVAL_MS).catch((error) => { sourceErrors++; console.warn(JSON.stringify({ event: 'results_source_failed', league: leagueId, date, message: (error as Error).message })); return []; });
       const relevant = isD1() ? fixtures.filter(f=>due.some(d=>d.fixture_id===f.id)) : fixtures;
       await persistFixtures(relevant.map((f) => ({ ...f, odds: null })));
+    }
+    // A match still "scheduled" long after its kickoff was usually moved to another date: ESPN no longer lists it on
+    // the original day. Read its own page; if it now starts more than a day later, it is a postponed match
+    // (bookmaker rule: void after 48 h), not a pending one forever.
+    const stale = due.filter((d) => d.status === 'pre' && Date.now() - new Date(d.kickoff_utc).getTime() > 6 * 3600_000);
+    for (const d of stale) {
+      const row = await one<{ provider_id: string }>('SELECT provider_id FROM fixtures WHERE id=$1', [d.fixture_id]).catch(() => null);
+      const league = leagues.find((l) => l.id === d.league_id);
+      if (!row || !league) continue;
+      try {
+        const summary = await espnSummary(league.providerKey, row.provider_id, SETTLEMENT_INTERVAL_MS);
+        const comp = ((summary.header as Record<string, unknown> | undefined)?.competitions as Array<Record<string, unknown>> | undefined)?.[0];
+        const moved = comp && typeof comp.date === 'string' ? Date.parse(comp.date) - new Date(d.kickoff_utc).getTime() : 0;
+        if (moved > 24 * 3600_000) await query("UPDATE fixtures SET status='postponed' WHERE id=$1 AND status='pre'", [d.fixture_id]);
+      } catch { sourceErrors++; }
     }
     await query(`UPDATE fixtures SET results_checked_at=${SQL_NOW()} WHERE ${dialect('id=ANY($1)','id IN (SELECT value FROM json_each($1))')}`, [due.map((d) => d.fixture_id)]);
     }

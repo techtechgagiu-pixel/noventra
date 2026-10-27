@@ -112,7 +112,7 @@ describe('provider quota failure and recovery', () => {
     const before = await one<{ seed: string; candidate_order: unknown }>('SELECT seed, candidate_order FROM ticket_generation_jobs WHERE id=$1', [jobId]);
     expect(before!.candidate_order).not.toBeNull();
     const paused = await one<{ last_error: string }>('SELECT last_error FROM ticket_generation_jobs WHERE id=$1', [jobId]);
-    expect(paused!.last_error).toMatch(/Cota zilnică/);
+    expect(paused!.last_error).toMatch(/Cota zilnică|și-au atins limita pentru azi/);
     const fabricated = await one<{ n: string }>("SELECT count(*) n FROM agent_predictions WHERE job_id=$1", [jobId]);
     expect(Number(fabricated!.n)).toBe(0);
     // Resuming while every free quota is still spent pauses again honestly (exhaustion is remembered, not retried blindly).

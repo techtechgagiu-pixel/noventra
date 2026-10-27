@@ -102,7 +102,7 @@ const MAX_EXTRAS_PER_RUN = 40;
  * tomorrow's matches complete everywhere), as long as at least SOON_FLOOR credits stay for the regular price refreshes. */
 const SOON_MS = 36 * 3600_000;
 const SOON_FLOOR = 150;
-type ExtrasPayload = { byEvent?: Record<string, { at: string; kickoff: string; markets: MarketQuote[] }>; day?: string; usedToday?: number };
+type ExtrasPayload = { byEvent?: Record<string, { at: string; kickoff: string; markets: MarketQuote[] }>; day?: string; usedToday?: number; creditsRemaining?: number | null };
 const half = (x: number) => Number.isFinite(x) && Math.abs(x % 1) === 0.5;
 
 /** Pure: event-odds response → extra markets (median price across bookmakers, canonical keys/labels). */
@@ -177,7 +177,7 @@ async function withTheOddsExtras(fixtures: Fixture[], events: Map<string, { spor
         const res = await fetch(url, { signal: AbortSignal.timeout(10_000), cache: 'no-store' });
         calls++; changed = true;
         const left = res.headers.get('x-requests-remaining'), last = res.headers.get('x-requests-last');
-        if (left !== null && /^\d+(\.\d+)?$/.test(left)) prices.creditsRemaining = Number(left);
+        if (left !== null && /^\d+(\.\d+)?$/.test(left)) { prices.creditsRemaining = Number(left); payload.creditsRemaining = Number(left); }
         payload.usedToday = (payload.usedToday ?? 0) + (last !== null && Number.isFinite(Number(last)) ? Number(last) : EXTRA_COST);
         if (!res.ok) { console.warn(JSON.stringify({ event: 'the_odds_extras_failed', status: res.status })); if (res.status === 401 || res.status === 429) break; payload.byEvent![e.id] = { at: new Date().toISOString(), kickoff: e.kickoff, markets: [] }; continue; }
         payload.byEvent![e.id] = { at: new Date().toISOString(), kickoff: e.kickoff, markets: parseTheOddsExtras(await res.json(), e.home, e.away) };

@@ -282,7 +282,14 @@ export async function structuredCall<T>(opts: {
       throw error;
     }
   }
-  if (Number.isFinite(shortestWait)) throw new RateLimitError(opts.primary.provider, Math.max(shortestWait, 5_000), shortestWait > 15 * 60_000);
+  if (Number.isFinite(shortestWait)) {
+    // Every model in the chain is limited right now: say that plainly instead of naming only the first provider.
+    const e = new RateLimitError(opts.primary.provider, Math.max(shortestWait, 5_000), shortestWait > 15 * 60_000);
+    e.message = e.daily
+      ? 'Toate modelele AI disponibile și-au atins limita pentru azi (credite OpenRouter sau cote gratuite). Analiza continuă automat când se eliberează.'
+      : `Modelele AI sunt ocupate acum; reîncercare automată în ${Math.ceil(e.retryAfterMs / 1000)}s.`;
+    throw e;
+  }
   throw lastError ?? new ProviderUnavailableError(opts.primary.provider, 'Niciun model disponibil.');
 }
 

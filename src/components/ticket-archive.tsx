@@ -66,6 +66,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
           {list.map((t) => {
             const result = archiveResult(t);
             const finishing = t.generation_status === 'INCOMPLETE' && ['QUEUED', 'RUNNING', 'WAITING'].includes(t.job_status ?? '');
+            const paused = t.generation_status === 'INCOMPLETE' && t.job_status === 'PAUSED';
             const partial = t.generation_status === 'INCOMPLETE' ? t.partialSelections ?? [] : [];
             const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome, kickoff: s.snapshot.kickoff as string | null, status: null as string | null, home_score: null as number | null, away_score: null as number | null }));
             return (
@@ -76,7 +77,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                   <div className="shrink-0 text-right"><p className={`board-num text-[2.6rem] ${t.generation_status === 'COMPLETED' ? '' : 'opacity-40'}`}>{t.generation_status === 'COMPLETED' ? odds(t.actual_odds) : '—'}</p><p className="mt-1 text-xs text-muted">țintă {t.target_odds}</p></div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  {finishing ? <span className="chip animate-pulse text-cyan">⏳ Se finalizează…</span> : <span className={`chip ${t.generation_status === 'COMPLETED' ? 'text-emerald' : 'text-gold'}`}>{t.generation_status === 'COMPLETED' ? `${t.leg_count} meciuri` : t.generation_status === 'NO_BET' ? 'NO BET' : 'Incomplet'}</span>}
+                  {finishing ? <span className="chip animate-pulse text-cyan">⏳ Se finalizează…</span> : paused ? <span className="chip text-gold" title="Modelele AI au atins limita; biletul continuă automat când revin">⏸ În pauză · continuă singur</span> : <span className={`chip ${t.generation_status === 'COMPLETED' ? 'text-emerald' : 'text-gold'}`}>{t.generation_status === 'COMPLETED' ? `${t.leg_count} meciuri` : t.generation_status === 'NO_BET' ? 'NO BET' : 'Incomplet'}</span>}
                   <span className={`chip ${result === 'WON' ? 'text-emerald' : result === 'ONE_LOSS' ? 'text-rose' : 'text-muted'}`}>{result === 'WON' ? (partial.length ? 'Selecții verzi' : 'Câștigat') : result === 'ONE_LOSS' ? '1 meci pierdut' : 'În așteptare'}</span>
                 </div>
                 {partial.length > 0 && <p className="mt-3 text-xs text-muted">{partial.length} selecții acceptate · {finishing ? 'agenții caută acum meciurile care lipsesc; biletul se completează singur' : 'ținta biletului nu a fost atinsă'}</p>}
