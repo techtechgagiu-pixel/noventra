@@ -1,5 +1,6 @@
 import { one, query } from '../db';
 import { settlePending } from '../settlement';
+import { autoContinueJobs } from './auto-continue';
 
 /** Only wakes an existing runner, which drains already-authorized queued jobs.
  * A wake never creates a ticket or calls a model by itself. */
@@ -20,8 +21,10 @@ export async function scheduledMaintenance(runner:string|undefined){
   await query('DELETE FROM d1_bridge_nonces WHERE expires_at<$1',[Date.now()]);
   // Keep the runner awake for its final active jobs too: outgoing AI requests
   // alone do not prevent a Free web service from spinning down.
+  // Paused or incomplete tickets continue on their own, even with nobody on the site.
+  const auto=await autoContinueJobs().catch(()=>({resumed:0,completed:0}));
   const queued=await one<{n:number}>("SELECT count(*) AS n FROM ticket_generation_jobs WHERE status IN ('QUEUED','WAITING','RUNNING')");
   const wake=queued?.n?await wakeAnalysisRunner(runner):{status:'idle'};
-  return {queued:queued?.n??0,wake};
+  return {queued:queued?.n??0,wake,auto};
 }
 export const scheduledSettlementPage=()=>settlePending();

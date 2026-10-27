@@ -20,6 +20,7 @@ import { setFixtureProviderForTests } from '@/lib/sports/fixtures';
 import { setHistoryProviderForTests } from '@/lib/scout/history';
 import { reservePaidCall, recordPaidCall } from '@/lib/d1/ai-budget';
 import { randomUUID } from 'node:crypto';
+import { autoContinueJobs } from '@/lib/d1/auto-continue';
 
 describe('real D1 runtime (local workerd, no provider calls)', () => {
   let mf: Miniflare;
@@ -104,6 +105,26 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     const archive=await listTickets(user.id);
     expect(archive).toEqual(expect.arrayContaining([expect.objectContaining({id:ticket.id,partialSelections:expect.arrayContaining([expect.objectContaining({market_label:'A câștigă',odds:1.5})]),creator:expect.objectContaining({mine:true})})]));
     expect(await ticketDetail(user.id,ticket.id)).toMatchObject({generationStatus:'INCOMPLETE',partialSelections:[{market_label:'A câștigă'}],mine:true});
+  }));
+
+  it('continues paused jobs after the daily reset and finishes incomplete tickets without the user', async () => scope(async () => {
+    await query("UPDATE ticket_generation_jobs SET status='COMPLETED' WHERE status IN ('QUEUED','RUNNING','WAITING','PAUSED','INCOMPLETE')");
+    const user = (await one<{ id: string }>("INSERT INTO users(google_sub,email,name) VALUES('auto-d1','auto@test.local','D1 Auto') RETURNING id"))!;
+    const yesterday = new Date(Date.now() - 26 * 3600_000).toISOString();
+    const paused = (await one<{ id: string }>("INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,last_error,updated_at) VALUES($1,'CUSTOM_7','2026-10-26',3,'s','{}','{}','PAUSED','Cota zilnică openrouter este epuizată.',$2) RETURNING id", [user.id, yesterday]))!;
+    const fresh = (await one<{ id: string }>("INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,last_error) VALUES($1,'CUSTOM_8','2026-10-27',3,'s','{}','{}','PAUSED','Cota zilnică openrouter este epuizată.') RETURNING id", [user.id]))!;
+    const done = (await one<{ id: string }>("INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,finished_at) VALUES($1,'CUSTOM_9','2026-10-27',3,'s','{}','{}','INCOMPLETE',$2) RETURNING id", [user.id, new Date(Date.now() - 3600_000).toISOString()]))!;
+    await query("INSERT INTO tickets(job_id,user_id,slot,period_key,target_odds,generation_status,outcome_status,summary) VALUES($1,$2,'CUSTOM_9','2026-10-27',3,'INCOMPLETE','NOT_APPLICABLE','{}')", [done.id, user.id]);
+    const r = await autoContinueJobs();
+    expect(r).toEqual({ resumed: 1, completed: 1 });
+    const status = async (id: string) => (await one<{ status: string; config: unknown }>('SELECT status,config FROM ticket_generation_jobs WHERE id=$1', [id]))!;
+    expect((await status(paused.id)).status).toBe('QUEUED');
+    expect((await status(fresh.id)).status).toBe('PAUSED'); // the cap of today has not reset yet
+    const d = await status(done.id);
+    expect(d.status).toBe('QUEUED');
+    expect((typeof d.config === 'string' ? JSON.parse(d.config) : d.config as { completion: unknown }).completion).toMatchObject({ attempt: 1, auto: true });
+    expect((await eventsAfter(done.id, 0)).at(-1)).toMatchObject({ type: 'JOB_RESUMED', payload: { by: 'automat', completion: true } });
+    expect(await autoContinueJobs()).toEqual({ resumed: 0, completed: 0 }); // nothing twice, runner already has work
   }));
 
   it('settles confirmed scores and exposes scheduler state without starting AI', async () => scope(async () => {
