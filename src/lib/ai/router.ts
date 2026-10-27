@@ -118,8 +118,11 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
   if (res.status === 429) throw new RateLimitError(ref.provider, retryAfter(res, text), /per day|daily|TPD|RPD/i.test(text));
   // The OpenRouter key itself reached the spending limit set on openrouter.ai: every paid model fails until it is raised.
   if (ref.provider === 'openrouter' && (res.status === 403 || res.status === 402) && /key limit exceeded|insufficient credits|more credits/i.test(text)) {
-    const e = new RateLimitError('openrouter', 15 * 60_000, false);
-    e.message = 'Cheia OpenRouter a atins limita de cost setată pe openrouter.ai; agentul folosește modelul de rezervă până se mărește limita.';
+    // No credits / key limit: every OpenRouter model fails the same way. Block the whole provider for 30 minutes so
+    // agents go straight to the free reserve models instead of each trying (and failing) its paid model first.
+    markExhausted(OPENROUTER_ALL, Date.now() + 30 * 60_000, 'credite OpenRouter epuizate');
+    const e = new RateLimitError('openrouter', 30 * 60_000, false);
+    e.message = 'Contul OpenRouter nu mai are credite (sau cheia și-a atins limita); agenții folosesc modelele gratuite de rezervă până se încarcă credite.';
     throw e;
   }
   if (res.status === 404 || res.status === 400 && /model/i.test(text) && /not (found|exist)|decommissioned/i.test(text)) throw new ProviderUnavailableError(ref.provider, `Model indisponibil: ${ref.model}`);
@@ -260,6 +263,7 @@ export async function structuredCall<T>(opts: {
     const exhausted = exhaustedModels();
     const until = exhausted.get(key) ?? 0;
     if (until > Date.now()) { shortestWait = Math.min(shortestWait, until - Date.now()); continue; }
+    if (ref.provider === 'openrouter' && (exhausted.get(OPENROUTER_ALL) ?? 0) > Date.now()) { lastError = new ProviderUnavailableError('openrouter', 'Credite OpenRouter epuizate: se folosesc modelele de rezervă.'); continue; }
     if (ref.provider === 'openrouter' && !(await openRouterBudgetLeft())) { lastError = new ProviderUnavailableError('openrouter', `Plafonul zilnic OpenRouter (${config.openRouterDailyUsd} USD) a fost atins.`); continue; }
     try {
       return await attempt(ref, i > 0);
@@ -346,12 +350,17 @@ async function loadPersistedExhaustion() {
 }
 
 /** Free models used, in order, when an agent's own models are exhausted. The model actually used is always recorded. */
+/** Free reserve models, each with its own quota pool: when paid models are unavailable the work spreads across all. */
 export const RESERVE_MODELS: ModelRef[] = [
   { provider: 'gemini', model: 'gemini-3.1-flash-lite' },
   { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
   { provider: 'gemini', model: 'gemini-3-flash-preview' },
+  { provider: 'gemini', model: 'gemini-3.6-flash' },
+  { provider: 'groq', model: 'openai/gpt-oss-20b' },
+  { provider: 'groq', model: 'openai/gpt-oss-120b' },
   { provider: 'groq', model: 'qwen/qwen3.8-27b' },
 ];
+const OPENROUTER_ALL = 'openrouter:*';
 const exhaustedModels = () => ((globalThis as unknown as { __bmExhausted?: Map<string, number> }).__bmExhausted ??= new Map<string, number>());
 
 async function logCall(log: { jobId?: string | null; agentId?: string | null; stage: string }, ref: ModelRef, raw: RawResult | null, ok: boolean, schemaValid: boolean | null, latencyMs: number, error: string | null) {

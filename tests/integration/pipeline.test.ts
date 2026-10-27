@@ -183,7 +183,7 @@ describe('custom ticket', () => {
     const started = (await jobEvents(u, jobId, 0))!.filter((e) => e.type === 'AGENT_STARTED').map((e) => e.agentId);
     expect(new Set(started)).toEqual(new Set(['andrei', 'alex', 'ioana']));
     const t = await one<{ id: string; leg_count: number; generation_status: string }>('SELECT id, leg_count, generation_status FROM tickets WHERE job_id=$1', [jobId]);
-    if (t!.generation_status === 'COMPLETED') expect(t!.leg_count).toBe(2);
+    if (t!.generation_status === 'COMPLETED') expect(t!.leg_count).toBeGreaterThanOrEqual(2); // more validated matches may be added to reach the target
     const detail = await ticketDetail(u, t!.id);
     expect(detail!.title).toBe('CUSTOM — COTĂ 2');
   });

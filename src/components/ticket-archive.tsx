@@ -26,7 +26,7 @@ export function CreatorBadge({ c, small }: { c?: Creator; small?: boolean }) {
   );
 }
 
-type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; partialSelections?: IncompletePick[]; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null; kickoff?: string | null; status?: string | null; home_score?: number | null; away_score?: number | null }> };
+type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; job_id?: string; job_status?: string; partialSelections?: IncompletePick[]; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null; kickoff?: string | null; status?: string | null; home_score?: number | null; away_score?: number | null }> };
 const FILTERS = [['all', 'Toate'], ['today', 'Azi'], ['yesterday', 'Ieri'], ['week', 'Săptămâna asta'], ['weekly', 'Biletul săptămânii'], ['PENDING', 'În așteptare'], ['WON', 'Verzi'], ['ONE_LOSS', 'Pierdute la un meci']] as const;
 const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
 
@@ -65,6 +65,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
         <ul className="grid gap-3 md:grid-cols-2">
           {list.map((t) => {
             const result = archiveResult(t);
+            const finishing = t.generation_status === 'INCOMPLETE' && ['QUEUED', 'RUNNING', 'WAITING'].includes(t.job_status ?? '');
             const partial = t.generation_status === 'INCOMPLETE' ? t.partialSelections ?? [] : [];
             const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome, kickoff: s.snapshot.kickoff as string | null, status: null as string | null, home_score: null as number | null, away_score: null as number | null }));
             return (
@@ -75,10 +76,10 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                   <div className="text-right"><p className="font-display text-2xl font-bold tabular">{t.generation_status === 'COMPLETED' ? odds(t.actual_odds) : '—'}</p><p className="text-xs text-muted">țintă {t.target_odds}</p></div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  <span className={`chip ${t.generation_status === 'COMPLETED' ? 'text-emerald' : 'text-gold'}`}>{t.generation_status === 'COMPLETED' ? `${t.leg_count} meciuri` : t.generation_status === 'NO_BET' ? 'NO BET' : 'Incomplet'}</span>
+                  {finishing ? <span className="chip animate-pulse text-cyan">⏳ Se finalizează…</span> : <span className={`chip ${t.generation_status === 'COMPLETED' ? 'text-emerald' : 'text-gold'}`}>{t.generation_status === 'COMPLETED' ? `${t.leg_count} meciuri` : t.generation_status === 'NO_BET' ? 'NO BET' : 'Incomplet'}</span>}
                   <span className={`chip ${result === 'WON' ? 'text-emerald' : result === 'ONE_LOSS' ? 'text-rose' : 'text-muted'}`}>{result === 'WON' ? (partial.length ? 'Selecții verzi' : 'Câștigat') : result === 'ONE_LOSS' ? '1 meci pierdut' : 'În așteptare'}</span>
                 </div>
-                {partial.length > 0 && <p className="mt-3 text-xs text-muted">{partial.length} selecții acceptate · ținta biletului nu a fost atinsă</p>}
+                {partial.length > 0 && <p className="mt-3 text-xs text-muted">{partial.length} selecții acceptate · {finishing ? 'agenții caută acum meciurile care lipsesc; biletul se completează singur' : 'ținta biletului nu a fost atinsă'}</p>}
                 {shown.length > 0 && (
                   <ul className="mt-3 space-y-1 text-xs">
                     {shown.map((s, i) => (
@@ -91,7 +92,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                   </ul>
                 )}
               </Link>
-              {t.generation_status === 'INCOMPLETE' && t.creator?.mine && <FinishIncompleteTicket ticketId={t.id} compact />}
+              {t.generation_status === 'INCOMPLETE' && t.creator?.mine && !finishing && <FinishIncompleteTicket ticketId={t.id} compact />}
             </li>
           ); })}
         </ul>
