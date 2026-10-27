@@ -6,7 +6,7 @@ import { createD1Job, resumeD1Job, transitionD1Job } from '../d1/job-mutations';
 import { SQL_NOW } from '../db';
 import { providerConfigured, resetModelExhaustion } from '../ai/router';
 import { aiUsageToday } from '../usage';
-import { CUSTOM_LIMIT_PER_DAY, REVIEW_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, isReviewSlot, slotInfo, type ReviewLeg, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
+import { CUSTOM_LIMIT_PER_DAY, MAX_CUSTOM_AGENTS, REVIEW_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, isReviewSlot, slotInfo, type ReviewLeg, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
 import { VOTING_AGENTS } from '../ai/agents';
 import { localDate } from '../time';
 import { recordEvent } from './events';
@@ -124,6 +124,7 @@ export function parseCustom(input: unknown): CustomConfig {
   if (!Number.isFinite(target) || target < 1.2 || target > 1000) throw new SlotError('Cota țintă trebuie să fie între 1.20 și 1000.');
   if (!Number.isInteger(legs) || legs < 1 || legs > 15) throw new SlotError('Numărul de meciuri trebuie să fie între 1 și 15.');
   if (!agents.length) throw new SlotError('Alege cel puțin un agent.');
+  if (agents.length > MAX_CUSTOM_AGENTS) throw new SlotError(`Poți alege maximum ${MAX_CUSTOM_AGENTS} agenți pentru un bilet.`);
   const perLeg = Math.pow(target, 1 / legs);
   if (perLeg < 1.1) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea mică pentru cotele reale. Pune mai puține meciuri sau o cotă mai mare.`);
   if (perLeg > 3.2) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea riscant. Pune mai multe meciuri sau o cotă mai mică.`);
