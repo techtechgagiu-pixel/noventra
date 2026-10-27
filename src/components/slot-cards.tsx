@@ -12,7 +12,7 @@ type Slot = {
   action: 'CREATE' | 'VIEW_ANALYSIS' | 'VIEW_TICKET' | 'VIEW_RESULT' | 'RESUME';
 };
 const LABEL = { CREATE: 'CREEAZĂ BILETUL', VIEW_ANALYSIS: 'VEZI ANALIZA', VIEW_TICKET: 'VEZI BILETUL', VIEW_RESULT: 'VEZI REZULTATUL', RESUME: 'CONTINUĂ ANALIZA' } as const;
-const ACCENT: Record<string, string> = { FIVE_A: '#5ee7f7', FIVE_B: '#34d399', TWO_A: '#a78bfa', TWO_B: '#f472b6', WEEKLY_100: '#e8c26a' };
+const ACCENT: Record<string, string> = { FIVE_A: '#ffbe3d', FIVE_B: '#7fdc6c', TWO_A: '#8fd0ff', TWO_B: '#f472b6', WEEKLY_100: '#ffe36e' };
 
 export function SlotCards({ initial }: { initial: Slot[] }) {
   const [slots, setSlots] = useState(initial);

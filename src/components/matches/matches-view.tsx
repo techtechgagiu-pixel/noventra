@@ -90,7 +90,7 @@ export function MatchesView() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold">Toate meciurile</h1>
+          <h1 className="page-title">Toate meciurile</h1>
           <p className="text-sm text-muted">
             {data ? <>{counts.all} meciuri în {data.leagues.filter((l) => l.count).length} ligi · {counts.odds} cu cote · {counts.analyzed} analizate în comunitate</> : 'Încarc meciurile din toate ligile…'}
           </p>
@@ -164,7 +164,7 @@ export function MatchesView() {
                   </div>
                   <div className="col-start-2 flex items-center gap-1.5 text-xs tabular sm:col-start-3 sm:justify-end">
                     {m.odds && (['home', 'draw', 'away'] as const).map((k, i) => (
-                      <span key={k} className="whitespace-nowrap rounded-md border border-line px-1.5 py-0.5"><span className="text-muted">{['1', 'X', '2'][i]}</span> {m.odds![k]?.toFixed(2) ?? '—'}</span>
+                      <span key={k} className="odds-cell"><span>{['1', 'X', '2'][i]}</span><b>{m.odds![k]?.toFixed(2) ?? '—'}</b></span>
                     ))}
                     {m.odds && <span className="whitespace-nowrap text-cyan">{m.odds.markets} piețe {open === m.id ? '▴' : '▾'}</span>}
                     {m.analysis && <Link href={`/?tab=analiza&job=${m.analysis.jobId}`} onClick={(e) => e.stopPropagation()} className="text-cyan hover:underline">jurnal</Link>}

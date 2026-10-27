@@ -27,12 +27,12 @@ export function ErrorRecovery({ error, reset }: { error: Error & { digest?: stri
     return () => { alive = false; };
   }, [error]);
   return (
-    <main style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', color: '#e6ecff', background: '#050914', fontFamily: 'system-ui, sans-serif' }}>
+    <main style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', color: '#e6ecff', background: '#0b1d15', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: 420 }}>
         <p style={{ fontSize: 22, fontWeight: 700 }}>{state === 'quota' ? 'Datele sunt temporar indisponibile.' : state === 'waiting' ? 'Verific conexiunea PRIMUL 11…' : 'Pagina nu a putut fi încărcată.'}</p>
-        <p style={{ marginTop: 8, fontSize: 14, color: '#94a3c4' }}>{state === 'quota' ? 'Serviciul bazei de date a atins limita de utilizare. Reîncărcarea paginii nu elimină această limită.' : state === 'waiting' ? 'Verific disponibilitatea serviciului. Pagina se reîncarcă automat dacă revine conexiunea.' : 'Conexiunea nu a revenit. Poți reîncerca manual sau reveni la prezentarea aplicației.'}</p>
-        <button onClick={() => (reset ? reset() : window.location.reload())} style={{ marginTop: 16, padding: '10px 18px', borderRadius: 12, background: '#22d3ee', color: '#050914', fontWeight: 700, border: 0, cursor: 'pointer' }}>Reîncarcă acum</button>
-        <p style={{marginTop:16,fontSize:14}}><a href="/" style={{color:'#94a3c4',textDecoration:'underline'}}>Prezentarea aplicației</a></p>
+        <p style={{ marginTop: 8, fontSize: 14, color: '#a3bcad' }}>{state === 'quota' ? 'Serviciul bazei de date a atins limita de utilizare. Reîncărcarea paginii nu elimină această limită.' : state === 'waiting' ? 'Verific disponibilitatea serviciului. Pagina se reîncarcă automat dacă revine conexiunea.' : 'Conexiunea nu a revenit. Poți reîncerca manual sau reveni la prezentarea aplicației.'}</p>
+        <button onClick={() => (reset ? reset() : window.location.reload())} style={{ marginTop: 16, padding: '10px 18px', borderRadius: 12, background: '#22d3ee', color: '#0b1d15', fontWeight: 700, border: 0, cursor: 'pointer' }}>Reîncarcă acum</button>
+        <p style={{marginTop:16,fontSize:14}}><a href="/" style={{color:'#a3bcad',textDecoration:'underline'}}>Prezentarea aplicației</a></p>
         {error.digest && <p style={{ marginTop: 12, fontSize: 11, color: '#64748b' }}>Cod: {error.digest}</p>}
       </div>
     </main>

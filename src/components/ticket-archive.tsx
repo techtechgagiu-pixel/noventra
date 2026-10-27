@@ -51,9 +51,9 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
-        <div><h1 className="font-display text-2xl font-bold">{title}</h1><p className="text-sm text-muted">Doar biletele în așteptare, verzi sau cu exact un meci roșu. Lista se schimbă odată cu rezultatele; istoricul complet rămâne salvat.</p></div>
+        <div><h1 className="page-title">{title}</h1><p className="page-lead text-sm">Biletele în așteptare, cele verzi și cele pierdute la un singur meci. Se actualizează odată cu rezultatele; istoricul complet rămâne salvat.</p></div>
         <label className="ml-auto flex items-center gap-2 text-sm text-muted">Creat de
-          <select value={who} onChange={(e) => setWho(e.target.value)} className="rounded-lg border border-line bg-ink px-2 py-1.5 text-text">
+          <select value={who} onChange={(e) => setWho(e.target.value)} className="rounded-md border border-line bg-panel px-2 py-1.5 text-text">
             <option value="all">toată lumea ({visible.length})</option>
             <option value="mine">mine ({visible.filter((t) => t.creator?.mine).length})</option>
             {creators.map(([k, v]) => <option key={k} value={k}>{v.label} ({v.n})</option>)}
@@ -62,18 +62,18 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
       </div>
       <div className="flex flex-wrap gap-2">{FILTERS.map(([k, l]) => <button key={k} onClick={() => setF(k)} className={`chip ${f === k ? 'border-cyan text-cyan' : 'text-muted'}`} aria-pressed={f === k}>{l}</button>)}</div>
       {list.length === 0 ? <div className="card p-8 text-center text-muted">Niciun bilet în această categorie.</div> : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {list.map((t) => {
             const result = archiveResult(t);
             const finishing = t.generation_status === 'INCOMPLETE' && ['QUEUED', 'RUNNING', 'WAITING'].includes(t.job_status ?? '');
             const partial = t.generation_status === 'INCOMPLETE' ? t.partialSelections ?? [] : [];
             const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome, kickoff: s.snapshot.kickoff as string | null, status: null as string | null, home_score: null as number | null, away_score: null as number | null }));
             return (
-            <li key={t.id}>
-              <Link href={`/?tab=istoric&ticket=${t.id}`} className={`card block p-4 transition hover:border-cyan/50 ${result === 'WON' ? 'border-emerald bg-emerald/10' : result === 'ONE_LOSS' ? 'border-rose bg-rose/10' : ''}`}>
+            <li key={t.id} className="min-w-0">
+              <Link href={`/?tab=istoric&ticket=${t.id}`} className="slip" data-result={result ?? undefined}>
                 <div className="flex items-start justify-between gap-3">
-                  <div><p className="font-semibold">{SLOTS_UI[t.slot] ?? (t.slot.startsWith('CUSTOM_') ? `CUSTOM — COTĂ ${t.target_odds}` : t.slot.startsWith('REVIEW_') ? `BILETUL TĂU — COTĂ ${t.target_odds}` : t.slot)}</p><p className="text-xs text-muted">{fmtDateTime(t.created_at)}</p><div className="mt-1"><CreatorBadge c={t.creator} small /></div></div>
-                  <div className="text-right"><p className="font-display text-2xl font-bold tabular">{t.generation_status === 'COMPLETED' ? odds(t.actual_odds) : '—'}</p><p className="text-xs text-muted">țintă {t.target_odds}</p></div>
+                  <div className="min-w-0"><p className="font-display text-xl font-bold leading-tight">{SLOTS_UI[t.slot] ?? (t.slot.startsWith('CUSTOM_') ? `CUSTOM — COTĂ ${t.target_odds}` : t.slot.startsWith('REVIEW_') ? `BILETUL TĂU — COTĂ ${t.target_odds}` : t.slot)}</p><p className="mt-0.5 text-xs text-muted">{fmtDateTime(t.created_at)}</p><div className="mt-1.5"><CreatorBadge c={t.creator} small /></div></div>
+                  <div className="shrink-0 text-right"><p className={`board-num text-[2.6rem] ${t.generation_status === 'COMPLETED' ? '' : 'opacity-40'}`}>{t.generation_status === 'COMPLETED' ? odds(t.actual_odds) : '—'}</p><p className="mt-1 text-xs text-muted">țintă {t.target_odds}</p></div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
                   {finishing ? <span className="chip animate-pulse text-cyan">⏳ Se finalizează…</span> : <span className={`chip ${t.generation_status === 'COMPLETED' ? 'text-emerald' : 'text-gold'}`}>{t.generation_status === 'COMPLETED' ? `${t.leg_count} meciuri` : t.generation_status === 'NO_BET' ? 'NO BET' : 'Incomplet'}</span>}
@@ -81,7 +81,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                 </div>
                 {partial.length > 0 && <p className="mt-3 text-xs text-muted">{partial.length} selecții acceptate · {finishing ? 'agenții caută acum meciurile care lipsesc; biletul se completează singur' : 'ținta biletului nu a fost atinsă'}</p>}
                 {shown.length > 0 && (
-                  <ul className="mt-3 space-y-1 text-xs">
+                  <ul className="mt-3 space-y-1.5 border-t border-dashed border-line pt-3 text-xs">
                     {shown.map((s, i) => (
                       <li key={i} className="flex items-center gap-2">
                         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.outcome === 'WON' ? 'bg-emerald' : s.outcome === 'LOST' ? 'bg-rose' : s.outcome === 'VOID' ? 'bg-muted' : 'border border-muted'}`} aria-label={s.outcome === 'WON' ? 'a intrat' : s.outcome === 'LOST' ? 'nu a intrat' : s.outcome === 'VOID' ? 'anulat' : 'în așteptare'} />

@@ -33,9 +33,8 @@ export function FeedbackButton() {
 
   return (
     <>
-      <button type="button" onClick={() => { setOpen(true); setState('idle'); }}
-        aria-label="Ajută-ne să îmbunătățim" className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full border border-gold/60 bg-ink/90 p-2.5 sm:px-4 text-sm font-semibold text-gold shadow-lg shadow-black/40 backdrop-blur transition hover:-translate-y-0.5 hover:bg-gold/15">
-        <Lightbulb size={16} aria-hidden /> <span className="hidden sm:inline">Ajută-ne să îmbunătățim</span>
+      <button type="button" onClick={() => { setOpen(true); setState('idle'); }} aria-label="Ajută-ne să îmbunătățim" className="feedback-fab">
+        <Lightbulb size={18} aria-hidden /><span className="feedback-fab-label">Ajută-ne să îmbunătățim</span>
       </button>
       {open && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="Ajută-ne să îmbunătățim" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
@@ -49,12 +48,12 @@ export function FeedbackButton() {
                 <div className="flex gap-2"><button type="button" className="chip" onClick={() => setState('idle')}>Mai trimit una</button><button type="button" className="chip text-muted" onClick={() => setOpen(false)}>Închide</button></div></div>
             ) : (
               <>
-                <div className="flex flex-wrap gap-2">{KINDS.map((k) => <button key={k.id} type="button" aria-pressed={kind === k.id} onClick={() => setKind(k.id)} className={`chip ${kind === k.id ? 'border-gold text-gold' : 'text-muted'}`}>{k.label}</button>)}</div>
+                <div className="flex flex-wrap gap-2">{KINDS.map((k) => <button key={k.id} type="button" aria-pressed={kind === k.id} onClick={() => setKind(k.id)} className={`chip ${kind === k.id ? 'text-cyan' : 'text-muted'}`}>{k.label}</button>)}</div>
                 <textarea ref={box} value={message} onChange={(e) => setMessage(e.target.value)} maxLength={2000} rows={5}
                   placeholder={kind === 'problemă' ? 'Ce s-a întâmplat și unde? (ex: în Meciuri nu se deschide…)' : 'Descrie ideea ta…'}
-                  className="w-full rounded-lg border border-line bg-panel-2 p-3 text-sm outline-none focus:border-gold/70" />
+                  className="w-full rounded-lg border border-line bg-ink p-3 text-sm outline-none focus:border-cyan" />
                 <div className="flex items-center justify-between gap-2 text-xs text-muted"><span>{message.length}/2000</span>
-                  <button type="button" disabled={message.trim().length < 5 || state === 'sending'} onClick={() => void send()} className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-ink disabled:opacity-40">{state === 'sending' ? 'Se trimite…' : 'Trimite'}</button></div>
+                  <button type="button" disabled={message.trim().length < 5 || state === 'sending'} onClick={() => void send()} className="btn btn-primary px-4 py-2 text-sm disabled:opacity-40">{state === 'sending' ? 'Se trimite…' : 'Trimite'}</button></div>
                 {state === 'error' && <p className="text-xs text-rose">{error}</p>}
               </>
             )}
