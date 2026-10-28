@@ -275,7 +275,8 @@ export async function structuredCall<T>(opts: {
         if (error.daily || error.retryAfterMs > 120_000) markExhausted(key, exhaustionUntil(ref, error), error.daily ? 'cota zilnică gratuită' : 'limită lungă');
         shortestWait = Math.min(shortestWait, error.retryAfterMs);
         // A short per-minute limit on the primary: wait for it rather than spreading to other models.
-        if (!error.daily && error.retryAfterMs <= 120_000 && i === 0) throw error;
+        // Paid OpenRouter models are interchangeable enough: move on to the next model instead of making the whole ticket wait.
+        if (!error.daily && error.retryAfterMs <= 120_000 && i === 0 && ref.provider !== 'openrouter') throw error;
         continue;
       }
       if (transient(error)) { exhausted.set(key, Date.now() + 60_000); shortestWait = Math.min(shortestWait, 30_000); continue; }
