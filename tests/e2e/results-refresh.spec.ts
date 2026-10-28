@@ -38,7 +38,7 @@ test('open archive and ticket receive green/red results without reload, retain f
   } finally { await db.end(); }
 });
 
-test('the creator removes a ticket from Bilete create; nobody sees it there afterwards', async ({ page, browser }) => {
+test('only the allowed account removes a ticket from Bilete create; nobody sees it there afterwards', async ({ page, browser }) => {
   const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL || 'postgresql://postgres@localhost:5433/betmind_e2e' });
   await db.connect();
   try {
@@ -49,10 +49,12 @@ test('the creator removes a ticket from Bilete create; nobody sees it there afte
     const fixture = `demo:remove:${ticket}`;
     await db.query(`INSERT INTO fixtures (id,provider,provider_id,league_id,home_team,away_team,kickoff_utc,status,content_hash) VALUES ($1,'demo','remove','ENG1','DEMO Remove Home','DEMO Remove Away',now()+interval '1 day','pre','remove')`, [fixture]);
     await db.query(`INSERT INTO ticket_selections (ticket_id,fixture_id,position,market_key,market_label,odds,bookmaker,quote_observed_at,votes_for,risk,snapshot) VALUES ($1,$2,1,'1X2:HOME','DEMO Remove wins',1.5,'DEMO',now(),6,'LOW',$3)`, [ticket, fixture, JSON.stringify({ match: 'DEMO Remove Home – DEMO Remove Away', home: 'DEMO Remove Home', away: 'DEMO Remove Away', kickoff: new Date().toISOString(), league: 'DEMO' })]);
-    // Another account cannot remove it.
+    // Another account sees no button and cannot remove it.
     const other = await browser.newPage();
     await other.goto('/auth/test-login?email=remove-other@test.local');
     expect((await other.request.delete(`/api/tickets/${ticket}`, { headers: { origin: 'http://localhost:3200' } })).status()).toBe(403);
+    await other.goto('/?tab=istoric');
+    await expect(other.getByRole('button', { name: 'Șterge din listă' })).toHaveCount(0);
     await page.goto('/?tab=istoric');
     const slip = page.locator('li', { hasText: 'DEMO Remove Home – DEMO Remove Away' });
     await slip.getByRole('button', { name: 'Șterge din listă' }).click();

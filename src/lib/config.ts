@@ -20,6 +20,8 @@ export const config = {
   geminiApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
   openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
   /** Daily spend cap for paid OpenRouter models (USD, UTC day). Over the cap, agents fall back to their free models. */
+  /** Accounts (emails, comma separated) allowed to remove tickets from Bilete create. Kept out of the code on purpose. */
+  ticketRemovers: (process.env.TICKET_REMOVE_EMAILS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean),
   openRouterDailyUsd: Number(process.env.OPENROUTER_DAILY_USD || '5'),
   oddsApiKey: process.env.ODDS_API_KEY || '',
   limits: {

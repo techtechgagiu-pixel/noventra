@@ -35,6 +35,7 @@ import { CustomLive } from '@/components/custom/custom-live';
 import { localDate } from '@/lib/time';
 import { topSixAgentIds } from '@/lib/agent-ranking';
 import { databaseIssue } from '@/lib/database-availability';
+import { canRemoveTickets } from '@/lib/ticket-removal';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,7 +110,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} />}
-        {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} admin={user.role === 'admin'} />}
+        {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} admin={user.role === 'admin'} canRemove={canRemoveTickets(user)} />}
         </Suspense>
       </main>
       <footer className="app-footer mx-auto max-w-6xl space-y-1 px-4 pb-28 md:pb-10"><p>Rezultatele și scorurile live de pe bilete se actualizează automat la 10 minute.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
@@ -250,12 +251,12 @@ async function StatisticiTab({ userId, admin, month, scope }: { userId: string; 
   return <div className="space-y-6">{automation && <AutomationPanel initial={plain(automation)} />}<StatsView agents={agents} totals={totals} month={m} scope={selected} /></div>;
 }
 
-async function IstoricTab({ userId, ticket, fresh, admin = false }: { userId: string; ticket?: string; fresh: boolean; admin?: boolean }) {
+async function IstoricTab({ userId, ticket, fresh, admin = false, canRemove = false }: { userId: string; ticket?: string; fresh: boolean; admin?: boolean; canRemove?: boolean }) {
   if (ticket) return <TicketPanel userId={userId} id={ticket} fresh={fresh} back="/?tab=istoric" />;
   const tickets = await listTickets(userId);
   return (
     <div className="space-y-10">
-      <TicketArchive tickets={JSON.parse(JSON.stringify(tickets))} admin={admin} />
+      <TicketArchive tickets={JSON.parse(JSON.stringify(tickets))} canRemove={canRemove} />
       <PerformancePanel />
     </div>
   );
