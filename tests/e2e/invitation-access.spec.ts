@@ -4,7 +4,7 @@ const adminCode = 'P11-ADMIN-01234567-89ABCDEF-01234567-89ABCDEF';
 test('invite access: anonymous gate, permanent administrator, visitor isolation and revocation', async ({ page, browser }) => {
   await page.goto('/');
   await expect(page).toHaveURL('http://localhost:3200/');
-  const google = page.getByRole('banner').getByRole('link', { name: 'Conectează-te cu Google' });
+  const google = page.getByRole('banner').getByRole('link', { name: 'Intră cu Google' });
   await expect(google).toBeVisible();
   await expect(google).toHaveAttribute('href', '/auth/google');
   expect((await google.boundingBox())!.y).toBeLessThan(100);
@@ -14,7 +14,7 @@ test('invite access: anonymous gate, permanent administrator, visitor isolation 
   const box = (await google.boundingBox())!;
   expect(box.x + box.width).toBeLessThanOrEqual(390);
   expect(box.y).toBeLessThan(100);
-  await page.getByRole('link', { name: 'Am un cod de acces', exact: true }).click();
+  await page.getByRole('link', { name: 'Am un cod de acces', exact: true }).first().click();
   await expect(page).toHaveURL(/\/login\?next=custom$/);
   await expect(page.getByRole('link', { name: 'Continuă cu Google' })).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/login.png` });
@@ -49,7 +49,7 @@ test('invite access: anonymous gate, permanent administrator, visitor isolation 
   expect((await guest.request.get('/api/tickets')).status()).toBe(401);
   await guest.reload();
   await expect(guest).toHaveURL('http://localhost:3200/');
-  await expect(guest.getByRole('link', { name: 'Conectează-te cu Google' })).toBeVisible();
+  await expect(guest.getByRole('banner').getByRole('link', { name: 'Intră cu Google' })).toBeVisible();
   expect((await page.request.get('/api/admin/models')).status()).toBe(200);
   await ctx.close();
 });

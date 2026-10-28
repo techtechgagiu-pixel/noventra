@@ -64,7 +64,7 @@ test('anonymous home is public while application sections and APIs remain protec
   expect((await request.get('/api/admin/models')).status()).toBe(401);
   const home = await request.get('/', { maxRedirects: 0 });
   expect(home.status()).toBe(200);
-  expect(await home.text()).toContain('Conectează-te cu Google');
+  expect(await home.text()).toContain('Intră cu Google');
   const privateTab = await request.get('/?tab=custom', { maxRedirects: 0 });
   expect(privateTab.headers().location).toBe('/login');
   const ticket = await request.get('/?ticket=00000000-0000-4000-8000-000000000000', { maxRedirects: 0 });
