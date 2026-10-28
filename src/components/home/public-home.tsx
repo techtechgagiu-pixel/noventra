@@ -63,7 +63,6 @@ function PublicHero({ google, proof }: { google: boolean; proof: PublicProof | n
       </div>
       <dl className="public-proof-stats">
         <div><dt>Selecții câștigate</dt><dd><span className="board-num">{pct(proof.picks.won, proof.picks.decided)}%</span> <small>{proof.picks.won} din {proof.picks.decided}</small></dd></div>
-        <div><dt>Bilete câștigate</dt><dd><span className="board-num">{proof.tickets.won}</span> <small>din {proof.tickets.settled} închise</small></dd></div>
       </dl>
       <p className="public-proof-note">Date reale din istoricul aplicației, la cotele din momentul analizei. Rezultatele trecute nu garantează rezultate viitoare.</p>
     </aside> : <aside className="public-proof public-proof-empty"><p className="board-num text-[7rem]">11</p><p className="mt-3 font-display text-xl font-bold">Primul 11 votează. Tu câștigi timp.</p></aside>}

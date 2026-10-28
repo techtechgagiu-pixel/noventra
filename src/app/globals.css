@@ -326,7 +326,7 @@ a.slip:hover { border-color: #3f7a5d; transform: translateY(-1px); }
 .public-proof-legs { margin-top: .9rem; border-top: 1px dashed rgba(238,245,236,.16); }
 .public-proof-legs li { display: flex; justify-content: space-between; gap: .9rem; padding: .6rem 0; border-bottom: 1px dashed rgba(238,245,236,.1); font-size: 14px; }
 .public-proof-legs li:last-child { border-bottom: 0; }
-.public-proof-stats { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin-top: .9rem; }
+.public-proof-stats { display: grid; grid-template-columns: 1fr; gap: .8rem; margin-top: .9rem; }
 .public-proof-stats > div { border: 1px solid var(--color-line); border-radius: 12px; padding: .8rem 1rem; background: var(--color-panel); }
 .public-proof-stats dt { font-size: 12px; color: var(--color-muted); }
 .public-proof-stats dd { margin-top: .3rem; }
