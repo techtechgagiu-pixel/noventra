@@ -120,8 +120,8 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
   if (ref.provider === 'openrouter' && (res.status === 403 || res.status === 402) && /key limit exceeded|insufficient credits|more credits/i.test(text)) {
     // No credits / key limit: every OpenRouter model fails the same way. Block the whole provider for 30 minutes so
     // agents go straight to the free reserve models instead of each trying (and failing) its paid model first.
-    markExhausted(OPENROUTER_ALL, Date.now() + 30 * 60_000, 'credite OpenRouter epuizate');
-    const e = new RateLimitError('openrouter', 30 * 60_000, false);
+    markExhausted(OPENROUTER_ALL, Date.now() + 10 * 60_000, 'credite OpenRouter epuizate'); // re-checked every minute against the real balance
+    const e = new RateLimitError('openrouter', 10 * 60_000, false);
     e.message = 'Contul OpenRouter nu mai are credite (sau cheia și-a atins limita); agenții folosesc modelele gratuite de rezervă până se încarcă credite.';
     throw e;
   }
@@ -250,13 +250,15 @@ export async function structuredCall<T>(opts: {
   };
 
   const transient = (e: unknown) => e instanceof ProviderUnavailableError && /\b5\d\d\b|high demand|UNAVAILABLE|overloaded/i.test(e.message);
-  // Candidate chain: primary → configured fallback → free reserve models. Exhausted models are skipped until their reset.
-  const chain: ModelRef[] = [opts.primary, ...(opts.fallback ? [opts.fallback] : []), ...RESERVE_MODELS]
+  // Candidate chain: primary → configured fallback → free reserve models → cheap paid reserve. Exhausted models are
+  // skipped until their reset; an OpenRouter-wide block is re-checked against the real balance first.
+  const chain: ModelRef[] = [opts.primary, ...(opts.fallback ? [opts.fallback] : []), ...RESERVE_MODELS, ...PAID_RESERVE_MODELS]
     .filter((m, i, all) => all.findIndex((x) => x.provider === m.provider && x.model === m.model) === i)
     .filter((m) => providerConfigured(m.provider));
   let shortestWait = Infinity;
   let lastError: unknown = null;
   await loadPersistedExhaustion();
+  if ((exhaustedModels().get(OPENROUTER_ALL) ?? 0) > Date.now()) await openRouterCreditsBack();
   for (let i = 0; i < chain.length; i++) {
     const ref = chain[i];
     const key = `${ref.provider}:${ref.model}`;
@@ -352,6 +354,10 @@ async function loadPersistedExhaustion() {
   try {
     const rows = await many<{ model_key: string; until: string }>(`SELECT model_key, ${dialect('extract(epoch from exhausted_until)*1000',"(julianday(exhausted_until)-2440587.5)*86400000")} AS until FROM model_health WHERE ${timeCompare('exhausted_until','>',SQL_NOW())}`);
     const m = exhaustedModels();
+    const persisted = new Set(rows.map((r) => r.model_key));
+    // Long blocks are persisted, so the database decides: one lifted there (credits added, manual clear) is lifted
+    // here too. Short in-memory blocks (overload, under ~2 min) are kept.
+    for (const [k, until] of m) if (!persisted.has(k) && until - Date.now() > 120_000) m.delete(k);
     for (const r of rows) m.set(r.model_key, Math.max(m.get(r.model_key) ?? 0, Number(r.until)));
   } catch { /* table missing or DB hiccup: in-memory state still applies */ }
 }
@@ -368,6 +374,32 @@ export const RESERVE_MODELS: ModelRef[] = [
   { provider: 'groq', model: 'qwen/qwen3.8-27b' },
 ];
 const OPENROUTER_ALL = 'openrouter:*';
+/**
+ * Paid safety net (owner decision 28.10: "never stuck unless there is no money"): after the agent's own models and the
+ * free reserves, two cheap OpenRouter models answer, so a ticket only waits when OpenRouter itself has no credits.
+ */
+export const PAID_RESERVE_MODELS: ModelRef[] = [
+  { provider: 'openrouter', model: 'deepseek/deepseek-v4-flash' },
+  { provider: 'openrouter', model: 'google/gemini-2.5-flash-lite' },
+];
+let creditsProbe: { at: number; ok: boolean } | null = null;
+/** Free OpenRouter endpoint: are there credits again? Checked at most once a minute while the provider is blocked. */
+async function openRouterCreditsBack(): Promise<boolean> {
+  if (ag.__bmFakeAi || !config.openRouterApiKey) return false;
+  if (creditsProbe && Date.now() - creditsProbe.at < 60_000) return creditsProbe.ok;
+  let ok = false;
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/credits', { headers: { Authorization: `Bearer ${config.openRouterApiKey}` }, signal: AbortSignal.timeout(8_000) });
+    const j = res.ok ? await res.json() as { data?: { total_credits?: number; total_usage?: number } } : null;
+    ok = !!j?.data && Number(j.data.total_credits ?? 0) - Number(j.data.total_usage ?? 0) > 0.05;
+  } catch { ok = false; }
+  creditsProbe = { at: Date.now(), ok };
+  if (ok) {
+    for (const k of [...exhaustedModels().keys()]) if (k.startsWith('openrouter:')) exhaustedModels().delete(k);
+    void query(`DELETE FROM model_health WHERE model_key LIKE 'openrouter:%'`).catch(() => {});
+  }
+  return ok;
+}
 const exhaustedModels = () => ((globalThis as unknown as { __bmExhausted?: Map<string, number> }).__bmExhausted ??= new Map<string, number>());
 
 async function logCall(log: { jobId?: string | null; agentId?: string | null; stage: string }, ref: ModelRef, raw: RawResult | null, ok: boolean, schemaValid: boolean | null, latencyMs: number, error: string | null) {
