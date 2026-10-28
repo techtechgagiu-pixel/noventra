@@ -27,7 +27,7 @@ export function CreatorBadge({ c, small }: { c?: Creator; small?: boolean }) {
   );
 }
 
-type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; job_id?: string; job_status?: string; partialSelections?: IncompletePick[]; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null; kickoff?: string | null; status?: string | null; home_score?: number | null; away_score?: number | null }> };
+type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; job_id?: string; job_status?: string; partialSelections?: IncompletePick[]; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null; kickoff?: string | null; status?: string | null; home_score?: number | null; away_score?: number | null; clock?: string | null; score_at?: string | null }> };
 const FILTERS = [['all', 'Toate'], ['today', 'Azi'], ['yesterday', 'Ieri'], ['week', 'Săptămâna asta'], ['weekly', 'Biletul săptămânii'], ['PENDING', 'În așteptare'], ['WON', 'Verzi'], ['ONE_LOSS', 'Pierdute la un meci']] as const;
 const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
 
@@ -69,7 +69,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
             const finishing = t.generation_status === 'INCOMPLETE' && ['QUEUED', 'RUNNING', 'WAITING'].includes(t.job_status ?? '');
             const paused = t.generation_status === 'INCOMPLETE' && t.job_status === 'PAUSED';
             const partial = t.generation_status === 'INCOMPLETE' ? t.partialSelections ?? [] : [];
-            const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome, kickoff: s.snapshot.kickoff as string | null, status: null as string | null, home_score: null as number | null, away_score: null as number | null }));
+            const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome, kickoff: s.snapshot.kickoff as string | null, status: s.fixture_status ?? null, home_score: s.home_score, away_score: s.away_score, clock: s.live_clock ?? null, score_at: s.score_at ?? null }));
             return (
             <li key={t.id} className="min-w-0">
               <Link href={`/?tab=istoric&ticket=${t.id}`} className="slip" data-result={result ?? undefined}>
@@ -88,7 +88,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                       <li key={i} className="flex items-center gap-2">
                         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.outcome === 'WON' ? 'bg-emerald' : s.outcome === 'LOST' ? 'bg-rose' : s.outcome === 'VOID' ? 'bg-muted' : 'border border-muted'}`} aria-label={s.outcome === 'WON' ? 'a intrat' : s.outcome === 'LOST' ? 'nu a intrat' : s.outcome === 'VOID' ? 'anulat' : 'în așteptare'} />
                         <span className={`min-w-0 truncate ${s.outcome === 'LOST' ? 'text-rose' : s.outcome === 'WON' ? 'text-emerald' : 'text-muted'}`}>{s.match} — {s.label} @ {odds(s.odds)}</span>
-                        <span className="ml-auto shrink-0 tabular text-[11px] text-muted">{s.status === 'in' && s.home_score != null ? <span className="font-semibold text-gold">LIVE {s.home_score}–{s.away_score}</span> : s.status === 'post' && s.home_score != null ? `${s.home_score}–${s.away_score}` : s.kickoff ? kickoffShort(s.kickoff) : ''}</span>
+                        <span className="ml-auto shrink-0 tabular text-[11px] text-muted">{s.status === 'in' && s.home_score != null ? <span className="font-semibold text-gold" title={s.score_at ? `Scor actualizat la ${new Date(s.score_at).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' })}` : undefined}>LIVE {s.home_score}–{s.away_score}{s.clock ? ` · ${s.clock}` : ''}</span> : s.status === 'post' && s.home_score != null ? `${s.home_score}–${s.away_score}` : s.kickoff ? kickoffShort(s.kickoff) : ''}</span>
                       </li>
                     ))}
                   </ul>
