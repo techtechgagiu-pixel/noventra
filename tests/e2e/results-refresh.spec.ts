@@ -37,3 +37,29 @@ test('open archive and ticket receive green/red results without reload, retain f
     expect(after).toEqual(before);
   } finally { await db.end(); }
 });
+
+test('the creator removes a ticket from Bilete create; nobody sees it there afterwards', async ({ page, browser }) => {
+  const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL || 'postgresql://postgres@localhost:5433/betmind_e2e' });
+  await db.connect();
+  try {
+    await page.goto('/auth/test-login?email=remove-owner@test.local');
+    const owner = (await db.query(`SELECT id FROM users WHERE email='remove-owner@test.local'`)).rows[0].id;
+    const job = (await db.query(`INSERT INTO ticket_generation_jobs (user_id,slot,period_key,target_odds,seed,config,checkpoint,status,stage) VALUES ($1,'CUSTOM_9',current_date,3,'remove','{}','{}','COMPLETED','DONE') RETURNING id`, [owner])).rows[0].id;
+    const ticket = (await db.query(`INSERT INTO tickets (job_id,user_id,slot,period_key,target_odds,actual_odds,leg_count,generation_status,summary) VALUES ($1,$2,'CUSTOM_9',current_date,3,1.5,1,'COMPLETED','{}') RETURNING id`, [job, owner])).rows[0].id;
+    const fixture = `demo:remove:${ticket}`;
+    await db.query(`INSERT INTO fixtures (id,provider,provider_id,league_id,home_team,away_team,kickoff_utc,status,content_hash) VALUES ($1,'demo','remove','ENG1','DEMO Remove Home','DEMO Remove Away',now()+interval '1 day','pre','remove')`, [fixture]);
+    await db.query(`INSERT INTO ticket_selections (ticket_id,fixture_id,position,market_key,market_label,odds,bookmaker,quote_observed_at,votes_for,risk,snapshot) VALUES ($1,$2,1,'1X2:HOME','DEMO Remove wins',1.5,'DEMO',now(),6,'LOW',$3)`, [ticket, fixture, JSON.stringify({ match: 'DEMO Remove Home – DEMO Remove Away', home: 'DEMO Remove Home', away: 'DEMO Remove Away', kickoff: new Date().toISOString(), league: 'DEMO' })]);
+    // Another account cannot remove it.
+    const other = await browser.newPage();
+    await other.goto('/auth/test-login?email=remove-other@test.local');
+    expect((await other.request.delete(`/api/tickets/${ticket}`, { headers: { origin: 'http://localhost:3200' } })).status()).toBe(403);
+    await page.goto('/?tab=istoric');
+    const slip = page.locator('li', { hasText: 'DEMO Remove Home – DEMO Remove Away' });
+    await slip.getByRole('button', { name: 'Șterge din listă' }).click();
+    await slip.getByRole('button', { name: 'Da, șterge' }).click();
+    await expect(page.getByText('DEMO Remove Home – DEMO Remove Away')).toHaveCount(0);
+    await other.goto('/?tab=istoric');
+    await expect(other.getByText('DEMO Remove Home – DEMO Remove Away')).toHaveCount(0);
+    expect((await db.query('SELECT count(*)::int n FROM ticket_selections WHERE ticket_id=$1', [ticket])).rows[0].n).toBe(1);
+  } finally { await db.end(); }
+});

@@ -58,7 +58,7 @@ export async function listTickets(userId: string) {
             j.id AS job_id, j.status AS job_status, CAST((SELECT count(*) FROM analysis_events e WHERE e.job_id=j.id) AS INTEGER) AS event_count,
             COALESCE((SELECT ${dialect('json_agg', 'json_group_array')}(${dialect('json_build_object', 'json_object')}('match', s.snapshot->>'match', 'label', s.market_label, 'market_key', s.market_key, 'model_probability', CAST(s.model_probability AS DOUBLE PRECISION), 'odds', CAST(s.odds AS DOUBLE PRECISION), 'outcome', s.outcome, 'kickoff', s.snapshot->>'kickoff', 'status', f.status, 'home_score', f.home_score, 'away_score', f.away_score) ORDER BY s.position) FROM ticket_selections s LEFT JOIN fixtures f ON f.id=s.fixture_id WHERE s.ticket_id=t.id), '[]') AS selections
             , ${CREATOR_COLS}
-     FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id JOIN users u ON u.id=t.user_id ORDER BY t.created_at DESC`,
+     FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id JOIN users u ON u.id=t.user_id WHERE t.hidden_at IS NULL ORDER BY t.created_at DESC`,
   );
   const partial = await incompleteTicketPicks(rows.filter((t) => t.generation_status === 'INCOMPLETE').map((t) => String(t.id)));
   return rows.map(({ creator_id, creator_name, creator_email, creator_picture, creator_sub, ...r }) => ({ ...r, partialSelections: partial.get(String(r.id)) ?? [], creator: creatorOf({ creator_id, creator_name, creator_email, creator_picture, creator_sub }, userId) }));
