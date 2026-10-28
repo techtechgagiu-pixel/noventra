@@ -1,4 +1,4 @@
-import { one, query, dialect, SQL_NOW, timeCompare } from '../db';
+import { many, one, query, dialect, SQL_NOW, timeCompare } from '../db';
 import { dateRange, localDate } from '../time';
 import { utcDay } from '../usage';
 import type { InformationalMatch } from './informational-matches';
@@ -106,10 +106,13 @@ export async function theOddsCatalog(today: string, count: number, enabled = tru
     if (!cloudflare && key && (!cached || cached.next_attempt_at.getTime() <= Date.now()) && !g.__p11TheOddsRefresh) {
       g.__p11TheOddsRefresh = refresh(today, count, key).catch(() => console.warn(JSON.stringify({ event: 'the_odds_catalog_failed' }))).finally(() => { g.__p11TheOddsRefresh = null; });
     }
+    // Credits are reported by whichever call ran last (schedule, prices or per-match markets): show the lowest.
+    const others = await many<{ payload: { creditsRemaining?: number | null } }>("SELECT payload FROM sports_catalog_cache WHERE provider IN ('the-odds-api-prices','the-odds-api-extras')").catch(() => []);
+    const credits = [cached?.payload.creditsRemaining, ...others.map((o) => o.payload?.creditsRemaining)].filter((x): x is number => typeof x === 'number');
     const sports = cached?.payload.sports ?? [], snapshots = sports.flatMap((s) => cached?.payload.byLeague?.[s.key] ? [cached.payload.byLeague[s.key]] : []);
     const days = new Set(dateRange(today, Math.min(8, Math.max(1, count))));
     return { fixtures: snapshots.flatMap((d) => d.fixtures).filter((f) => days.has(localDate(new Date(f.kickoff)))).map((f) => ({ ...f, status: Date.parse(f.kickoff) > Date.now() ? 'pre' as const : 'unknown' as const })),
       source: { configured: true, refreshing: !!g.__p11TheOddsRefresh, updatedAt: snapshots.length ? snapshots.map((d) => d.at).sort()[0] : null,
-        leaguesLoaded: snapshots.length, leaguesTotal: sports.length, creditsUsed: cached?.payload.creditsUsed ?? null, creditsRemaining: cached?.payload.creditsRemaining ?? null, error: cached?.last_error ?? null } };
+        leaguesLoaded: snapshots.length, leaguesTotal: sports.length, creditsUsed: cached?.payload.creditsUsed ?? null, creditsRemaining: credits.length ? Math.min(...credits) : null, error: cached?.last_error ?? null } };
   } catch { return { ...empty, source: { ...empty.source, configured: true, error: 'Catalogul The Odds API nu poate fi citit acum. ESPN și LPF rămân disponibile.' } }; }
 }

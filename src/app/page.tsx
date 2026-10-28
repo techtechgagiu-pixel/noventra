@@ -86,7 +86,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
           <nav className="app-tabs md:ml-auto" aria-label="Secțiuni">
             {tabs.map(({ id, label, icon: Icon, badge }) => (
               <TabLink key={id} href={`/?tab=${id}`} label={label} active={tab === id}>
-                <Icon size={17} aria-hidden /> <span className="md:hidden lg:inline">{label}</span>
+                <Icon size={17} aria-hidden /> <span className="md:hidden">{label.split(' ')[0]}</span><span className="hidden lg:inline">{label}</span>
                 {badge && <span className="app-tab-dot" aria-label="analiză în curs" />}
               </TabLink>
             ))}

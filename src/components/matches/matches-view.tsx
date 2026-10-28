@@ -69,7 +69,9 @@ export function MatchesView() {
   useEffect(() => { if (!data?.refreshing) return; const t = setTimeout(load, 15_000); return () => clearTimeout(t); }, [data, load]);
 
   const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  const base = useMemo(() => (data?.rows ?? []).filter((m) => fromSource(m, source) && (!hideDone || m.status !== 'post') && (!leagues.length || leagues.includes(m.leagueId)) && (!q || norm(`${m.home} ${m.away} ${m.league} ${m.country}`).includes(norm(q)))), [data, leagues, q, hideDone, source]);
+  // A schedule-only match whose kickoff passed has no score from its source: treat it as finished.
+  const done = (m: MatchRow) => m.status === 'post' || (m.status === 'unknown' && Date.parse(m.kickoff) < Date.now() - 2 * 3600_000);
+  const base = useMemo(() => (data?.rows ?? []).filter((m) => fromSource(m, source) && (!hideDone || !done(m)) && (!leagues.length || leagues.includes(m.leagueId)) && (!q || norm(`${m.home} ${m.away} ${m.league} ${m.country}`).includes(norm(q)))), [data, leagues, q, hideDone, source]);
   const days = useMemo(() => [...new Set(base.map((m) => dayOf(m.kickoff)))].sort(), [base]);
   const shown = useMemo(() => base.filter((m) => (day === 'all' || dayOf(m.kickoff) === day) && (
     status === 'all' ? true : status === 'odds' ? !!m.odds : status === 'analyzed' ? !!m.analysis : status === 'ticket' ? !!m.analysis?.onTicket : !m.analysis && !!m.odds))
@@ -82,7 +84,7 @@ export function MatchesView() {
   const counts = { all: data?.rows.length ?? 0, odds: data?.rows.filter((m) => m.odds).length ?? 0, analyzed: data?.rows.filter((m) => m.analysis).length ?? 0 };
   const pickerLeagues = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const m of data?.rows ?? []) if ((!hideDone || m.status !== 'post') && fromSource(m, source)) counts.set(m.leagueId, (counts.get(m.leagueId) ?? 0) + 1);
+    for (const m of data?.rows ?? []) if ((!hideDone || !done(m)) && fromSource(m, source)) counts.set(m.leagueId, (counts.get(m.leagueId) ?? 0) + 1);
     return (data?.leagues ?? []).map((l) => ({ ...l, count: counts.get(l.id) ?? 0 }));
   }, [data, hideDone, source]);
 
