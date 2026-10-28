@@ -10,6 +10,7 @@ export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; 
   ...Object.fromEntries(NEW_AI_PROFILES.map((a) => [a.id, { model: a.model, inPerM: a.inPerM, outPerM: a.outPerM }])),
   // Corina: sourced sports reporting; catalogue checked 2026-10-22.
   corina: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },
+  scout: { model: 'google/gemini-2.5-flash-lite', inPerM: 0.1, outPerM: 0.4 },
   victor: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },
   andrei: { model: 'deepseek/deepseek-v4.1-flash', inPerM: 0.14, outPerM: 0.42 },
   mihai: { model: 'openai/gpt-6-luna', inPerM: 0.1, outPerM: 0.5 },

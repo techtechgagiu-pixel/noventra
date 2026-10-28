@@ -11,7 +11,7 @@ import { transitionD1Job } from './job-mutations';
  *     team, new fixtures), at most MAX_COMPLETIONS attempts per ticket, one new start per pass, never two at once.
  * Only state transitions are written here; the AI work itself still runs on the runner within the same daily cap.
  */
-export const MAX_AUTO_RESUMES = 6;
+export const MAX_AUTO_RESUMES = 24; // "never stuck unless there is no money": quota pauses keep resuming for 3 days
 export const MAX_COMPLETIONS = 3;
 const QUOTA = /cota zilnic|plafon|buget|budget|epuizat|limita ai zilnic|limita pentru azi|credite/i;
 const RESERVE_COUNT = 7; // free reserve models (router.RESERVE_MODELS)
