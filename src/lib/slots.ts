@@ -54,7 +54,9 @@ export type CustomConfig = { target: number; legs: number; agents: string[]; win
   /** Exact interval chosen by the user: matches starting between fromHours and toHours from the moment of creation. */
   fromHours?: number; toHours?: number;
   /** League ids the user ticked; absent = every league. */
-  leagues?: string[] };
+  leagues?: string[];
+  /** Lowest odds a single selection may have (user setting, 28.10); absent = 1.10. */
+  minLegOdds?: number };
 export const CUSTOM_LIMIT_PER_DAY = 20;
 /** User decision 27.10: at most 11 agents per custom ticket (the brain is always added on top). */
 export const MAX_CUSTOM_AGENTS = 11;
@@ -75,7 +77,7 @@ export function reviewPolicy(r: ReviewConfig): LegPolicy {
 /** Price band and probability floor derived from the price each leg needs (target^(1/legs)). */
 export function customPolicy(c: CustomConfig): LegPolicy {
   const perLeg = Math.pow(c.target, 1 / c.legs);
-  const minOdds = Math.max(1.1, Math.round(perLeg * 0.72 * 100) / 100);
+  const minOdds = Math.max(c.minLegOdds ?? 1.1, Math.round(perLeg * 0.72 * 100) / 100);
   const maxOdds = Math.min(4, Math.round((perLeg * 1.4 + 0.05) * 100) / 100);
   const minProbability = Math.min(0.75, Math.max(0.3, Math.round((0.95 / perLeg - 0.1) * 100) / 100));
   return {

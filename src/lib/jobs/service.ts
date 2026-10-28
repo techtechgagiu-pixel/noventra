@@ -128,9 +128,12 @@ export function parseCustom(input: unknown): CustomConfig {
   const perLeg = Math.pow(target, 1 / legs);
   if (perLeg < 1.1) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea mică pentru cotele reale. Pune mai puține meciuri sau o cotă mai mare.`);
   if (perLeg > 3.2) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea riscant. Pune mai multe meciuri sau o cotă mai mică.`);
+  const minLegOdds = o.minLegOdds === undefined || o.minLegOdds === null ? undefined : Math.round(Number(o.minLegOdds) * 100) / 100;
+  if (minLegOdds !== undefined && (!Number.isFinite(minLegOdds) || minLegOdds < 1.01 || minLegOdds > 2)) throw new SlotError('Cota minimă pe meci trebuie să fie între 1.01 și 2.00.');
+  if (minLegOdds !== undefined && minLegOdds > perLeg) throw new SlotError(`Cota minimă ${minLegOdds.toFixed(2)} pe meci e peste media necesară (~${perLeg.toFixed(2)}): ar depăși ținta. Coboară cota minimă sau pune o cotă țintă mai mare.`);
   // Leagues the user ticked (ids are validated against the league table when the job is created). Empty = all.
   const leagues = [...new Set(Array.isArray(o.leagues) ? o.leagues.map(String).filter((x) => /^[A-Z0-9]{2,12}$/.test(x)) : [])].slice(0, 120);
-  return { target, legs, agents, window, fromHours, toHours, ...(leagues.length ? { leagues } : {}) };
+  return { target, legs, agents, window, fromHours, toHours, ...(leagues.length ? { leagues } : {}), ...(minLegOdds !== undefined ? { minLegOdds } : {}) };
 }
 
 /** Atomically queues 1…20 custom jobs, with one daily allowance and retry identity. */

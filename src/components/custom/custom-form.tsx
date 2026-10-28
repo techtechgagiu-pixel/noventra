@@ -43,6 +43,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const attempt = useRef<{ body: string; requestId: string } | null>(null);
   const [target, setTarget] = useState(5);
   const [legs, setLegs] = useState(4);
+  const [minLeg, setMinLeg] = useState(1.15);
   const [fromI, setFromI] = useState(STOPS.indexOf(2));
   const [toI, setToI] = useState(STOPS.indexOf(48));
   const fromHours = STOPS[fromI], toHours = STOPS[toI];
@@ -67,7 +68,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const [error, setError] = useState<string | null>(null);
 
   const perLeg = Math.pow(target, 1 / legs);
-  const policy = useMemo(() => customPolicy({ target, legs, agents: chosen, window: win, fromHours, toHours }), [target, legs, chosen, win, fromHours, toHours]);
+  const policy = useMemo(() => customPolicy({ target, legs, agents: chosen, window: win, fromHours, toHours, minLegOdds: minLeg }), [target, legs, chosen, win, fromHours, toHours, minLeg]);
   const tooLow = perLeg < 1.1; const tooHigh = perLeg > 3.2;
   const risk = perLeg <= 1.3 ? { t: 'prudent', c: 'text-emerald' } : perLeg <= 1.6 ? { t: 'echilibrat', c: 'text-cyan' } : perLeg <= 2.1 ? { t: 'curajos', c: 'text-gold' } : { t: 'riscant', c: 'text-rose' };
   // Fixtures with odds that start inside the chosen interval, per league (what the analysis can actually use).
@@ -93,7 +94,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true); setError(null);
-    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues, count });
+    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues, count, minLegOdds: minLeg });
     if (attempt.current?.body !== body) attempt.current = { body, requestId: crypto.randomUUID() };
     try {
       const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ ...JSON.parse(body), requestId: attempt.current.requestId }) });
@@ -123,6 +124,11 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <p className="text-xs font-semibold text-muted">Media de cotă pe meci</p>
           <p className={`mt-2 font-display text-[2.6rem] font-bold leading-none tabular ${tooLow || tooHigh ? 'text-rose' : risk.c}`}>≈ {Number.isFinite(perLeg) ? perLeg.toFixed(2) : '—'}</p>
           <p className="mt-1 text-xs text-muted">{tooLow ? 'Prea mică — pune mai puține meciuri.' : tooHigh ? 'Prea mare — pune mai multe meciuri.' : <>Pentru cota {target} din {legs} {legs === 1 ? 'meci' : 'meciuri'}. Cotele selecțiilor pot diferi.</>}</p>
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="text-xs font-semibold text-muted">Cotă minimă pe meci</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Cotă minimă pe meci">{[1.1, 1.15, 1.2, 1.25, 1.3].map((v) => <button key={v} type="button" aria-pressed={minLeg === v} onClick={() => setMinLeg(v)} className={`chip ${minLeg === v ? 'text-cyan' : 'text-muted'}`}>{v.toFixed(2)}</button>)}</div>
+            {minLeg > perLeg && <p className="mt-1 text-xs text-rose">Peste media necesară: coboar-o sau mărește cota țintă.</p>}
+          </div>
 
         </div>
       </div>
@@ -228,7 +234,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
         </p>
         {!chosen.length && <p className="text-sm text-gold">Alege cel puțin un agent din „Echipa de agenți”.</p>}
         {error && <p className="text-sm text-rose" role="alert">{error}</p>}
-        <button onClick={create} disabled={busy || remaining === 0 || count < 1 || count > remaining || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && leagues.length > 0 && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : count === 1 ? 'Pornește dezbaterea' : `Creează ${count} bilete`}</button>
+        <button onClick={create} disabled={busy || remaining === 0 || count < 1 || count > remaining || !chosen.length || tooLow || tooHigh || target < 1.2 || minLeg > perLeg || (!!catalog && leagues.length > 0 && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : count === 1 ? 'Pornește dezbaterea' : `Creează ${count} bilete`}</button>
       </div>
       <p className="text-xs leading-relaxed text-muted">După pornire vezi agenții pe hartă și argumentele în chat. Cota este o țintă; echipa poate refuza meciuri și poate încheia fără un bilet complet.</p>
     </div>
