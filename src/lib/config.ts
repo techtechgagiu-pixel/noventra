@@ -27,7 +27,7 @@ export const config = {
   limits: {
     aiDailyCalls: num('AI_DAILY_CALL_LIMIT', 8000),
     aiDailyTokens: num('AI_DAILY_TOKEN_LIMIT', 23_000_000), // +15% at the owner's request (28.10)
-    sportsDailyRequests: num('SPORTS_API_DAILY_LIMIT', 15000),
+    sportsDailyRequests: num('SPORTS_API_DAILY_LIMIT', 30000), // 28.10: 15000 was reached with 30 tickets/day (ESPN is free; this is only our safety cap)
     maxConcurrentJobs: num('MAX_CONCURRENT_ANALYSES', 2),
     maxFixturesDaily: num('MAX_FIXTURES_PER_JOB', 30),
     maxFixturesWeekly: num('MAX_FIXTURES_WEEKLY_JOB', 48),
