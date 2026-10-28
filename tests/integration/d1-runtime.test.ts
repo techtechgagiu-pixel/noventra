@@ -30,7 +30,7 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("D1 local test")}}', compatibilityDate: '2026-10-25', d1Databases: ['DB'] }));
     const binding = await mf.getD1Database('DB');
     db = d1Database(binding);
-    for (const file of ['0001_legacy_schema.sql', '0002_agent_configuration.sql', '0003_request_coordination.sql', '0004_league_configuration.sql', '0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0009_feedback.sql','0010_ticket_hidden.sql']) {
+    for (const file of ['0001_legacy_schema.sql', '0002_agent_configuration.sql', '0003_request_coordination.sql', '0004_league_configuration.sql', '0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0009_feedback.sql','0010_ticket_hidden.sql','0013_perf_indexes.sql','0015_custom_daily_limits.sql']) {
       const statements = splitSqlScript(await readFile('cloudflare/d1/migrations/' + file, 'utf8'));
       for (let i = 0; i < statements.length; i += 20) await binding.batch(statements.slice(i, i + 20).map(s => binding.prepare(s)));
     }
@@ -142,6 +142,17 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
       return {verified:true};
     });
     expect(busy).toMatchObject({status:'completed'});
+  }));
+
+  it('applies the per-user daily limit atomically: 3 for others, 30 for the owner', async () => scope(async () => {
+    const guest=(await one<{id:string}>("INSERT INTO users(google_sub,email) VALUES('guest-limit-d1','guest@test.local') RETURNING id"))!;
+    const base={target:5,legs:3,agents:['victor','andrei','robert']};
+    expect((await createCustomJob(guest.id,{...base,count:2,requestId:randomUUID()},new Date(),3)).jobIds).toHaveLength(2);
+    await expect(createCustomJob(guest.id,{...base,count:2,requestId:randomUUID()},new Date(),3)).rejects.toMatchObject({status:429});
+    expect((await createCustomJob(guest.id,{...base,count:1,requestId:randomUUID()},new Date(),3)).jobIds).toHaveLength(1);
+    const owner=(await one<{id:string}>("INSERT INTO users(google_sub,email) VALUES('owner-limit-d1','owner@test.local') RETURNING id"))!;
+    expect((await createCustomJob(owner.id,{...base,count:25,requestId:randomUUID()},new Date(),30)).jobIds).toHaveLength(25);
+    await expect(createCustomJob(owner.id,{...base,count:6,requestId:randomUUID()},new Date(),30)).rejects.toMatchObject({status:429});
   }));
 
   it('atomically enforces 20 Custom jobs and stable retry IDs across concurrent requests', async () => scope(async () => {

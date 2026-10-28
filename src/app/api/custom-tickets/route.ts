@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { fail, json, rateLimited, requireUser, sameOrigin } from '@/lib/http';
 import { SlotError, createCustomJob, customJobs, customBatchJobs } from '@/lib/jobs/service';
+import { customLimitFor } from '@/lib/ticket-removal';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (rateLimited(`custom:${user.id}`, 6, 60_000)) return fail('Prea multe cereri. Așteaptă un minut.', 429);
   const body = await req.json().catch(() => null);
   try {
-    return json(await createCustomJob(user.id, body), 201);
+    return json(await createCustomJob(user.id, body, new Date(), customLimitFor(user)), 201);
   } catch (error) {
     if (error instanceof SlotError) return fail(error.message, error.status);
     throw error;

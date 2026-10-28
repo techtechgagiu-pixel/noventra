@@ -30,6 +30,7 @@ it('shows the latest visible won ticket with real scores and honest totals, neve
   const p = await publicProof();
   expect(p?.lastWon?.legs).toHaveLength(2);
   expect(p?.lastWon).toMatchObject({ odds: 2.25, legs: [{ label: 'DEMO Home wins', odds: 1.5, homeScore: 2, awayScore: 1 }, {}] });
+  expect(p?.wins.map((w) => w.legs.length)).toEqual([2, 1]);
   expect(p?.tickets).toEqual({ won: 2, settled: 3 });
   expect(p?.picks).toEqual({ won: 3, decided: 4 });
 });

@@ -5,7 +5,7 @@ export type Account = { id: string; name: string | null; email: string; picture:
 const date = (v: string | null) => (v ? new Intl.DateTimeFormat('ro-RO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Bucharest' }).format(new Date(v)) : '—');
 
 /** Google accounts that signed in, with a block switch (blocked accounts are signed out on their next request). */
-export function AccountManager({ initial }: { initial: Account[] }) {
+export function AccountManager({ initial, readOnly = false }: { initial: Account[]; readOnly?: boolean }) {
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -28,8 +28,9 @@ export function AccountManager({ initial }: { initial: Account[] }) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{a.name ?? a.email} {a.blocked_at && <span className="ml-1 text-xs text-rose">blocat</span>}</p>
             <p className="truncate text-xs text-muted">{a.email} · {a.tickets} bilete · ultima intrare {date(a.last_login_at)}</p>
+            {readOnly && <p className="text-xs text-muted">Prima intrare {date(a.created_at)}</p>}
           </div>
-          <button disabled={busy === a.id} onClick={() => set(a.id, !a.blocked_at)} className={`btn px-3 py-1.5 text-xs ${a.blocked_at ? 'btn-ghost' : 'btn-ghost text-rose'}`}>{a.blocked_at ? 'Deblochează' : 'Blochează'}</button>
+          {!readOnly && <button disabled={busy === a.id} onClick={() => set(a.id, !a.blocked_at)} className={`btn px-3 py-1.5 text-xs ${a.blocked_at ? 'btn-ghost' : 'btn-ghost text-rose'}`}>{a.blocked_at ? 'Deblochează' : 'Blochează'}</button>}
         </div>
       ))}
     </div>

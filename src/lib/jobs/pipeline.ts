@@ -18,11 +18,12 @@ import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sp
 import type { Fixture } from '../sports/types';
 import { modelFixture, selectionImplies } from '../stats/engine';
 import { localDate, yyyymmdd } from '../time';
-import { agentFacts, characterViolation, isBannedMarket, factsForAgent, consensus, contested, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
+import { agentFacts, characterViolation, isBannedMarket, factsForAgent, consensus, contested, setVoteWeights, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
 import { agentTrackRecord, trackRecordText } from '../track-record';
 import { withTheOddsPrices } from '../sports/the-odds-prices';
 import { cachedCalibrations, calibrated, calibrationText, loadCalibrations } from '../calibration';
 import { cachedCoaching, coachedAgent, coachingText, loadCoaching } from '../coaching';
+import { loadVoteWeights } from '../vote-weights';
 import { teamNews } from '../news/google-news';
 import { buildDigest } from '../digest';
 import { recordEvent } from './events';
@@ -787,6 +788,7 @@ export async function runJobSlice(job: JobRow, budgetMs = 50_000) {
   const assigned = new Map([...(await activeAssignments())].map(([id, a]) => [id, a.primary.model]));
   await loadCalibrations(assigned).catch(() => null);
   await loadCoaching([...VOTING_AGENTS], assigned).catch(() => null);
+  setVoteWeights(await loadVoteWeights(assigned).catch(() => null));
   // Finishing an incomplete ticket: first try to build it from the selections the agents already validated (more
   // matches allowed). That needs no AI at all, so a ticket can finish even while every model is busy or out of quota.
   const attemptKey = job.config.completion?.requestedAt;

@@ -134,11 +134,11 @@ export function parseCustom(input: unknown): CustomConfig {
 }
 
 /** Atomically queues 1…20 custom jobs, with one daily allowance and retry identity. */
-export async function createCustomJob(userId: string, input: unknown, at = new Date()) {
+export async function createCustomJob(userId: string, input: unknown, at = new Date(), limit = CUSTOM_LIMIT_PER_DAY) {
   const custom = parseCustom(input);
   const o = (input ?? {}) as Record<string, unknown>;
   const count = o.count === undefined ? 1 : o.count;
-  if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > CUSTOM_LIMIT_PER_DAY) throw new SlotError(`Alege între 1 și ${CUSTOM_LIMIT_PER_DAY} bilete.`);
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > limit) throw new SlotError(`Alege între 1 și ${limit} bilete.`);
   const requestId = o.requestId === undefined ? randomUUID() : o.requestId;
   if (typeof requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) throw new SlotError('Identificatorul cererii nu este valid.');
   if (custom.leagues) {
@@ -154,7 +154,7 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
   const maxFixtures = Math.min(weekly ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, Math.max(12, custom.legs * 4));
   const cfg = { windowStart: key, windowDays: days, top10Only: false, maxFixtures, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], custom };
   const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
-  const result = isD1() ? await createD1CustomJobs({userId,day:key,requestId,count,custom,cfg,checkpoint,policy,callLimit:config.limits.aiDailyCalls}) : await tx(async (c) => {
+  const result = isD1() ? await createD1CustomJobs({userId,day:key,requestId,count,custom,cfg,checkpoint,policy,callLimit:config.limits.aiDailyCalls,dailyLimit:limit}) : await tx(async (c) => {
     // One user lock protects the daily allowance and retry IDs, including retries after midnight.
     await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`custom:${userId}`]);
     const previous = await c.query(`SELECT id, config FROM ticket_generation_jobs WHERE user_id=$1 AND config->'customBatch'->>'id'=$2 ORDER BY (config->'customBatch'->>'index')::int`, [userId, requestId]);
@@ -166,8 +166,8 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
       return { jobIds: previous.rows.map((r) => r.id as string), created: false };
     }
     const n = Number((await c.query("SELECT count(*) AS n FROM ticket_generation_jobs WHERE user_id=$1 AND period_key=$2 AND substr(slot,1,7)='CUSTOM_'", [userId, key])).rows[0].n);
-    const remaining = CUSTOM_LIMIT_PER_DAY - n;
-    if (count > remaining) throw new SlotError(`Mai poți crea ${remaining} bilete custom azi din ${CUSTOM_LIMIT_PER_DAY}. Ai cerut ${count}.`, 429);
+    const remaining = limit - n;
+    if (count > remaining) throw new SlotError(`Mai poți crea ${Math.max(0, remaining)} bilete custom azi din ${limit}. Ai cerut ${count}.`, 429);
     const usage = await aiUsageToday(c);
     if (usage.requests + 20 * count > config.limits.aiDailyCalls) throw new SlotError(`Cota AI zilnică este aproape epuizată (${usage.requests}/${config.limits.aiDailyCalls} apeluri). Redu numărul de bilete.`, 503);
     const jobIds: string[] = [];

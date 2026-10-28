@@ -20,9 +20,10 @@ function reuse(rows: Existing[], custom: CustomConfig, count: number) {
  * requests. No interactive transaction, advisory lock, or per-job round trips. */
 export async function createD1CustomJobs(input: {
   userId: string; day: string; requestId: string; count: number; custom: CustomConfig;
-  cfg: Record<string, unknown>; checkpoint: Checkpoint; policy: LegPolicy; callLimit: number;
+  cfg: Record<string, unknown>; checkpoint: Checkpoint; policy: LegPolicy; callLimit: number; dailyLimit?: number;
 }) {
   const {userId,day,requestId,count,custom,cfg,checkpoint,policy,callLimit}=input;
+  const dailyLimit=input.dailyLimit??CUSTOM_LIMIT_PER_DAY;
   const existing=await previous(userId,requestId);
   if(existing.length) return reuse(existing,custom,count);
   const owner=randomUUID(),settings=canonical(custom);
@@ -47,6 +48,8 @@ export async function createD1CustomJobs(input: {
     {text:'INSERT INTO d1_custom_requests(user_id,request_id,period_key,count,settings,attempt_owner) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(user_id,request_id) DO NOTHING',params:params.slice(0,6)},
     {text:`INSERT INTO d1_custom_allowance(user_id,period_key,used) SELECT $1,$3,count(*) FROM ticket_generation_jobs WHERE user_id=$1 AND period_key=$3 AND substr(slot,1,7)='CUSTOM_' ON CONFLICT(user_id,period_key) DO NOTHING`,params:params.slice(0,3)},
     {text:`UPDATE d1_custom_allowance SET used=used+$4 WHERE user_id=$1 AND period_key=$3 AND ${owned} RETURNING used`,params:params.slice(0,6)},
+    // Per-user daily limit (30 owner / 3 others): a failing CHECK aborts the whole atomic batch, like the table cap.
+    {text:`INSERT INTO d1_custom_limit_guards(id,within) SELECT $6,CASE WHEN (SELECT used FROM d1_custom_allowance WHERE user_id=$1 AND period_key=$3)<=$7 THEN 1 ELSE 0 END WHERE ${owned}`,params:[userId,requestId,day,count,settings,owner,dailyLimit]},
     {text:`INSERT INTO ticket_generation_jobs(id,user_id,slot,period_key,target_odds,required_legs,seed,config,checkpoint,status,stage,last_event_seq)
       SELECT json_extract(j.value,'$.id'),$1,'CUSTOM_'||CAST((SELECT used FROM d1_custom_allowance WHERE user_id=$1 AND period_key=$3)-$4+CAST(j.key AS INTEGER)+1 AS INTEGER),$3,
       json_extract(j.value,'$.config.custom.target'),json_extract(j.value,'$.config.custom.legs'),json_extract(j.value,'$.seed'),json_extract(j.value,'$.config'),$9,'QUEUED','QUEUED',3
@@ -58,8 +61,9 @@ export async function createD1CustomJobs(input: {
       SELECT $1,'job_created',json_object('jobId',j.id,'slot',j.slot,'period',$3,'custom',json(j.config->'custom'),'customBatch',json(j.config->'customBatch'))
       FROM ticket_generation_jobs j WHERE j.user_id=$1 AND j.config->'customBatch'->>'id'=$2 AND ${owned}`,params:params.slice(0,6)},
     {text:'DELETE FROM d1_request_guards WHERE id=$1',params:[owner]},
+    {text:'DELETE FROM d1_custom_limit_guards WHERE id=$1',params:[owner]},
   ]).catch((error:Error)=>{
-    if(/custom_daily_cap/.test(error.message))throw new SlotError(`Limita de ${CUSTOM_LIMIT_PER_DAY} bilete custom pe zi ar fi depășită. Redu numărul de bilete.`,429);
+    if(/custom_daily_cap|custom_user_limit/.test(error.message))throw new SlotError(`Limita ta de ${dailyLimit} bilete custom pe zi ar fi depășită. Redu numărul de bilete.`,429);
     if(/request_settings_match/.test(error.message))throw new SlotError('Cererea a fost deja folosită cu alte setări. Reîncarcă formularul.',409);
     if(/request_budget_available/.test(error.message))throw new SlotError('Cota AI zilnică este aproape epuizată. Redu numărul de bilete.',503);
     throw error;
