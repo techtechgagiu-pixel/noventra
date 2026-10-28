@@ -8,7 +8,7 @@ export type AgentMapHandle = { replay: (speed?: number) => void };
 type Info = Record<string, { title: string; specialty: string; maxOdds: number; minProbability: number; model?: string | null }>;
 
 /**
- * Canvas map of the team (60 fps). History present at mount is applied instantly; anything newer flows in animated.
+ * Canvas map of the team, animated at the screen refresh rate (60/90/120 Hz). History present at mount is applied instantly; anything newer flows in animated.
  * onProgress reports the last event the map has shown, so the chat below stays in sync with the animation.
  */
 type Props = { events: NexusEvent[]; target: number; info?: Info; onProgress: (seq: number) => void;
