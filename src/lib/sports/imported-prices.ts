@@ -12,7 +12,8 @@ import { sameMatch } from './the-odds-prices';
  * fixture's main prices, exactly as exported (bookmaker "Stake"); markets Stake does not have stay from ESPN/The Odds
  * API in the background. Like The Odds API cache, prices are used as they are for IMPORTED_ODDS_MAX_AGE_MINUTES
  * (4 days) after the export, then the fixture falls back to its other sources. Only markets we can settle and whose
- * meaning is unambiguous are mapped: 1X2, goal totals (x.5 lines), both teams to score, double chance.
+ * meaning is unambiguous are mapped: 1X2, goal totals and Asian totals (x.5 lines), Asian handicap (x.5 lines),
+ * both teams to score, double chance.
  */
 export const IMPORT_SOURCE = 'stake-import';
 const BOOK = 'Stake';
@@ -63,7 +64,9 @@ export function sameImportedMatch(f: { home: string; away: string; kickoff: stri
 }
 
 const ONE_X_TWO = new Set(['1x2', 'winner', 'match winner', 'full time result', 'fulltime result', '3way', 'match result']);
-const TOTALS = new Set(['total', 'totals', 'total goals', 'over/under', 'goals over/under', 'total - goals']);
+// Asian Total on a x.5 line settles exactly like a plain total (no push), so only those lines are taken.
+const TOTALS = new Set(['total', 'totals', 'total goals', 'over/under', 'goals over/under', 'total - goals', 'asian total']);
+const HANDICAP = new Set(['asian handicap', 'handicap']);
 const BTTS = new Set(['both teams to score', 'both teams score', 'btts', 'gg/ng']);
 const DOUBLE = new Set(['double chance']);
 
@@ -74,6 +77,7 @@ export function labelFor(key: string, home: string, away: string): string {
   if (family === 'DC') return a === '1X' ? `${home} sau egal (1X)` : a === 'X2' ? `Egal sau ${away} (X2)` : `${home} sau ${away} (12)`;
   if (family === 'BTTS') return `Ambele echipe marchează – ${a === 'YES' ? 'DA' : 'NU'}`;
   if (family === 'TOTAL') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} goluri`;
+  if (family === 'AH') { const n = Number(b); return `${a === 'HOME' ? home : away} handicap ${n > 0 ? '+' : ''}${n}`; }
   return key;
 }
 
@@ -110,6 +114,18 @@ function mapMarket(m: Obj, home: string, away: string): { family: string | null;
       quotes.push({ key: `TOTAL:${dir}:${line}`, marketType: 'TOTAL', odds: r3(o.odds), line });
     }
     return { family: 'TOTAL', quotes };
+  }
+  if (HANDICAP.has(name)) {
+    // Each outcome carries its own team and line, e.g. "Huracan (-0.5)": x.5 lines only (no push).
+    const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) {
+      const x = /^(.*?)\s*\(([+-]?\d+(?:\.\d+)?)\)$/.exec(o.n);
+      const line = Number(x?.[2]);
+      if (!x || !Number.isFinite(line) || Math.abs(line % 1) !== 0.5) continue;
+      const side = isHome(x[1].trim()) ? 'HOME' : isAway(x[1].trim()) ? 'AWAY' : null;
+      if (side) quotes.push({ key: `AH:${side}:${line}`, marketType: 'HANDICAP', odds: r3(o.odds), line });
+    }
+    return { family: 'AH', quotes };
   }
   if (BTTS.has(name)) {
     const quotes: ImportedMarket[] = [];

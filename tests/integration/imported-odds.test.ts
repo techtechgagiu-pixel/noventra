@@ -28,15 +28,23 @@ describe('Stake export parsing', () => {
       { name: 'Double chance', status: 'active', outcomes: [o('Huracan or draw', 1.22), o('Huracan or Tigre', 1.35), o('draw or Tigre', 1.6)] },
       { name: '1st half - 1x2', status: 'active', outcomes: [o('Huracan', 2.8), o('Draw', 2), o('Tigre', 4.5)] },
       { name: 'Total', status: 'active', specifiers: 'total=3', outcomes: [o('over 3', 2.4), o('under 3', 1.5)] },
+      { name: 'Asian Total', status: 'active', specifiers: 'total=3.5', outcomes: [o('Over 3.5', 3.1), o('Under 3.5', 1.36)] },
+      { name: 'Asian Total', status: 'active', specifiers: 'total=2.25', outcomes: [o('Over 2.25', 1.9), o('Under 2.25', 1.9)] },
+      { name: 'Asian Handicap', status: 'active', specifiers: 'hcp=-0.5', outcomes: [o('Huracan (-0.5)', 2.12), o('Tigre (0.5)', 1.75)] },
+      { name: 'Asian Handicap', status: 'active', specifiers: 'hcp=0', outcomes: [o('Huracan (0)', 1.46), o('Tigre (0)', 2.6)] },
+      { name: 'Draw No Bet', status: 'active', outcomes: [o('Huracan', 1.46), o('Tigre', 2.6)] },
     ]), match('m2', 'A Team', 'B Team', at, [{ ...oneXTwo('A Team', 'B Team', 1.5, 4, 6), outcomes: [o('A Team', 1.5), o('Draw', 4, false), o('B Team', 6)] }])]));
     expect(p.events).toHaveLength(1);
-    expect(p.events[0].markets).toEqual([
+    expect([...p.events[0].markets].sort((a, b) => a.key.localeCompare(b.key))).toEqual([
       { key: '1X2:HOME', marketType: '1X2', odds: 2.11 }, { key: '1X2:DRAW', marketType: '1X2', odds: 2.9 }, { key: '1X2:AWAY', marketType: '1X2', odds: 3.8 },
       { key: 'TOTAL:OVER:2.5', marketType: 'TOTAL', odds: 2.05, line: 2.5 }, { key: 'TOTAL:UNDER:2.5', marketType: 'TOTAL', odds: 1.72, line: 2.5 },
       { key: 'BTTS:YES', marketType: 'BTTS', odds: 1.95 }, { key: 'BTTS:NO', marketType: 'BTTS', odds: 1.8 },
       { key: 'DC:1X', marketType: 'DOUBLE_CHANCE', odds: 1.22 }, { key: 'DC:12', marketType: 'DOUBLE_CHANCE', odds: 1.35 }, { key: 'DC:X2', marketType: 'DOUBLE_CHANCE', odds: 1.6 },
-    ]);
-    expect(p.stats.skipped).toEqual({ '1st half - 1x2': 1 });
+      { key: 'TOTAL:OVER:3.5', marketType: 'TOTAL', odds: 3.1, line: 3.5 }, { key: 'TOTAL:UNDER:3.5', marketType: 'TOTAL', odds: 1.36, line: 3.5 },
+      { key: 'AH:HOME:-0.5', marketType: 'HANDICAP', odds: 2.12, line: -0.5 }, { key: 'AH:AWAY:0.5', marketType: 'HANDICAP', odds: 1.75, line: 0.5 },
+    ].sort((a, b) => a.key.localeCompare(b.key)).map((m) => expect.objectContaining(m)));
+    expect(p.events[0].markets).toHaveLength(14);
+    expect(p.stats.skipped).toEqual({ '1st half - 1x2': 1, 'Draw No Bet': 1 });
     expect(() => parseStakeExport({ data: { matches: [] }, meta: {} })).toThrow(ImportError);
   });
 
