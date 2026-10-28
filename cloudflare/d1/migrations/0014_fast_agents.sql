@@ -1,0 +1,5 @@
+-- 28.10: the two slowest agents (GLM 5.3 ~28 s, Command R ~24 s per answer) moved to fast models (owner decision). Versioned: old row deactivated, never edited.
+UPDATE agent_model_assignments SET active=0 WHERE agent_id='sigma' AND active AND model_id<>'openai/gpt-4.1-mini';
+INSERT INTO agent_model_assignments(agent_id,provider,model_id,fallback_provider,fallback_model_id,active,reason) SELECT 'sigma','openrouter','openai/gpt-4.1-mini','gemini','gemini-3.1-flash-lite',1,'Viteză 28.10: model rapid, același rol' WHERE NOT EXISTS(SELECT 1 FROM agent_model_assignments WHERE agent_id='sigma' AND active);
+UPDATE agent_model_assignments SET active=0 WHERE agent_id='petrescu' AND active AND model_id<>'qwen/qwen3.7-flash';
+INSERT INTO agent_model_assignments(agent_id,provider,model_id,fallback_provider,fallback_model_id,active,reason) SELECT 'petrescu','openrouter','qwen/qwen3.7-flash','gemini','gemini-3.1-flash-lite',1,'Viteză 28.10: model rapid, același rol' WHERE NOT EXISTS(SELECT 1 FROM agent_model_assignments WHERE agent_id='petrescu' AND active);
