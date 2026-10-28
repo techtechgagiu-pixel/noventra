@@ -30,7 +30,7 @@ import type { CandidateEntry, Checkpoint, FixtureSnapshot, LegReview, Stage } fr
 
 export type JobRow = {
   id: string; user_id: string; slot: string; period_key: string; target_odds: string; required_legs: number | null; seed: string;
-  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; votingAgentIds?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number } };
+  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; votingAgentIds?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number }; extendedAt?: string };
   status: string; stage: Stage; checkpoint: Checkpoint; candidate_order: CandidateEntry[] | null; eligible_count: number | null; attempt_count: number;
   created_at?: Date | string;
 };
@@ -65,12 +65,13 @@ async function discover(job: JobRow) {
   if (job.config.review) return discoverReview(job, loaded.fixtures, errors);
   // Custom tickets may be limited to the leagues the user ticked.
   const only = job.config.custom?.leagues?.length ? new Set(job.config.custom.leagues) : null;
-  const seen = job.config.completion ? new Set((await many<{ fixture_id: string }>('SELECT fixture_id FROM final_decisions WHERE job_id=$1', [job.id])).map((r) => r.fixture_id)) : new Set<string>();
+  const seen = job.config.completion || job.config.extendedAt ? new Set((await many<{ fixture_id: string }>('SELECT fixture_id FROM final_decisions WHERE job_id=$1', [job.id])).map((r) => r.fixture_id)) : new Set<string>();
   const fixtures = loaded.fixtures.filter((f) => (!only || only.has(f.leagueId)) && !seen.has(f.id));
   const now = Date.now();
   const pol = jobPolicy(job);
   // Daily tickets use a rolling window measured from the job's creation: start ≥ minLeadHours, ≤ maxAheadHours.
-  const createdAt = job.config.completion ? Date.parse(job.config.completion.requestedAt) : job.created_at ? new Date(job.created_at).getTime() : now;
+  const latest = [job.config.completion?.requestedAt, job.config.extendedAt].filter(Boolean).map((x) => Date.parse(x!));
+  const createdAt = latest.length ? Math.max(...latest) : job.created_at ? new Date(job.created_at).getTime() : now;
   const leadMs = pol.minLeadHours ? pol.minLeadHours * 3600_000 : MIN_LEAD_MS;
   const aheadMs = pol.maxAheadHours ? pol.maxAheadHours * 3600_000 : Number.POSITIVE_INFINITY;
   const entries: CandidateEntry[] = fixtures.map((f) => {
@@ -111,7 +112,7 @@ async function discover(job: JobRow) {
   const batches: string[][] = [];
   for (let i = 0; i < prioritized.length; i += job.config.batchSize) batches.push(prioritized.slice(i, i + job.config.batchSize).map((e) => e.fixtureId));
   const freshOrder = [...prioritized, ...entries.filter((e) => !e.eligible)];
-  const previous = job.config.completion ? job.candidate_order ?? [] : [];
+  const previous = job.config.completion || job.config.extendedAt ? job.candidate_order ?? [] : [];
   const order = [...previous, ...freshOrder.filter((e) => !previous.some((p) => p.fixtureId === e.fixtureId))];
   await query('UPDATE ticket_generation_jobs SET candidate_order=$2, eligible_count=$3 WHERE id=$1', [job.id, JSON.stringify(order), eligible.length]);
   job.candidate_order = order;
@@ -120,6 +121,7 @@ async function discover(job: JobRow) {
   if (rejected.length) await recordEvent(job.id, { type: 'CANDIDATE_REJECTED', stage: 'SELECTING', payload: { count: rejected.length, items: rejected.slice(0, 60).map((r) => ({ fixtureId: r.fixtureId, match: `${r.home} – ${r.away}`, league: r.league, reason: r.reason })) } });
   await recordEvent(job.id, { type: 'CANDIDATE_SELECTED', stage: 'SELECTING', payload: { seed: job.seed.slice(0, 12), order: prioritized.map((e, i) => ({ rank: i + 1, fixtureId: e.fixtureId, match: `${e.home} – ${e.away}`, league: e.league, kickoff: e.kickoff })), batches: batches.length, batchSize: job.config.batchSize } });
   cp.batches = batches;
+  cp.lastDiscoverBatches = batches.length;
   cp.phase = batches.length ? 'BATCH' : 'BUILD';
   cp.batchIndex = 0;
   cp.batchStep = 'FETCH';
@@ -189,8 +191,15 @@ async function freshFixture(f: Fixture): Promise<Fixture | null> {
     const { fixtures } = await activeProvider()([league], [localDate(new Date(f.kickoff))]);
     return fixtures.find((x) => x.id === f.id) ?? null;
   }
-  const day = await espnLeagueDay(league, yyyymmdd(localDate(new Date(f.kickoff))));
-  const listed = day.find((x) => x.id === f.id) ?? null;
+  // ESPN files a match under its own (US) day: a 00:30 UTC kickoff in MLS/Brazil is on the previous day there, not on
+  // the Romanian date. Look in the Romanian, UTC and US-Eastern days until the match is found.
+  const at = new Date(f.kickoff);
+  const days = [...new Set([localDate(at), at.toISOString().slice(0, 10), new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at)])];
+  let listed: Fixture | null = null;
+  for (const d of days) {
+    listed = (await espnLeagueDay(league, yyyymmdd(d)).catch(() => [] as Fixture[])).find((x) => x.id === f.id) ?? null;
+    if (listed) break;
+  }
   // Same price sources as at analysis time: cached The Odds API prices (main) + ESPN (background), no new credits.
   const found = listed ? (await withTheOddsPrices([listed], { fetchAllowed: false }).catch(() => [listed]))[0] : listed;
   if (found) await persistFixtures([found]);
@@ -705,9 +714,28 @@ async function tryOptimize(job: JobRow) {
   return { cands, result };
 }
 
-async function build(job: JobRow) {
+/** How many times a custom ticket keeps searching new matches on its own before it may end incomplete. */
+export const MAX_INLINE_EXTENSIONS = 4;
+
+/**
+ * Returns false when the ticket is not finished yet: a custom ticket that is short of selections searches new matches
+ * right away, in the same run (owner decision 28.10: "cap-coadă", no stop in between), keeping every analysis and
+ * validated selection. It ends incomplete only when no new eligible matches are left or after MAX_INLINE_EXTENSIONS.
+ */
+async function build(job: JobRow): Promise<boolean> {
   await setStage(job, 'BUILDING', job.checkpoint);
   const { cands, result } = await tryOptimize(job);
+  const cp = job.checkpoint;
+  if (result.status !== 'COMPLETED' && job.config.custom && !job.config.review && (cp.extensions ?? 0) < MAX_INLINE_EXTENSIONS && (cp.lastDiscoverBatches ?? 1) > 0) {
+    cp.extensions = (cp.extensions ?? 0) + 1;
+    // A new search start: the time window and the 'already analysed' list move on (not a user completion request).
+    job.config = { ...job.config, extendedAt: new Date().toISOString() };
+    await query('UPDATE ticket_generation_jobs SET config=$2 WHERE id=$1', [job.id, JSON.stringify(job.config)]);
+    await recordEvent(job.id, { type: 'JOB_RESUMED', stage: 'SELECTING', payload: { by: 'automat', extension: cp.extensions, note: `Încă nu sunt destule selecții validate (${cands.length} din ${job.config.custom?.legs}). Echipa caută imediat meciuri noi, păstrând tot ce a analizat (căutarea ${cp.extensions} din ${MAX_INLINE_EXTENSIONS}).` } });
+    Object.assign(cp, { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [] });
+    await save(job);
+    return false;
+  }
   const analyzed = job.checkpoint.analyzed;
   await recordEvent(job.id, { type: 'OPTIMIZATION_COMPLETED', stage: 'BUILDING', payload: {
     status: result.status, totalOdds: result.totalOdds, target: Number(job.target_odds), legs: result.legs.map((l) => l.fixtureId), qualified: cands.length, analyzed, reason: result.reason,
@@ -734,7 +762,7 @@ async function build(job: JobRow) {
   if (chosen.length) {
     const tid = await one<{ id: string }>('SELECT id FROM tickets WHERE job_id=$1', [job.id]);
     if (tid) await buildDigest(tid.id, job.id).catch(() => null);
-  }
+  }  return true;
 }
 
 /**
@@ -759,7 +787,7 @@ export async function runJobSlice(job: JobRow, budgetMs = 50_000) {
   }
   while (Date.now() < deadline) {
     if (cp.phase === 'DISCOVER') { await discover(job); continue; }
-    if (cp.phase === 'BUILD') { if (job.config.review) await buildReview(job); else await build(job); return 'DONE'; }
+    if (cp.phase === 'BUILD') { if (job.config.review) await buildReview(job); else if (!(await build(job))) continue; return 'DONE'; }
     if (cp.phase === 'DONE') return 'DONE';
     const ids = cp.batches[cp.batchIndex] ?? [];
     switch (cp.batchStep) {

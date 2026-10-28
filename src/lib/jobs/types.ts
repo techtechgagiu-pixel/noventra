@@ -25,6 +25,9 @@ export type Checkpoint = {
   phase: 'DISCOVER' | 'BATCH' | 'BUILD' | 'DONE';
   /** Completion attempt (requestedAt) already tried with the validated selections only. */
   optimizedFirstFor?: string;
+  /** Inline extensions with new matches before a custom ticket may end incomplete, and batches the last search found. */
+  extensions?: number;
+  lastDiscoverBatches?: number;
   batchIndex: number;
   batchStep: BatchStep;
   batches: string[][];
