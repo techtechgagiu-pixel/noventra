@@ -47,7 +47,7 @@ describe('The Odds API as main price source', () => {
     const { topMarkets } = await import('@/lib/jobs/analysis');
     const ms = Array.from({ length: 25 }, (_, i) => ({ key: `K${i}`, estimatedProbability: i / 25 }));
     const kept = topMarkets(ms);
-    expect(kept).toHaveLength(18); expect(kept[0].key).toBe('K7');
+    expect(kept).toHaveLength(12); expect(kept[0].key).toBe('K13');
   });
 });
 

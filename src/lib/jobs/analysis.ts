@@ -7,7 +7,10 @@ import type { FixtureSnapshot } from './types';
 /** User rule (2026-10-21): no „Under” selections at all — match totals or team totals. */
 export const isBannedMarket = (key: string | null) => !!key && /:UNDER(:|$)/.test(key);
 
-export const MAX_FACT_MARKETS = 18;
+// Token economy (owner decision 28.10): 12 most likely selections per match and probabilities rounded to 2 decimals.
+// Agents pick the safest selections anyway; the exact numbers stay in the snapshot and every threshold uses them.
+export const MAX_FACT_MARKETS = 12;
+const r2 = (x: number | null | undefined) => (x === null || x === undefined || !Number.isFinite(x) ? x ?? null : Math.round(x * 100) / 100);
 /** Keeps the most likely selections (by the engine's estimate, then the market's), in their original order. */
 export function topMarkets<T extends { key: string; estimatedProbability: number | null; fairMarketProbability?: number | null }>(ms: T[], max = MAX_FACT_MARKETS): T[] {
   if (ms.length <= max) return ms;
@@ -21,7 +24,7 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
     team: t.team, sample: t.sample, record: `${t.record.w}V-${t.record.d}E-${t.record.l}Î`,
     goals: `${t.goalsForPerMatch ?? 'n/d'} marcate / ${t.goalsAgainstPerMatch ?? 'n/d'} primite pe meci`,
     shotsOnTarget: `${t.shotsOnTargetFor ?? 'n/d'} pentru / ${t.shotsOnTargetAgainst ?? 'n/d'} împotrivă pe meci`,
-    finishingDelta: t.finishingDelta, verdict: t.resultsVsPerformance,
+    finishingDelta: r2(t.finishingDelta), verdict: t.resultsVsPerformance,
     last5: t.recent.slice(0, 5).map((r) => `${r.venue === 'acasă' ? 'A' : 'D'} ${r.score}${r.sot !== 'n/d' ? ` șp${r.sot}` : ''}${r.notes.length ? ' ' + r.notes[0] : ''}`).join('; '),
     anomalies: t.anomalies.filter((a) => a.classification !== 'INSUFFICIENT EVIDENCE').slice(0, 2).map((a) => `${a.classification === 'VERIFIED EVENT' ? 'verificat' : 'posibil noroc'}: ${a.observation}`),
   });
@@ -32,9 +35,9 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
     kickoffUtc: s.fixture.kickoff,
     standings: { home: s.standings.home, away: s.standings.away },
     scout: { home: team(d.home), away: team(d.away) },
-    model: { lambdaHome: s.model.lambdaHome, lambdaAway: s.model.lambdaAway, uncertainty: s.model.uncertainty, margin1x2: s.model.bookmakerMargin1x2 },
+    model: { lambdaHome: r2(s.model.lambdaHome), lambdaAway: r2(s.model.lambdaAway), uncertainty: s.model.uncertainty, margin1x2: r2(s.model.bookmakerMargin1x2) },
     // Token economy: at most MAX_FACT_MARKETS selections per match, the most likely first (agents pick the safest anyway).
-    markets: topMarkets(s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds)).map((m) => ({ key: m.key, label: m.label, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: m.fairMarketProbability, model: m.modelProbability, est: m.estimatedProbability, ev: m.expectedValue })),
+    markets: topMarkets(s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds)).map((m) => ({ key: m.key, label: m.label, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: r2(m.fairMarketProbability), model: r2(m.modelProbability), est: r2(m.estimatedProbability), ev: r2(m.expectedValue) })),
     missing: d.missing.filter((x) => !/xG|Accident/.test(x)).slice(0, 2),
     /** Hanțu's research brief: every agent must weigh h2h, home/away form, table, absences and finances. */
     researchBrief: briefForPrompt(s.brief),
@@ -54,7 +57,7 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
     standings: { home: s.standings.home, away: s.standings.away },
     researchBrief: briefForPrompt(s.brief),
     news: { [s.fixture.home]: n.home.map(fmt), [s.fixture.away]: n.away.map(fmt), note: n.home.length + n.away.length === 0 ? 'Nicio știre relevantă găsită în ultimele zile.' : undefined },
-    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, label: m.label, odds: m.odds, fair: m.fairMarketProbability })),
+    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, label: m.label, odds: m.odds, fair: r2(m.fairMarketProbability) })),
   };
 }
 
