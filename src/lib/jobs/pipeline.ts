@@ -189,8 +189,15 @@ async function freshFixture(f: Fixture): Promise<Fixture | null> {
     const { fixtures } = await activeProvider()([league], [localDate(new Date(f.kickoff))]);
     return fixtures.find((x) => x.id === f.id) ?? null;
   }
-  const day = await espnLeagueDay(league, yyyymmdd(localDate(new Date(f.kickoff))));
-  const listed = day.find((x) => x.id === f.id) ?? null;
+  // ESPN files a match under its own (US) day: a 00:30 UTC kickoff in MLS/Brazil is on the previous day there, not on
+  // the Romanian date. Look in the Romanian, UTC and US-Eastern days until the match is found.
+  const at = new Date(f.kickoff);
+  const days = [...new Set([localDate(at), at.toISOString().slice(0, 10), new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at)])];
+  let listed: Fixture | null = null;
+  for (const d of days) {
+    listed = (await espnLeagueDay(league, yyyymmdd(d)).catch(() => [] as Fixture[])).find((x) => x.id === f.id) ?? null;
+    if (listed) break;
+  }
   // Same price sources as at analysis time: cached The Odds API prices (main) + ESPN (background), no new credits.
   const found = listed ? (await withTheOddsPrices([listed], { fetchAllowed: false }).catch(() => [listed]))[0] : listed;
   if (found) await persistFixtures([found]);
