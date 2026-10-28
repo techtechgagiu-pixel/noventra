@@ -22,8 +22,14 @@ it('uses fresh The Odds API prices as the main source', async () => {
   expect(f.odds?.markets.find((m) => m.key === '1X2:HOME')?.odds).toBe(2.4);
 });
 
-it('never lets stale cached prices replace live ESPN prices (validation would reject them as too old)', async () => {
+it('keeps using The Odds API prices for up to 4 days (fetched every 3 days, owner decision)', async () => {
   prime(2 * 86_400_000);
+  const [f] = await withTheOddsPrices([espn], { fetchAllowed: false });
+  expect(f.odds?.markets.find((m) => m.key === '1X2:HOME')?.odds).toBe(2.4);
+});
+
+it('falls back to live ESPN prices once The Odds API prices are older than 4 days', async () => {
+  prime(5 * 86_400_000);
   const [f] = await withTheOddsPrices([espn], { fetchAllowed: false });
   expect(f.odds?.markets.find((m) => m.key === '1X2:HOME')?.odds).toBe(1.8);
   expect(f.odds?.source).toBe('espn');

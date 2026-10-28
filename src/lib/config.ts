@@ -38,6 +38,8 @@ export const config = {
     maxOutputTokens: num('AI_MAX_OUTPUT_TOKENS', 2200),
     consensusThreshold: num('CONSENSUS_THRESHOLD', 3),
     oddsMaxAgeMinutes: num('ODDS_MAX_AGE_MINUTES', 180),
+    /** Owner decision 28.10: The Odds API prices are fetched every 3 days and used as they are for up to 4 days. */
+    oddsApiMaxAgeMinutes: num('ODDS_API_MAX_AGE_MINUTES', 4 * 24 * 60),
     targetTolerance: num('TARGET_TOLERANCE', 0.15),
   },
   /** DEMO data is only allowed in test runs. Production never substitutes synthetic data. */
