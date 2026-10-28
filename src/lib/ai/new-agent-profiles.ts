@@ -18,7 +18,7 @@ export const NEW_AI_PROFILES = [
   },
   {
     "id": "sigma",
-    "name": "GLM 5.3",
+    "name": "GPT-4.1 Mini",
     "title": "Auditorul statistic",
     "specialty": "Calibrare, eșantioane, coerența modelului Poisson cu piața",
     "risk": 30,
@@ -26,11 +26,10 @@ export const NEW_AI_PROFILES = [
     "minProbability": 0.63,
     "accent": "#8eafff",
     "temperature": 0.15,
-    "model": "z-ai/glm-5.3",
-    "modelName": "GLM 5.3",
-    "inPerM": 0.07,
-    "outPerM": 1.4,
-    "reasoningEffort": "low"
+    "model": "openai/gpt-4.1-mini",
+    "modelName": "GPT-4.1 Mini",
+    "inPerM": 0.4,
+    "outPerM": 1.6
   },
   {
     "id": "atlas",
