@@ -14,5 +14,5 @@
   "triggers":{"crons":["*/5 * * * *"]},
   "limits":{"cpu_ms":3000},
   "observability":{"enabled":true,"head_sampling_rate":0.1},
-  "vars":{"BETMIND_RUNTIME":"cloudflare-production","BETMIND_DATABASE":"d1","BETMIND_DISABLE_WORKER":"1","BETMIND_MAINTENANCE":"0","APP_TIMEZONE":"Europe/Bucharest"}
+  "vars":{"BETMIND_RUNTIME":"cloudflare-production","BETMIND_DATABASE":"d1","BETMIND_DISABLE_WORKER":"1","BETMIND_MAINTENANCE":"0","APP_TIMEZONE":"Europe/Bucharest","SPORTS_API_DAILY_LIMIT":"30000"}
 }
