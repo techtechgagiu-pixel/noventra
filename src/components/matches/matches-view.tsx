@@ -10,9 +10,11 @@ import { LeaguePicker, type LeagueOption } from './league-picker';
 import { MatchMarkets } from './match-markets';
 
 type Data = { rows: MatchRow[]; leagues: LeagueOption[]; refreshing: boolean; updatedAt: string | null; errors: number; additionalSource?: InformationalSourceStatus };
-type Source = 'all' | 'existing' | 'the-odds-api';
+type Source = 'all' | 'existing' | 'the-odds-api' | 'stake';
 const fromSource = (m: MatchRow, source: Source) => {
   const sources = m.sources ?? (m.source ? [m.source] : []);
+  // Stake: matches whose current prices come from the owner's imported Stake export.
+  if (source === 'stake') return m.odds?.bookmaker === 'Stake';
   return source === 'all' || (source === 'existing' ? m.source !== 'the-odds-api' : sources.includes(source));
 };
 const TZ = 'Europe/Bucharest';
@@ -116,7 +118,7 @@ export function MatchesView() {
       </div>}
 
       {data?.additionalSource?.configured && <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sursa meciurilor">
-        {([{ id: 'all', label: 'Toate sursele' }, { id: 'existing', label: 'ESPN / LPF' }, { id: 'the-odds-api', label: 'The Odds API' }] as const).map((s) =>
+        {([{ id: 'all', label: 'Toate sursele' }, { id: 'existing', label: 'ESPN / LPF' }, { id: 'the-odds-api', label: 'The Odds API' }, { id: 'stake', label: 'Stake' }] as const).map((s) =>
           <button key={s.id} onClick={() => { setSource(s.id); setLeagues([]); setDay('all'); setStatus('all'); }} aria-pressed={source === s.id} className={`chip ${source === s.id ? 'text-cyan' : 'text-muted'}`}>{s.label}</button>)}
       </div>}
 
