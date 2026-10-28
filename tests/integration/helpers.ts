@@ -2,6 +2,7 @@ import { closePool, query, one } from '@/lib/db';
 export * from '@/lib/testing/fakes';
 
 export async function resetDb() {
+  (await import('@/lib/decided-picks')).clearDecidedPicks();
   await query(`TRUNCATE sports_catalog_cache, analysis_events, agent_predictions, final_decisions, scout_dossiers, fixture_snapshots, ticket_selections, tickets, ticket_generation_jobs, odds_snapshots, fixtures, sessions, users, model_usage_logs, provider_usage, audit_logs, historical_match_statistics, agent_model_assignments, agent_prompt_versions RESTART IDENTITY CASCADE`);
 }
 export async function makeUser(email = 'u@test.local') {

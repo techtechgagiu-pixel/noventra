@@ -90,6 +90,7 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     expect(await agentTrackRecord('robert')).toMatchObject({ decided: 1, won: 0 });
     expect((await allTrackRecords(['robert'], { month: '2026-11' }))[0].record).toMatchObject({ decided: 1, won: 0 });
     await pick(b, 2, 'NO_BET', null, '2026-10-21T10:00:00Z');
+    (await import('@/lib/decided-picks')).clearDecidedPicks(); // the shared prompt-feedback cache refreshes every 10 min
     expect(await agentTrackRecord('robert')).toBeNull();
   }));
 

@@ -58,6 +58,8 @@ async function loadMatchFacts() {
   const rows = await many<{ id: string; provider_id: string; provider_key: string }>(
     `SELECT DISTINCT f.id, f.provider_id, l.provider_key, f.facts_checked_at FROM fixtures f JOIN leagues l ON l.id=f.league_id
      WHERE f.status='post' AND f.provider='espn' AND (f.ht_home IS NULL OR f.corners_home IS NULL)
+       -- A match whose summary still lacks these facts after a week never gets them: stop re-scanning it every 15 min.
+       AND ${timeCompare('f.kickoff_utc','>',SQL_AGO(7*24,'hours'))}
        AND (f.facts_checked_at IS NULL OR ${timeCompare('f.facts_checked_at','<',SQL_AGO(15,'minutes'))})
        AND (EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND ${factMarket('s.market_key')})
          OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND ${factMarket('p.market_key')})

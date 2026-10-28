@@ -1,5 +1,4 @@
-import { many, timeCompare } from './db';
-import { finalAgentPicksCte } from './final-agent-picks';
+import { decidedPicks } from './decided-picks';
 import { sameModel } from './calibration';
 
 /**
@@ -91,12 +90,7 @@ const g = globalThis as unknown as { __bmCoaching?: { at: number; data: Map<stri
 /** Loads (and caches for 30 minutes) the coaching of every voting agent for its currently assigned model. */
 export async function loadCoaching(agents: AgentLimits[], assigned: Map<string, string>, force = false): Promise<Map<string, Coaching>> {
   if (!force && g.__bmCoaching && Date.now() - g.__bmCoaching.at < TTL_MS) return g.__bmCoaching.data;
-  const rows = await many<{ agent_id: string; model_id: string; market_key: string | null; odds: string | number | null; outcome: string }>(
-    `${finalAgentPicksCte()}
-     SELECT p.agent_id,p.model_id,p.market_key,p.odds,p.outcome FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id
-     WHERE p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST') AND ${timeCompare('p.created_at', '<', 'f.kickoff_utc')}
-     ORDER BY f.kickoff_utc DESC,p.id DESC`,
-  ).catch(() => null);
+  const rows = await decidedPicks(force).catch(() => null);
   if (!rows) return g.__bmCoaching?.data ?? new Map();
   const data = coachingForTeam(agents, assigned, rows);
   g.__bmCoaching = { at: Date.now(), data };

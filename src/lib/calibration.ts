@@ -1,5 +1,4 @@
-import { many, timeCompare } from './db';
-import { finalAgentPicksCte } from './final-agent-picks';
+import { decidedPicks } from './decided-picks';
 
 /**
  * Per-agent calibration learned from settled history — no fine-tuning, no invented data.
@@ -42,12 +41,7 @@ export const sameModel = (stored: string | null | undefined, assigned: string | 
 /** Loads (and caches for 30 minutes) every voting agent's calibration for its currently assigned model. */
 export async function loadCalibrations(assigned: Map<string, string>, force = false): Promise<Map<string, Calibration>> {
   if (!force && g.__bmCalibration && Date.now() - g.__bmCalibration.at < TTL_MS) return g.__bmCalibration.data;
-  const rows = await many<{ agent_id: string; model_id: string; estimated_probability: string | number | null; outcome: string }>(
-    `${finalAgentPicksCte()}
-     SELECT p.agent_id,p.model_id,p.estimated_probability,p.outcome FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id
-     WHERE p.decision='BET_CANDIDATE' AND p.outcome IN ('WON','LOST') AND p.estimated_probability IS NOT NULL
-       AND ${timeCompare('p.created_at', '<', 'f.kickoff_utc')}`,
-  ).catch(() => []);
+  const rows = (await decidedPicks(force).catch(() => [])).filter((r) => r.estimated_probability !== null);
   const data = new Map<string, Calibration>();
   for (const [agentId, model] of assigned) {
     const own = rows.filter((r) => r.agent_id === agentId && sameModel(r.model_id, model)).map((r) => ({ estimated: Number(r.estimated_probability), won: r.outcome === 'WON' }));
