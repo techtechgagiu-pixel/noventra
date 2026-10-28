@@ -31,7 +31,7 @@ type T = { id: string; slot: string; period_key: string; target_odds: number; ac
 const FILTERS = [['all', 'Toate'], ['today', 'Azi'], ['yesterday', 'Ieri'], ['week', 'Săptămâna asta'], ['weekly', 'Biletul săptămânii'], ['PENDING', 'În așteptare'], ['WON', 'Verzi'], ['ONE_LOSS', 'Pierdute la un meci']] as const;
 const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
 
-export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete create', admin = false }: { tickets: T[]; initialFilter?: string; title?: string; admin?: boolean }) {
+export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete create', canRemove = false }: { tickets: T[]; initialFilter?: string; title?: string; canRemove?: boolean }) {
   const visible = useMemo(() => tickets.filter((t) => archiveResult(t) !== null), [tickets]);
   const [f, setF] = useState<string>(initialFilter);
   const [who, setWho] = useState<string>('all');
@@ -95,7 +95,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                 )}
               </Link>
               {t.generation_status === 'INCOMPLETE' && t.creator?.mine && !finishing && <FinishIncompleteTicket ticketId={t.id} compact />}
-              {(t.creator?.mine || admin) && !finishing && <RemoveTicket ticketId={t.id} compact />}
+              {canRemove && !finishing && <RemoveTicket ticketId={t.id} compact />}
             </li>
           ); })}
         </ul>
