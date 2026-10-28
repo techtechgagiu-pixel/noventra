@@ -615,7 +615,9 @@ async function stepVote(job: JobRow, ids: string[]) {
     if (c.outcome === 'QUALIFIED' && c.marketKey) {
       // The brain's backup is tried when its first choice fails validation (e.g. the price moved).
       const backup = brain?.backup && brain.backup !== c.marketKey ? c.shortlist.find((x) => x.key === brain.backup) ?? null : null;
-      const tries = [c.marketKey, ...(backup ? [backup.key] : [])];
+      // Then every other selection on the shortlist (each already has enough votes): one price that moved no longer
+      // throws the whole match away (owner question 28.10: "de ce nu mai sunt studiate pentru alte pronosticuri").
+      const tries = [...new Set([c.marketKey, ...(backup ? [backup.key] : []), ...c.shortlist.map((x) => x.key)])].slice(0, 5);
       const labels: Record<string, string> = { fixtureStillPreMatch: 'meciul nu mai este pre-meci', oddsAvailable: 'cota nu mai este disponibilă', oddsFresh: 'cota este prea veche', bookmakerIdentified: 'bookmaker neidentificat', selectionConsistent: 'selecție inconsistentă', probabilityPlausible: 'probabilitate estimată prea mică', evNotStronglyNegative: 'valoare așteptată clar negativă', dataSufficient: 'istoric insuficient' };
       const base = await fixtureFromDb(s.fixture.id);
       const fresh = base ? await freshFixture(base).catch(() => null) : null;
@@ -628,7 +630,7 @@ async function stepVote(job: JobRow, ids: string[]) {
         const checks = {
           fixtureStillPreMatch: !!fresh && fresh.status === 'pre' && Date.parse(fresh.kickoff) > Date.now() + MIN_LEAD_MS,
           oddsAvailable: !!freshQuote,
-          oddsFresh: ageMin <= config.limits.oddsMaxAgeMinutes,
+          oddsFresh: ageMin <= maxOddsAgeMinutes(fresh?.odds?.source ?? s.odds.source),
           bookmakerIdentified: !!(freshQuote?.bookmaker ?? fresh?.odds?.bookmaker),
           selectionConsistent: s.model.markets.some((m) => m.key === key),
           probabilityPlausible: est.estimatedProbability !== null && est.estimatedProbability >= 0.25,
@@ -640,7 +642,8 @@ async function stepVote(job: JobRow, ids: string[]) {
         const failed = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
         await recordEvent(job.id, { type: 'ODDS_VALIDATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { marketKey: key, checks, originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt } });
         if (!failed.length) {
-          if (ti > 0 && backup) Object.assign(c, { marketKey: backup.key, votesFor: backup.supporters.length, directVotes: backup.direct, supporters: backup.supporters });
+          const alt = ti > 0 ? c.shortlist.find((x) => x.key === key) : null;
+          if (alt) Object.assign(c, { marketKey: alt.key, votesFor: alt.supporters.length, directVotes: alt.direct, supporters: alt.supporters });
           outcome = 'QUALIFIED';
           reason = `Consens ${c.votesFor}/${N} pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.${ti > 0 ? ` (Alegerea de rezervă a creierului — prima, „${s.model.markets.find((m) => m.key === tries[0])?.label}”, a picat la validare: ${failures[0]}.)` : brainNote}`;
           break;
@@ -660,11 +663,16 @@ async function stepVote(job: JobRow, ids: string[]) {
 }
 
 async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { marketKey: string; label: string; observedAt: string; probability: number | null; riskLabel: string; votesFor: number; snapshot: FixtureSnapshot }>> {
-  const rows = await many<{ fixture_id: string; market_key: string; votes_for: number; validation: { currentOdds: number; observedAt: string; bookmaker: string } }>(
-    "SELECT fixture_id, market_key, votes_for, validation FROM final_decisions WHERE job_id=$1 AND outcome='QUALIFIED'", [job.id]);
+  // A later search (completion or automatic extension) also re-checks selections that the team backed but validation
+  // rejected (price moved, quote old, match not found): with today's price they may pass. Never insufficient history
+  // or an implausible probability; every check below runs again with the current price and votes.
+  const recheck = !!(job.config.completion || job.config.extendedAt);
+  const rows = (await many<{ fixture_id: string; market_key: string; votes_for: number; outcome: string; validation: { currentOdds: number; observedAt: string; bookmaker: string; dataSufficient?: boolean; probabilityPlausible?: boolean } }>(
+    `SELECT fixture_id, market_key, votes_for, outcome, validation FROM final_decisions WHERE job_id=$1 AND (outcome='QUALIFIED' OR ($2=1 AND outcome='REJECTED' AND market_key IS NOT NULL))`, [job.id, recheck ? 1 : 0]))
+    .filter((r) => r.outcome === 'QUALIFIED' || (r.validation?.dataSufficient !== false && r.validation?.probabilityPlausible !== false));
   const snaps = await batchSnapshots(job, rows.map((r) => r.fixture_id));
   // Completion never promotes old scores or expired quotes into a new finalized ticket.
-  const current = job.config.completion ? new Map((await loadFixtures(job.config.windowStart, job.config.windowDays, {top10Only:job.config.top10Only})).fixtures.map((f) => [f.id, f])) : null;
+  const current = recheck ? new Map((await loadFixtures(job.config.windowStart, job.config.windowDays, {top10Only:job.config.top10Only})).fixtures.map((f) => [f.id, f])) : null;
   return (await Promise.all(rows.map(async (r) => {
     const s = snaps.find((x) => x.fixture.id === r.fixture_id);
     if (!s) return [];
@@ -678,7 +686,7 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
       const age = Date.now() - Date.parse(fresh?.odds?.observedAt ?? '');
       const policy = jobPolicy(job);
       if (!fresh || fresh.status !== 'pre' || Date.parse(fresh.kickoff) <= Date.now() + MIN_LEAD_MS || !quote ||
-        !Number.isFinite(age) || age < -120_000 || age > config.limits.oddsMaxAgeMinutes * 60_000 ||
+        !Number.isFinite(age) || age < -120_000 || age > maxOddsAgeMinutes(fresh?.odds?.source) * 60_000 ||
         !Number.isFinite(quote.odds) || quote.odds < policy.minOdds || quote.odds > policy.maxOdds ||
         est.estimatedProbability === null || est.estimatedProbability * quote.odds - 1 < -0.12) return [];
       odds = quote.odds; bookmaker = quote.bookmaker ?? fresh.odds!.bookmaker; observedAt = fresh.odds!.observedAt;
@@ -713,6 +721,9 @@ async function tryOptimize(job: JobRow) {
   }
   return { cands, result };
 }
+
+/** The Odds API prices are refreshed every 3 days and accepted for 4 (owner decision 28.10); ESPN prices for 3 hours. */
+const maxOddsAgeMinutes = (source: string | null | undefined) => source === 'the-odds-api' ? config.limits.oddsApiMaxAgeMinutes : config.limits.oddsMaxAgeMinutes;
 
 /** How many times a custom ticket keeps searching new matches on its own before it may end incomplete. */
 export const MAX_INLINE_EXTENSIONS = 4;
