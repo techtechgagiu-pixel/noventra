@@ -24,7 +24,7 @@ export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; 
   hantu: { model: 'nvidia/nemotron-3.5-super-vl', inPerM: 0.15, outPerM: 0.5 },
   becali: { model: 'deepseek/deepseek-v4-flash', inPerM: 0.091, outPerM: 0.182 },
   // Echipa a doua (2026-10-21) — fiecare agent își păstrează modelul, ca rezultatele lunare să fie comparabile.
-  ilie: { model: 'mistralai/mistral-medium-3.1', inPerM: 0.4, outPerM: 2.0 },
+  ilie: { model: 'mistralai/mistral-small-3.2-24b-instruct', inPerM: 0.075, outPerM: 0.2 },
   sumudica: { model: 'upstage/solar-mini4', inPerM: 0.05, outPerM: 0.2 },
   petrescu: { model: 'cohere/command-r-08-2024', inPerM: 0.15, outPerM: 0.6 },
   stoica: { model: 'qwen/qwen3-235b-a22b-2507', inPerM: 0.09, outPerM: 0.55 },

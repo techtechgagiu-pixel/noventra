@@ -107,7 +107,7 @@ test('model identities replace actors across public home, Custom and statistics,
   await expect(page.locator('.home-team-grid > div')).toHaveCount(34);
   await expect(page.locator('.home-team')).not.toContainText(actors);
   await expect(page.locator('.home-team img[src^="/agents/"]')).toHaveCount(0);
-  await expect(page.locator('.home-team')).toContainText('Claude Sonnet 5.5');
+  await expect(page.locator('.home-team')).toContainText('Mistral Small 4');
   await expect(page.locator('.home-team')).toContainText('MiniMax M3.1 Flash');
   await page.goto('/auth/test-login?email=model-identities@test.local');
   await page.goto('/?tab=custom');
