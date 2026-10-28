@@ -1,7 +1,8 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
-import { AlertTriangle, Check, ClipboardCopy, Download, History, ListChecks, PlayCircle, Sparkles } from 'lucide-react';
+import { AlertTriangle, Check, ClipboardCopy, Download, History, ListChecks, PlayCircle, Share2, Sparkles } from 'lucide-react';
+import { shareTicketImage } from '@/lib/share-image';
 import { AGENT_META, OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
 import { superbetPick } from '@/lib/superbet-format';
 import { FinishIncompleteTicket } from './finish-incomplete-ticket';
@@ -56,6 +57,16 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
       if (!r.ok) throw new Error(j.error ?? 'Rezumatul nu a putut fi generat.');
       setDigest(j.digest);
     } catch (e) { setDigestError((e as Error).message); } finally { setDigestBusy(false); }
+  };
+  const [sharing, setSharing] = useState<'idle' | 'busy' | 'downloaded' | 'error'>('idle');
+  const share = async () => {
+    setSharing('busy');
+    try {
+      const r = await shareTicketImage({ title: t.title, createdAt: t.createdAt, actualOdds: t.actualOdds, outcomeStatus: t.outcomeStatus,
+        legs: t.selections.map((s) => ({ home: s.snapshot.home, away: s.snapshot.away, league: s.snapshot.league, kickoff: s.snapshot.kickoff, label: s.market_label, odds: s.odds, outcome: s.outcome, homeScore: s.home_score, awayScore: s.away_score })) });
+      setSharing(r === 'downloaded' ? 'downloaded' : 'idle');
+      if (r === 'downloaded') setTimeout(() => setSharing('idle'), 2500);
+    } catch { setSharing('error'); setTimeout(() => setSharing('idle'), 3000); }
   };
   const copySb = async () => { await navigator.clipboard.writeText(superbetText(t)); setCopiedSb(true); setTimeout(() => setCopiedSb(false), 2000); };
   const completed = t.generationStatus === 'COMPLETED';
@@ -149,7 +160,8 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
         </div>
       )}
       <div className="flex flex-wrap gap-3">
-        {completed && <button onClick={copy} className="btn btn-primary px-5 py-3">{copied ? <Check size={16} /> : <ClipboardCopy size={16} />} {copied ? 'COPIAT' : 'COPIAZĂ BILETUL'}</button>}
+        {completed && <button onClick={share} disabled={sharing === 'busy'} className="btn btn-primary px-5 py-3">{sharing === 'downloaded' ? <Check size={16} /> : <Share2 size={16} />} {sharing === 'busy' ? 'SE PREGĂTEȘTE…' : sharing === 'downloaded' ? 'IMAGINE DESCĂRCATĂ' : sharing === 'error' ? 'ÎNCEARCĂ DIN NOU' : 'DISTRIBUIE'}</button>}
+        {completed && <button onClick={copy} className="btn btn-ghost px-5 py-3">{copied ? <Check size={16} /> : <ClipboardCopy size={16} />} {copied ? 'COPIAT' : 'COPIAZĂ BILETUL'}</button>}
         {completed && <button onClick={copySb} className="btn btn-ghost px-5 py-3">{copiedSb ? <Check size={16} /> : <ClipboardCopy size={16} />} {copiedSb ? 'COPIAT' : 'COPIAZĂ PENTRU SUPERBET'}</button>}
         {completed && <button onClick={download} className="btn btn-ghost px-5 py-3"><Download size={16} /> DESCARCĂ TXT</button>}
         <a href="#analiza" className="btn btn-ghost px-5 py-3"><ListChecks size={16} /> VEZI ANALIZA</a>
