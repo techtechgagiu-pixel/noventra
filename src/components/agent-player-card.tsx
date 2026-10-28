@@ -29,6 +29,7 @@ export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: {
       {ai && <p className="player-ai-provider">{ai.company}</p>}
       <h2 title={displayName}>{displayName}</h2>
       <p className="player-card-specialty" title={a.title}>{ai.role}</p>
+      {a.coaching && <p className="player-card-coaching" title={`Sub media echipei: ${Math.round(a.coaching.hitRate * 100)}% față de ${Math.round(a.coaching.teamRate * 100)}% pe ultimele ${a.coaching.n} pronosticuri`}>🎯 În antrenament{a.coaching.level === 2 ? ' strict' : ''}</p>}
 
     </header>
     <div className="player-card-body">
@@ -40,6 +41,7 @@ export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: {
       {ai && a.character && <div className="player-ai-character">
         <p>{a.character.specialty}</p>
         {!a.editorial && <dl><div><dt>Risc</dt><dd>{a.character.risk}/100</dd></div><div><dt>Cotă max.</dt><dd>{a.character.maxOdds.toFixed(2)}</dd></div><div><dt>Prob. min.</dt><dd>{Math.round(a.character.minProbability * 100)}%</dd></div></dl>}
+        {a.coaching && <p className="text-gold">În antrenament: pe ultimele {a.coaching.n} pronosticuri are {Math.round(a.coaching.hitRate * 100)}%, echipa {Math.round(a.coaching.teamRate * 100)}%. Joacă acum cu cotă max. {a.coaching.maxOdds.toFixed(2)} și prob. min. {Math.round(a.coaching.minProbability * 100)}%{a.coaching.blocked.length ? `; nu mai poate vota: ${a.coaching.blocked.map((b) => `${b.label} (${b.won}/${b.n})`).join(', ')}` : ''}. Limitele se relaxează singure când revine la nivelul echipei.</p>}
       </div>}
         {ai && <p className="break-all">Model atribuit: {ai.modelId ?? 'neatribuit'}</p>}
         {!a.editorial && <><dl className="grid grid-cols-2 gap-2"><div><dt>Cotă medie (decise)</dt><dd className="font-bold text-text">{a.avgOdds == null ? '—' : a.avgOdds.toFixed(2)}</dd></div><div><dt>Estimare medie (decise)</dt><dd className="font-bold text-text">{a.avgEstimated == null ? '—' : `${Math.round(a.avgEstimated * 100)}%`}</dd></div></dl><p>{a.bets} pronosticuri · {a.voided} anulate · {a.noBet} NO BET</p><p>{a.upcoming} viitoare · {a.live} live · {a.awaiting} așteaptă confirmare</p>{p?.nextRank && <p>Următorul rang, {p.nextRank.name}: minimum {p.nextRank.minimum} rezultate decise și {p.nextRank.strict ? 'peste ' : 'minimum '}{Math.round(p.nextRank.rate * 100)}% verzi în carieră.</p>}</>}

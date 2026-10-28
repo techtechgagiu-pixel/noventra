@@ -1,12 +1,13 @@
 import { describeModel } from '@/lib/model-identities';
 import { many, timeCompare, dialect } from './db';
 import { config } from './config';
-import { AGENTS } from './ai/agents';
+import { AGENTS, VOTING_AGENTS } from './ai/agents';
 import { OPENROUTER_MODELS, OPENROUTER_PRICE } from './ai/openrouter-models';
 import { finalAgentPicksCte } from './final-agent-picks';
 import { activeAssignments } from './ai/assignments';
 import { romanianMonthWindow } from './time';
 import { sameModel } from './calibration';
+import { loadCoaching, type Coaching } from './coaching';
 
 export type AgentStat = {
   id: string; name: string; title: string; model: string | null;
@@ -18,6 +19,8 @@ export type AgentStat = {
   /** Settled picks made by other models for this role (fallbacks, earlier assignments) or saved after kickoff — shown, never counted. */
   excluded: { won: number; lost: number; otherModel: number; afterKickoff: number };
   character: { role: string; specialty: string; risk: number; maxOdds: number; minProbability: number };
+  /** Stricter limits while the agent is clearly below the team (coaching.ts); null when it plays normally. */
+  coaching: { level: 1 | 2; n: number; hitRate: number; teamRate: number; maxOdds: number; minProbability: number; blocked: Array<{ label: string; won: number; n: number }> } | null;
   usage: { calls: number; failed: number; fallback: number; inTokens: number; outTokens: number; costToday: number; cost7d: number; costMonth: number; costTotal: number; avgLatencyMs: number | null; models: string[] };
 };
 
@@ -77,6 +80,7 @@ export async function agentStats(userId: string, admin = false, month = currentM
   // selected month's matches only; "all" shows the whole history.
   // A role is judged only by its CURRENT model, on picks saved before kickoff: the same agent keeps the same pattern.
   const ownOf = (agentId: string) => assignments.get(agentId)?.primary.model ?? OPENROUTER_MODELS[agentId]?.model ?? null;
+  const coachingMap = await loadCoaching([...VOTING_AGENTS], new Map([...assignments].map(([id, a]) => [id, a.primary.model]))).catch(() => new Map<string, Coaching>());
   const career = new Map<string, { won: number; lost: number }>();
   for (const r of careerRows) {
     if (!sameModel(r.model_id, ownOf(r.agent_id))) continue;
@@ -109,6 +113,7 @@ export async function agentStats(userId: string, admin = false, month = currentM
       career: career.get(a.id) ?? { won: 0, lost: 0 },
       excluded: { won: left.filter((p) => p.outcome === 'WON').length, lost: left.filter((p) => p.outcome === 'LOST').length, otherModel: left.filter((p) => !sameModel(p.model_id, ownModel)).length, afterKickoff: left.filter((p) => sameModel(p.model_id, ownModel)).length },
       character: { role: a.title.split(' · ')[0], specialty: a.specialty, risk: a.risk, maxOdds: a.maxOdds, minProbability: a.minProbability },
+      coaching: (() => { const c = coachingMap.get(a.id); return c ? { level: c.level, n: c.n, hitRate: c.hitRate, teamRate: c.teamRate, maxOdds: c.maxOdds, minProbability: c.minProbability, blocked: c.blocked.map((b) => ({ label: b.label, won: b.won, n: b.n })) } : null; })(),
       hitRate: won + lost ? won / (won + lost) : null,
       avgOdds: priced.length ? priced.reduce((s, p) => s + Number(p.odds), 0) / priced.length : null,
       avgEstimated: est.length ? est.reduce((s, p) => s + Number(p.estimated_probability), 0) / est.length : null,
