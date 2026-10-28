@@ -16,7 +16,7 @@ import { NexusLive } from '@/components/nexus-live';
 import { ReplayPlayer } from '@/components/replay-player';
 import { PerformancePanel } from '@/components/performance-panel';
 import { AGENT_META, STATUS_RO, fmtDateTime } from '@/lib/format';
-import { CUSTOM_LIMIT_PER_DAY, slotById } from '@/lib/slots';
+import { slotById } from '@/lib/slots';
 import { VOTING_AGENTS } from '@/lib/ai/agents';
 import { activeAssignments } from '@/lib/ai/assignments';
 import { allTrackRecords } from '@/lib/track-record';
@@ -35,7 +35,7 @@ import { CustomLive } from '@/components/custom/custom-live';
 import { localDate } from '@/lib/time';
 import { topSixAgentIds } from '@/lib/agent-ranking';
 import { databaseIssue } from '@/lib/database-availability';
-import { canRemoveTickets } from '@/lib/ticket-removal';
+import { canRemoveTickets, canSeeAccounts, customLimitFor } from '@/lib/ticket-removal';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,7 +93,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3 md:ml-2">
-            {user.role === 'admin' && <Link href="/admin/invitations" className="text-xs text-muted hover:text-text" title="Conturi și coduri de acces">Conturi</Link>}
+            {user.role === 'admin' ? <Link href="/admin/invitations" className="text-xs text-muted hover:text-text" title="Conturi și coduri de acces">Conturi</Link> : canSeeAccounts(user) && <Link href="/conturi" className="text-xs text-muted hover:text-text" title="Cine s-a conectat cu Google">Conturi</Link>}
             {user.role === 'admin' && <Link href="/admin/feedback" className="text-xs text-muted hover:text-text" title="Ideile trimise de utilizatori">Sugestii</Link>}
             <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
           </div>
@@ -106,7 +106,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       <main className="app-main mx-auto max-w-6xl px-4 pb-24 pt-8">
         <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
-        {tab === 'custom' && <CustomTab userId={user.id} job={sp.job} />}
+        {tab === 'custom' && <CustomTab limit={customLimitFor(user)} userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} />}
@@ -201,7 +201,7 @@ async function agentCards(): Promise<AgentCard[]> {
 
 const CUSTOM_STATUS: Record<string, string> = { QUEUED: 'în coadă', RUNNING: 'live', WAITING: 'așteaptă', PAUSED: 'pauză', COMPLETED: 'gata', INCOMPLETE: 'incomplet', NO_BET: 'NO BET', FAILED: 'eșuat' };
 
-async function CustomTab({ userId, job }: { userId: string; job?: string }) {
+async function CustomTab({ userId, job, limit }: { userId: string; job?: string; limit: number }) {
   if (job && UUID.test(job)) {
     const meta = await jobMeta(userId, job);
     if (meta) {
@@ -211,14 +211,14 @@ async function CustomTab({ userId, job }: { userId: string; job?: string }) {
       return <CustomLive key={job} jobId={job} initialMeta={plain(meta)} initialEvents={plain(events)} info={info} />;
     }
   }
-  const [cards, recent, ranking] = await Promise.all([agentCards(), customJobs(userId, CUSTOM_LIMIT_PER_DAY), agentRanking()]);
+  const [cards, recent, ranking] = await Promise.all([agentCards(), customJobs(userId, Math.max(limit, 20)), agentRanking()]);
   return (
     <div className="space-y-6">
       <div>
         <h1 className="page-title">Bilet custom</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {CUSTOM_LIMIT_PER_DAY} bilete custom pe zi.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {limit} bilete custom pe zi.</p>
       </div>
-      <CustomForm agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, CUSTOM_LIMIT_PER_DAY - recent.filter((j) => j.period_key === localDate()).length)} />
+      <CustomForm agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
       {recent.length > 0 && (
         <section>
           <h3 className="mb-2 font-display text-lg font-bold">Biletele tale custom</h3>

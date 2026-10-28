@@ -5,6 +5,7 @@ import { HowItWorks } from './home-intro';
 import { DebatePreview } from './debate-preview';
 import { HOME_EXAMPLE, HOME_EXAMPLE_MODELS } from '@/lib/home-example';
 import { publicProof, type PublicProof } from '@/lib/public-proof';
+import { WonTicketRotator } from './won-ticket-rotator';
 
 const odds = (n: number) => n.toFixed(2);
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
@@ -43,7 +44,7 @@ function PublicHero({ google, proof }: { google: boolean; proof: PublicProof | n
   return <section className="public-hero" aria-labelledby="home-title">
     <div className="public-hero-copy">
       <p className="public-eyebrow">Analiză de fotbal cu agenți AI</p>
-      <h1 id="home-title">Agenții dezbat. <em>Tu primești biletul.</em></h1>
+      <h1 id="home-title">Agenții AI dezbat. <em>Tu primești biletul.</em></h1>
       <p className="public-lead">Alegi cota și numărul de meciuri. Agenții citesc cotele, forma echipelor și știrile zilei, se contrazic, apoi votează. Pe bilet ajung doar selecțiile susținute de echipă.</p>
       <div className="public-cta"><GoogleSignIn configured={google} label="Intră cu Google" /></div>
       {google
@@ -51,16 +52,7 @@ function PublicHero({ google, proof }: { google: boolean; proof: PublicProof | n
         : <p role="status" className="public-cta-note text-gold">Conectarea cu Google este momentan indisponibilă. <Link href="/login?next=custom">Intră cu un cod de acces</Link></p>}
     </div>
     {won && proof ? <aside className="public-proof" aria-labelledby="proof-title">
-      <div className="slip" data-result="WON">
-        <div className="flex items-start justify-between gap-3">
-          <div><p id="proof-title" className="public-proof-kicker">Ultimul bilet câștigat</p><p className="mt-1 text-xs text-muted">închis pe {day(won.settledAt)} · {won.legs.length} meciuri</p></div>
-          <div className="text-right"><p className="board-num text-[2.6rem]">{odds(won.odds)}</p><p className="mt-1 text-xs text-muted">cota totală</p></div>
-        </div>
-        <ul className="public-proof-legs">{won.legs.map((l, i) => <li key={i}>
-          <div className="min-w-0"><p className="truncate font-semibold">{l.home} – {l.away}</p><p className="truncate text-xs text-muted">{l.label}</p></div>
-          <div className="shrink-0 text-right"><p className="font-display text-lg font-bold">{l.homeScore != null && l.awayScore != null ? `${l.homeScore}-${l.awayScore}` : '—'}</p><p className="text-xs text-emerald">✓ {odds(l.odds)}</p></div>
-        </li>)}</ul>
-      </div>
+      <WonTicketRotator wins={proof.wins} />
       <dl className="public-proof-stats">
         <div><dt>Selecții câștigate</dt><dd><span className="board-num">{pct(proof.picks.won, proof.picks.decided)}%</span> <small>{proof.picks.won} din {proof.picks.decided}</small></dd></div>
       </dl>

@@ -85,7 +85,7 @@ export function canonicalMarket(key: string | null, validKeys: Set<string>): str
   return a && validKeys.has(a) ? a : null;
 }
 
-export type ShortlistItem = { key: string; odds: number; supporters: string[]; direct: number };
+export type ShortlistItem = { key: string; odds: number; supporters: string[]; direct: number; /** Sum of the supporters' vote weights. */ weight?: number };
 export type ConsensusResult = { outcome: 'QUALIFIED' | 'NO_CONSENSUS' | 'NO_BET'; marketKey: string | null; votesFor: number; directVotes: number; noBetVotes: number; abstentions: number; tally: Record<string, number>; supporters: string[]; requiredVotes: number; cautiousVeto: boolean;
   /** Every selection that reached the required support — the brain chooses among these. */
   shortlist: ShortlistItem[] };
@@ -101,6 +101,16 @@ export const CAUTIOUS_VETO_VOTES = 5;
  * so a broader, safer selection beats a riskier one that only part of the group supports.
  * `availableKeys` should already be limited to the ticket's allowed price band.
  */
+/**
+ * Weighted votes (owner decision 28.10): an agent that wins more often counts a little more, one that wins less counts
+ * a little less (0.8–1.2 of a vote, from its own settled record, see vote-weights.ts). Set once per worker slice;
+ * without weights every vote counts 1, as before.
+ */
+let voteWeights: Map<string, number> | null = null;
+export function setVoteWeights(w: Map<string, number> | null) { voteWeights = w; }
+const weightOf = (agentId: string) => voteWeights?.get(agentId) ?? 1;
+const EPS = 1e-9;
+
 export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 10, availableKeys?: Array<{ key: string; odds: number }>, pick: 'safest' | 'highest' = 'safest'): ConsensusResult {
   const bets = positions.filter((p) => picksOf(p).length > 0);
   const noBet = positions.length - bets.length;
@@ -113,15 +123,16 @@ export function consensus(positions: FinalPosition[], threshold: number, totalAg
   const keys = availableKeys ?? [...new Set(bets.flatMap(picksOf))].map((key) => ({ key, odds: 0 }));
   const support = keys.map((k) => {
     const supporters = bets.filter((b) => picksOf(b).some((pk) => selectionImplies(pk, k.key))).map((b) => b.agentId);
-    return { key: k.key, odds: k.odds, supporters, direct: tally[k.key] ?? 0 };
+    return { key: k.key, odds: k.odds, supporters, direct: tally[k.key] ?? 0, weight: Math.round(supporters.reduce((t, a) => t + weightOf(a), 0) * 100) / 100 };
   }).filter((s) => s.supporters.length > 0)
-    .sort((a, b) => b.supporters.length - a.supporters.length || a.odds - b.odds || b.direct - a.direct);
+    .sort((a, b) => b.weight - a.weight || b.supporters.length - a.supporters.length || a.odds - b.odds || b.direct - a.direct);
+  const enough = (s: { weight: number }) => s.weight >= required - EPS;
   const qualified = pick === 'highest'
-    ? support.filter((s) => s.supporters.length >= required).sort((a, b) => b.odds - a.odds || b.supporters.length - a.supporters.length)[0]
-    : support.find((s) => s.supporters.length >= required);
+    ? support.filter(enough).sort((a, b) => b.odds - a.odds || b.weight - a.weight)[0]
+    : support.find(enough);
   const top = qualified ?? support[0];
   // Only selections at least one agent actually proposed (not merely implied) are offered to the brain.
-  const shortlist = support.filter((s) => s.supporters.length >= required && s.direct > 0).slice(0, 6);
+  const shortlist = support.filter((s) => enough(s) && s.direct > 0).slice(0, 6);
   const base = { noBetVotes: noBet, abstentions, tally, requiredVotes: required, cautiousVeto, shortlist };
   if (qualified) return { outcome: 'QUALIFIED', marketKey: qualified.key, votesFor: qualified.supporters.length, directVotes: qualified.direct, supporters: qualified.supporters, ...base };
   if (noBet >= threshold) return { outcome: 'NO_BET', marketKey: null, votesFor: top?.supporters.length ?? 0, directVotes: top?.direct ?? 0, supporters: top?.supporters ?? [], ...base };

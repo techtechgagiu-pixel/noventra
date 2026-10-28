@@ -9,7 +9,7 @@ test('first visit explains AI debate and reaches a compact Custom form without s
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Agenții dezbat. Tu primești biletul.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agenții AI dezbat. Tu primești biletul.' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Fragment real din dezbatere' })).toBeVisible();
   await expect(page.getByText('mercury-3', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Contradicție', exact: true }).click();

@@ -36,7 +36,7 @@ const dur = (h: number) => (h < 1 ? `${Math.round(h * 60)} min` : h < 24 ? `${h}
 const at = (h: number) => new Date(Date.now() + h * 3600_000).toLocaleString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
 const span = (a: number, b: number) => `${at(a)} – ${at(b)}`;
 
-export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_PER_DAY }: { agents: AgentCard[]; topAgentIds?: string[]; remaining?: number }) {
+export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_PER_DAY, limit = CUSTOM_LIMIT_PER_DAY }: { agents: AgentCard[]; topAgentIds?: string[]; remaining?: number; limit?: number }) {
   const router = useRouter();
   const [count, setCount] = useState(1);
   const inFlight = useRef(false);
@@ -218,7 +218,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <input id="ticket-count" type="number" inputMode="numeric" min={1} max={Math.max(1, remaining)} step={1} value={count} disabled={busy || remaining === 0}
             onChange={(e) => setCount(Math.max(1, Math.min(Math.max(1, remaining), Math.trunc(Number(e.target.value) || 1))))}
             className="w-24 rounded-xl border border-line bg-ink px-3 py-2 text-xl font-bold tabular outline-none focus:border-cyan" />
-          <p className="text-sm text-muted" role="status">Mai ai <strong className="text-cyan">{remaining}</strong> din {CUSTOM_LIMIT_PER_DAY} bilete custom azi.</p>
+          <p className="text-sm text-muted" role="status">Mai ai <strong className="text-cyan">{remaining}</strong> din {limit} bilete custom azi.</p>
         </div>
         <p className="mt-2 text-xs text-muted">Aceeași cotă țintă, aceleași ligi și aceeași echipă pentru fiecare bilet. Fiecare are propria analiză și consumă un loc din limita zilnică. Meciurile se pot repeta între bilete.</p>
       </section>

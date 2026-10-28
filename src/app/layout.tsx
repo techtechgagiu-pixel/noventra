@@ -29,13 +29,14 @@ export const metadata: Metadata = {
     locale: 'ro_RO',
     url: '/',
     siteName: 'PRIMUL 11',
-    title: 'PRIMUL 11 · Agenții dezbat. Tu primești biletul.',
+    title: 'PRIMUL 11 · Agenții AI dezbat. Tu primești biletul.',
     description: 'Analiză de fotbal cu 32 de agenți AI, pe cote și date reale din ziua meciului.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'PRIMUL 11: agenții dezbat, tu primești biletul. Analiză de fotbal cu 32 de agenți AI.' }],
+    // WhatsApp builds the preview on the sender's phone and is picky: a small JPEG with explicit type and size works best.
+    images: [{ url: 'https://primul11.noventra.ro/og-image.jpg', secureUrl: 'https://primul11.noventra.ro/og-image.jpg', type: 'image/jpeg', width: 1200, height: 630, alt: 'PRIMUL 11: agenții dezbat, tu primești biletul. Analiză de fotbal cu 32 de agenți AI.' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'PRIMUL 11 · Agenții dezbat. Tu primești biletul.',
+    title: 'PRIMUL 11 · Agenții AI dezbat. Tu primești biletul.',
     description: 'Analiză de fotbal cu 32 de agenți AI, pe cote și date reale din ziua meciului.',
     images: [{ url: '/twitter-image.png', width: 1200, height: 675, alt: 'PRIMUL 11: agenții dezbat, tu primești biletul.' }],
   },
