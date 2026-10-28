@@ -1,3 +1,4 @@
+import { config } from '../config';
 import { one, query } from '../db';
 import type { Fixture, MarketQuote } from './types';
 import type { InformationalMatch } from './informational-matches';
@@ -275,6 +276,9 @@ export async function withTheOddsPrices(fixtures: Fixture[], opts: { fetchAllowe
     const cached = sport ? payload.bySport![sport] : undefined;
     const e = cached?.events.find((x) => sameMatch(f, x));
     if (!e) return f;
+    // Stale prices never replace live ones (28.10: 2-day-old cached prices made validation reject every consensus
+    // pick as "cota este prea veche"). Past the validation age limit the fixture keeps its own fresh ESPN prices.
+    if (Date.now() - Date.parse(cached!.at) > config.limits.oddsMaxAgeMinutes * 60_000) return f;
     events.set(f.id, { sport: sport!, e });
     return mergeTheOdds(f, e, cached!.at);
   });
