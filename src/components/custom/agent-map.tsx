@@ -5,6 +5,24 @@ import type { NexusEvent } from '@/lib/nexus-state';
 import { FORMATION, MapScene } from './map-scene';
 
 export type AgentMapHandle = { replay: (speed?: number) => void };
+
+/**
+ * Pitch effects (ball, goals, fireworks). Off by default when the system asks for reduced motion ("Reduce motion"
+ * on macOS/iOS, also in incognito); the viewer can turn them on anyway. The choice is remembered in this browser.
+ */
+const EFFECTS_KEY = 'p11:map-effects';
+const systemReduced = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+export function readEffectsPref(): boolean {
+  try { const v = localStorage.getItem(EFFECTS_KEY); if (v === 'on') return true; if (v === 'off') return false; } catch { /* storage blocked */ }
+  return !systemReduced();
+}
+export function useMapEffects() {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [system, setSystem] = useState(false);
+  useEffect(() => { setOn(readEffectsPref()); setSystem(systemReduced()); }, []);
+  const set = (v: boolean) => { setOn(v); try { localStorage.setItem(EFFECTS_KEY, v ? 'on' : 'off'); } catch { /* storage blocked */ } };
+  return { on, set, system };
+}
 type Info = Record<string, { title: string; specialty: string; maxOdds: number; minProbability: number; model?: string | null }>;
 
 /**
@@ -13,8 +31,10 @@ type Info = Record<string, { title: string; specialty: string; maxOdds: number; 
  */
 type Props = { events: NexusEvent[]; target: number; info?: Info; onProgress: (seq: number) => void;
   /** Showcase mode: replays `events` from the start at `speed`, then loops after a pause. */
-  autoplay?: { speed: number; pauseMs: number }; height?: (width: number) => number; className?: string };
-export const AgentMap = forwardRef<AgentMapHandle, Props>(function AgentMap({ events, target, info, onProgress, autoplay, height, className }, ref) {
+  autoplay?: { speed: number; pauseMs: number }; height?: (width: number) => number; className?: string;
+  /** Pitch effects on/off; when absent, the viewer's saved choice (or the system setting) decides. */
+  effects?: boolean | null };
+export const AgentMap = forwardRef<AgentMapHandle, Props>(function AgentMap({ events, target, info, onProgress, autoplay, height, className, effects }, ref) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useRef<MapScene | null>(null);
@@ -26,7 +46,7 @@ export const AgentMap = forwardRef<AgentMapHandle, Props>(function AgentMap({ ev
   useEffect(() => {
     const c = canvas.current!; const w = wrap.current!;
     const s = new MapScene(c, { onProgress: (seq) => { progress.current = seq; }, onAgentHover: setHover });
-    s.reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    s.reducedMotion = !(effects ?? readEffectsPref());
     s.setTarget(target);
     scene.current = s;
     const size = () => { const width = w.clientWidth; const h = height ? height(width) : width < 640 ? Math.min(1100, Math.max(760, width * 2.5)) : Math.min(600, Math.max(380, width * 0.52)); s.resize(width, h); };
@@ -52,6 +72,8 @@ export const AgentMap = forwardRef<AgentMapHandle, Props>(function AgentMap({ ev
     return () => { ro.disconnect(); io.disconnect(); clearInterval(tick); if (loop) clearInterval(loop); s.destroy(); scene.current = null; fed.current = 0; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => { if (scene.current && effects != null) scene.current.reducedMotion = !effects; }, [effects]);
 
   useEffect(() => {
     const s = scene.current; if (!s || autoplay) return;

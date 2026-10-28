@@ -5,11 +5,11 @@ import { CreatorBadge } from '@/components/ticket-archive';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Pause, Play, WifiOff } from 'lucide-react';
+import { Pause, Play, Sparkles, WifiOff } from 'lucide-react';
 import { api } from '@/lib/format';
 import type { NexusEvent } from '@/lib/nexus-state';
 import { TERMINAL, useJobEvents, type JobMeta } from '../use-job-events';
-import { AgentMap, type AgentMapHandle } from './agent-map';
+import { AgentMap, useMapEffects, type AgentMapHandle } from './agent-map';
 import { DebateChat } from './debate-chat';
 
 type Info = Record<string, { title: string; specialty: string; maxOdds: number; minProbability: number; model?: string | null }>;
@@ -32,6 +32,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
   }, [openTicketWhenDone, done, meta.ticketId, router]);
   useEffect(() => { if (replayOnOpen) { const t = setTimeout(() => map.current?.replay(2.5), 400); return () => clearTimeout(t); } }, [replayOnOpen]);
 
+  const fx = useMapEffects();
   async function resume() { await api(`/api/jobs/${jobId}/resume`, { method: 'POST' }).catch(() => {}); setMeta({ ...meta, status: 'QUEUED' }); }
 
   return (
@@ -54,10 +55,16 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
           {meta.mine === false ? <span className="text-xs text-muted">Doar cel care a creat analiza o poate relua.</span> : <button onClick={resume} className="btn btn-primary px-5 py-3">CONTINUĂ ANALIZA</button>}
         </div>
       )}
-      <AgentMap ref={map} events={events} target={meta.target} info={info} onProgress={onProgress} />
+      <AgentMap ref={map} events={events} target={meta.target} info={info} onProgress={onProgress} effects={fx.on} />
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
         <span>Așezați în teren după risc: prudenții în apărare, vânătorii de cote în atac. GPT-6 Luna Pro (portar) e creierul care alege pronosticul final.</span>
         {behind ? <span className="chip text-cyan">harta redă discuția…</span> : null}
+        {fx.on !== null && (
+          <button type="button" onClick={() => fx.set(!fx.on)} aria-pressed={fx.on} className={`chip ml-auto ${fx.on ? 'text-emerald' : 'text-gold'}`}
+            title={fx.system ? 'Sistemul tău cere animații reduse („Reduce motion”); poți porni efectele doar pentru PRIMUL 11.' : undefined}>
+            <Sparkles size={12} aria-hidden />{fx.on ? 'Efecte pornite' : fx.system ? 'Pornește efectele (animații reduse de sistem)' : 'Pornește efectele'}
+          </button>
+        )}
       </div>
       {done && meta.ticketId && (
         <div className="card flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
