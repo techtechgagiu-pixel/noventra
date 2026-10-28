@@ -8,6 +8,7 @@ import { finalizeTicket, type SavedLeg } from './finalize-ticket';
 import { type Prediction, type Revision, AGENTS, BRAIN_AGENT_ID, BRAIN_SCHEMA_TEXT, BRAIN_SYSTEM, BrainOutputSchema, DEBATE_SCHEMA_TEXT, DebateOutputSchema, INITIAL_SCHEMA_TEXT, InitialOutputSchema, SCOUT_SCHEMA_TEXT, ScoutOutputSchema, VOTING_AGENTS, agentById, systemPrompt, type AgentDefinition } from '../ai/agents';
 import { activeAssignments } from '../ai/assignments';
 import { BudgetExceededError, RateLimitError, providerConfigured, structuredCall } from '../ai/router';
+import { assertSportsQuota } from '../sports/http';
 import { optimizeTicket, type Candidate } from '../optimizer';
 import { buildDossier } from '../scout/dossier';
 import { teamHistory } from '../scout/history';
@@ -222,6 +223,9 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
     await recordEvent(job.id, { type: 'BATCH_STARTED', stage: 'SCOUT', payload: { batch: cp.batchIndex + 1, of: cp.batches.length, fixtures: ids } });
     await recordEvent(job.id, { type: 'SCOUT_STARTED', stage: 'SCOUT', payload: { message: 'SCOUT analizează statisticile meciurilor anterioare.', mode: 'statistics', fixtures: ids.length } });
     const existing = new Set((await batchSnapshots(job, ids)).map((s) => s.fixture.id));
+    // No data, no analysis (28.10: the ESPN cap was reached and agents got empty dossiers, so everything became NO BET).
+    // Pause instead; the job resumes on its own once requests are allowed again.
+    if (ids.some((id) => !existing.has(id) && id.startsWith('espn:'))) await assertSportsQuota('espn');
     // Fixtures of a batch are prepared in parallel (history, standings, news are independent).
     await Promise.all(ids.filter((id) => !existing.has(id)).map(async (id) => {
       const stored = await fixtureFromDb(id);

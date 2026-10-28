@@ -13,7 +13,7 @@ import { transitionD1Job } from './job-mutations';
  */
 export const MAX_AUTO_RESUMES = 24; // "never stuck unless there is no money": quota pauses keep resuming for 3 days
 export const MAX_COMPLETIONS = 3;
-const QUOTA = /cota zilnic|plafon|buget|budget|epuizat|limita ai zilnic|limita pentru azi|credite/i;
+const QUOTA = /cota zilnic|plafon|buget|budget|epuizat|limita ai zilnic|limita zilnică de cereri|limita pentru azi|credite/i;
 const RESERVE_COUNT = 7; // free reserve models (router.RESERVE_MODELS)
 
 type Row = { id: string; user_id: string; config: string | Record<string, unknown>; last_error: string | null; updated_at: string; last_event_seq: number };

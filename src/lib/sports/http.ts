@@ -30,6 +30,12 @@ async function acquire(provider: string) {
   return () => { g.active--; g.queue.shift()?.(); };
 }
 
+/** Throws QuotaExceededError when today's request cap for a sports source is used up. */
+export async function assertSportsQuota(provider: string) {
+  const usage = await providerUsageToday(provider).catch(() => ({ requests: 0 }));
+  if (usage.requests >= config.limits.sportsDailyRequests) throw new QuotaExceededError(provider);
+}
+
 /** Counted, cached, de-duplicated JSON/text GET for public sports sources. */
 export async function sportsGet<T = unknown>(url: string, opts: { provider: string; ttlMs: number; as?: 'json' | 'text'; timeoutMs?: number }): Promise<T> {
   const key = `${opts.as ?? 'json'}:${url}`;
