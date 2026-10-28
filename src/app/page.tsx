@@ -94,6 +94,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
           </nav>
           <div className="ml-auto flex items-center gap-3 md:ml-2">
             {user.role === 'admin' ? <Link href="/admin/invitations" className="text-xs text-muted hover:text-text" title="Conturi și coduri de acces">Conturi</Link> : canSeeAccounts(user) && <Link href="/conturi" className="text-xs text-muted hover:text-text" title="Cine s-a conectat cu Google">Conturi</Link>}
+            {canSeeAccounts(user) && <Link href="/cote" className="text-xs text-muted hover:text-text" title="Import cote Stake">Cote</Link>}
             {user.role === 'admin' && <Link href="/admin/feedback" className="text-xs text-muted hover:text-text" title="Ideile trimise de utilizatori">Sugestii</Link>}
             <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
           </div>

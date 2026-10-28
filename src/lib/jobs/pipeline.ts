@@ -22,6 +22,7 @@ import { localDate, yyyymmdd } from '../time';
 import { agentFacts, characterViolation, isBannedMarket, factsForAgent, consensus, contested, setVoteWeights, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
 import { agentTrackRecord, trackRecordText } from '../track-record';
 import { withTheOddsPrices } from '../sports/the-odds-prices';
+import { IMPORT_SOURCE, withImportedPrices } from '../sports/imported-prices';
 import { cachedCalibrations, calibrated, calibrationText, loadCalibrations } from '../calibration';
 import { cachedCoaching, coachedAgent, coachingText, loadCoaching } from '../coaching';
 import { loadVoteWeights } from '../vote-weights';
@@ -103,7 +104,7 @@ async function discover(job: JobRow) {
       const full = await withExtraMarkets(f).catch(() => f);
       const count = (full.odds?.markets ?? []).filter((m) => !isBannedMarket(m.key)).length;
       // Prices from The Odds API cover only 1X2 and goal totals: enough for analysis, judged on that smaller menu.
-      return f.odds?.source === 'the-odds-api' && count >= 4 ? Number.POSITIVE_INFINITY : count;
+      return (f.odds?.source === 'the-odds-api' || f.odds?.source === IMPORT_SOURCE) && count >= 4 ? Number.POSITIVE_INFINITY : count;
     }));
     chunk.forEach((e, k) => {
       if (counts[k] >= config.limits.minMarkets) { if (prioritized.length < job.config.maxFixtures) prioritized.push(e); }
@@ -173,7 +174,7 @@ async function batchSnapshots(job: JobRow, ids: string[]): Promise<FixtureSnapsh
 async function fixtureFromDb(id: string): Promise<Fixture | null> {
   const r = await one<Record<string, unknown>>(`SELECT f.*, l.name AS league_name, l.country, l.provider_key FROM fixtures f JOIN leagues l ON l.id=f.league_id WHERE f.id=$1`, [id]);
   if (!r) return null;
-  const odds = await one<{ bookmaker: string; source: string; markets: unknown; observed_at: Date; provider_updated_at: Date | null }>('SELECT bookmaker, source, markets, observed_at, provider_updated_at FROM odds_snapshots WHERE fixture_id=$1 ORDER BY observed_at DESC LIMIT 1', [id]);
+  const odds = await one<{ bookmaker: string; source: string; markets: unknown; observed_at: Date; provider_updated_at: Date | null }>('SELECT bookmaker, source, markets, observed_at, provider_updated_at FROM odds_snapshots WHERE fixture_id=$1 ORDER BY id DESC LIMIT 1', [id]);
   return {
     id: r.id as string, provider: r.provider as Fixture['provider'], providerId: r.provider_id as string, leagueId: r.league_id as string, leagueKey: r.provider_key as string, leagueName: r.league_name as string, country: r.country as string,
     home: r.home_team as string, away: r.away_team as string, homeTeamId: (r.home_team_id as string) ?? undefined, awayTeamId: (r.away_team_id as string) ?? undefined,
@@ -203,7 +204,8 @@ async function freshFixture(f: Fixture): Promise<Fixture | null> {
     if (listed) break;
   }
   // Same price sources as at analysis time: cached The Odds API prices (main) + ESPN (background), no new credits.
-  const found = listed ? (await withTheOddsPrices([listed], { fetchAllowed: false }).catch(() => [listed]))[0] : listed;
+  const odds = listed ? (await withTheOddsPrices([listed], { fetchAllowed: false }).catch(() => [listed]))[0] : listed;
+  const found = odds ? (await withImportedPrices([odds]).catch(() => [odds]))[0] : odds;
   if (found) await persistFixtures([found]);
   return found ? withExtraMarkets(found) : null;
 }
@@ -728,7 +730,7 @@ async function tryOptimize(job: JobRow) {
 }
 
 /** The Odds API prices are refreshed every 3 days and accepted for 4 (owner decision 28.10); ESPN prices for 3 hours. */
-const maxOddsAgeMinutes = (source: string | null | undefined) => source === 'the-odds-api' ? config.limits.oddsApiMaxAgeMinutes : config.limits.oddsMaxAgeMinutes;
+const maxOddsAgeMinutes = (source: string | null | undefined) => source === 'the-odds-api' ? config.limits.oddsApiMaxAgeMinutes : source === IMPORT_SOURCE ? config.limits.importedOddsMaxAgeMinutes : config.limits.oddsMaxAgeMinutes;
 
 /** How many times a custom ticket keeps searching new matches on its own before it may end incomplete. */
 export const MAX_INLINE_EXTENSIONS = 4;
