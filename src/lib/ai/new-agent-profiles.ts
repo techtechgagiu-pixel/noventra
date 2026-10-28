@@ -28,7 +28,7 @@ export const NEW_AI_PROFILES = [
     "temperature": 0.15,
     "model": "z-ai/glm-5.3",
     "modelName": "GLM 5.3",
-    "inPerM": 0.079,
+    "inPerM": 0.07,
     "outPerM": 1.4,
     "reasoningEffort": "low"
   },
@@ -82,7 +82,7 @@ export const NEW_AI_PROFILES = [
   },
   {
     "id": "prisma",
-    "name": "Qwen3.8 Max (0902)",
+    "name": "Qwen 3.8 Omni Flash",
     "title": "Interpreta piețelor",
     "specialty": "Sensul exact al piețelor, echipa vizată, repriza și linia de goluri",
     "risk": 40,
@@ -90,11 +90,10 @@ export const NEW_AI_PROFILES = [
     "minProbability": 0.6,
     "accent": "#b8a5f0",
     "temperature": 0.2,
-    "model": "qwen/qwen3.8-max-0902",
-    "modelName": "Qwen3.8 Max (0902)",
-    "inPerM": 2.0,
-    "outPerM": 6.0,
-    "reasoningEffort": "minimal"
+    "model": "qwen/qwen3.8-omni-flash",
+    "modelName": "Qwen 3.8 Omni Flash",
+    "inPerM": 0.15,
+    "outPerM": 0.47
   },
   {
     "id": "mnemos",

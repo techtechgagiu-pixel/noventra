@@ -86,7 +86,7 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
   if (ref.provider === 'openrouter') {
     // Mandatory-reasoning models cannot disable thinking. Use their lowest supported effort,
     // omit reasoning text and leave room for JSON; reasoning still consumes billed output tokens.
-    const effort = NEW_AI_PROFILES.find((a) => a.model === ref.model)?.reasoningEffort ?? (reasoningRequired.has(ref.model) ? 'low' : undefined);
+    const effort = (NEW_AI_PROFILES.find((a) => a.model === ref.model) as { reasoningEffort?: string } | undefined)?.reasoningEffort ?? (reasoningRequired.has(ref.model) ? 'low' : undefined);
     body.reasoning = effort ? { effort, exclude: true } : { enabled: false };
     body.max_completion_tokens = Math.min(8000, Math.max(Number(body.max_completion_tokens) || 0, 4000));
   }

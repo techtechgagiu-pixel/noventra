@@ -12,7 +12,8 @@ const MODEL_NAMES: Record<string, string> = {
   'grok-4.3': 'Grok 4.3', 'mistral-medium-3.1': 'Mistral Medium 3.1', 'kimi-k2.5': 'Kimi K2.5',
   'command-r-08-2024': 'Command R', 'qwen3-235b-a22b-2507': 'Qwen 3 235B', 'seed-2.0-mini': 'Seed 2.0 Mini',
   'solar-pro4': 'Solar Pro 4', 'mercury-3': 'Mercury 3', 'nex-n2.5-pro': 'NEX N2.5 Pro',
-  'ling-3.1-flash': 'Ling 3.1 Flash', 'deepseek-v4-pro': 'DeepSeek V4 Pro', 'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
+  'ling-3.1-flash': 'Ling 3.1 Flash', 'deepseek-v4-pro': 'DeepSeek V4 Pro', 'deepseek-v4-flash': 'DeepSeek V4 Flash',
+  'deepseek-v4.1-flash-1017': 'DeepSeek V4.1 Flash 1017', 'solar-mini4': 'Solar Mini 4', 'qwen3.8-omni-flash': 'Qwen 3.8 Omni Flash', 'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
 };
 const PROVIDERS: Record<string, string> = {
   anthropic: 'Anthropic', openai: 'OpenAI', deepseek: 'DeepSeek', xiaomi: 'Xiaomi', 'z-ai': 'Z.ai', qwen: 'Qwen',
