@@ -56,7 +56,7 @@ export async function listTickets(userId: string) {
   const rows = await many<Record<string, unknown> & { creator_id: string; creator_name: string | null; creator_email: string | null; creator_picture: string | null; creator_sub: string | null }>(
     `SELECT t.id, t.slot, ${dialect("to_char(t.period_key,'YYYY-MM-DD')", 't.period_key')} AS period_key, CAST(t.target_odds AS DOUBLE PRECISION) AS target_odds, CAST(t.actual_odds AS DOUBLE PRECISION) AS actual_odds, t.leg_count, t.generation_status, t.outcome_status, t.created_at, t.mixed_bookmakers,
             j.id AS job_id, j.status AS job_status, CAST((SELECT count(*) FROM analysis_events e WHERE e.job_id=j.id) AS INTEGER) AS event_count,
-            COALESCE((SELECT ${dialect('json_agg', 'json_group_array')}(${dialect('json_build_object', 'json_object')}('match', s.snapshot->>'match', 'label', s.market_label, 'market_key', s.market_key, 'model_probability', CAST(s.model_probability AS DOUBLE PRECISION), 'odds', CAST(s.odds AS DOUBLE PRECISION), 'outcome', s.outcome, 'kickoff', s.snapshot->>'kickoff', 'status', f.status, 'home_score', f.home_score, 'away_score', f.away_score) ORDER BY s.position) FROM ticket_selections s LEFT JOIN fixtures f ON f.id=s.fixture_id WHERE s.ticket_id=t.id), '[]') AS selections
+            COALESCE((SELECT ${dialect('json_agg', 'json_group_array')}(${dialect('json_build_object', 'json_object')}('match', s.snapshot->>'match', 'label', s.market_label, 'market_key', s.market_key, 'model_probability', CAST(s.model_probability AS DOUBLE PRECISION), 'odds', CAST(s.odds AS DOUBLE PRECISION), 'outcome', s.outcome, 'kickoff', s.snapshot->>'kickoff', 'status', f.status, 'home_score', f.home_score, 'away_score', f.away_score, 'clock', f.live_clock, 'score_at', f.source_observed_at) ORDER BY s.position) FROM ticket_selections s LEFT JOIN fixtures f ON f.id=s.fixture_id WHERE s.ticket_id=t.id), '[]') AS selections
             , ${CREATOR_COLS}
      FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id JOIN users u ON u.id=t.user_id WHERE t.hidden_at IS NULL ORDER BY t.created_at DESC`,
   );
@@ -74,7 +74,7 @@ export async function ticketDetail(userId: string, ticketId: string) {
   if (!t) return null;
   const selections = await many<Record<string, unknown>>(
     `SELECT s.position, s.fixture_id, s.market_key, s.market_label, CAST(s.odds AS DOUBLE PRECISION) AS odds, s.bookmaker, s.quote_observed_at, s.votes_for, CAST(s.model_probability AS DOUBLE PRECISION) AS model_probability, s.risk, s.snapshot, s.outcome,
-            f.home_score, f.away_score, f.status AS fixture_status
+            f.home_score, f.away_score, f.status AS fixture_status, f.live_clock, f.source_observed_at AS score_at
      FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE s.ticket_id=$1 ORDER BY s.position`,
     [ticketId],
   );

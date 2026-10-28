@@ -30,6 +30,18 @@ function mapStatus(type: Obj): FixtureStatus {
   return 'pre';
 }
 
+/** Match clock as ESPN shows it when the score was read: "67'", "45'+2'", "Pauză". Null outside play. */
+export function liveClock(status: Obj): string | null {
+  const type = obj(status.type);
+  if (str(type.state) !== 'in') return null;
+  const name = (str(type.name) || '').toUpperCase();
+  if (name.includes('HALFTIME')) return 'Pauză';
+  if (name.includes('PENALT') || name.includes('SHOOTOUT')) return 'Penalty-uri';
+  const clock = str(status.displayClock) || str(type.shortDetail) || '';
+  if (!/\d/.test(clock)) return null;
+  return /['’]$/.test(clock) ? clock.replace(/’/g, "'") : `${clock}'`;
+}
+
 const sideLine = (side: Obj) => obj(side.close).odds ?? obj(side.open).odds;
 
 /** Parses ESPN's embedded bookmaker odds (DraftKings in the soccer feed) without altering prices. */
@@ -88,7 +100,7 @@ export function parseScoreboardEvent(raw: unknown, league: League, observedAt: s
   return {
     id: `espn:${id}`, provider: 'espn', providerId: id, leagueId: league.id, leagueKey: league.providerKey, leagueName: league.name, country: league.country,
     home, away, homeTeamId: str(ht.id), awayTeamId: str(at.id), homeLogo: str(ht.logo), awayLogo: str(at.logo),
-    kickoff: new Date(date).toISOString(), status,
+    kickoff: new Date(date).toISOString(), status, clock: liveClock(obj(c.status)),
     homeScore: status === 'pre' ? null : numOrNull(h.score), awayScore: status === 'pre' ? null : numOrNull(a.score),
     odds: status === 'pre' ? parseEspnOdds(c.odds, home, away, observedAt) : null,
     fetchedAt: observedAt,

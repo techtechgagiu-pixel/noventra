@@ -5,12 +5,14 @@ import { AlertTriangle, Check, ClipboardCopy, Download, History, ListChecks, Pla
 import { shareTicketImage } from '@/lib/share-image';
 import { AGENT_META, OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
 import { superbetPick } from '@/lib/superbet-format';
+
+const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
 import { FinishIncompleteTicket } from './finish-incomplete-ticket';
 import { CreatorBadge } from '@/components/ticket-archive';
 import type { IncompletePick } from '@/lib/incomplete-ticket-picks';
 import type { Creator } from '@/lib/views';
 
-type Sel = { position: number; fixture_id: string; market_key: string; market_label: string; odds: number; bookmaker: string; quote_observed_at: string; votes_for: number; model_probability: number | null; risk: string; snapshot: { match: string; home: string; away: string; league: string; kickoff: string; source: string }; outcome: string; home_score: number | null; away_score: number | null };
+type Sel = { position: number; fixture_id: string; market_key: string; market_label: string; odds: number; bookmaker: string; quote_observed_at: string; votes_for: number; model_probability: number | null; risk: string; snapshot: { match: string; home: string; away: string; league: string; kickoff: string; source: string }; outcome: string; home_score: number | null; away_score: number | null; fixture_status?: string | null; live_clock?: string | null; score_at?: string | null };
 export type TicketData = {
   id: string; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string; creator?: Creator; mine?: boolean;
   summary: { completion?: { requestedAt: string; attempt: number }; review?: { legs: Array<{ fixtureId: string; match: string; label: string; odds: number; verdict: 'SOLID' | 'RISCANT' | 'SLAB' | 'NEANALIZAT'; supporters: string[]; responded: number; engineProbability: number | null; suggestion: { label: string; odds: number; supporters: number } | null; note: string }>; overall: string; advice: string[]; chance: number | null; model: string | null; userAdvice: string | null; solid: number; risky: number; weak: number }; digest?: { lines: string[]; source: 'ai' | 'data'; model: string | null; createdAt: string }; agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
@@ -104,7 +106,8 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
               <li key={s.position} className={`grid gap-2 border-l-4 p-5 md:grid-cols-[1fr_auto] md:items-center ${s.outcome === 'WON' ? 'border-l-emerald bg-emerald/10' : s.outcome === 'LOST' ? 'border-l-rose bg-rose/10' : 'border-l-transparent'}`}>
                 <div>
                   <p className="text-xs text-muted">{s.snapshot.league} · {fmtDateTime(s.snapshot.kickoff)}</p>
-                  <p className="font-display text-2xl font-bold leading-tight">{s.snapshot.home} <span className="font-medium text-muted">vs</span> {s.snapshot.away}{s.home_score != null && s.outcome !== 'PENDING' && <span className="ml-2 text-sm text-muted">({s.home_score}–{s.away_score})</span>}</p>
+                  <p className="font-display text-2xl font-bold leading-tight">{s.snapshot.home} <span className="font-medium text-muted">vs</span> {s.snapshot.away}{s.home_score != null && s.outcome !== 'PENDING' ? <span className="ml-2 text-sm text-muted">({s.home_score}–{s.away_score})</span>
+                    : s.home_score != null && s.fixture_status === 'in' && <span className="ml-2 align-middle text-sm font-semibold text-gold">LIVE {s.home_score}–{s.away_score}{s.live_clock ? ` · ${s.live_clock}` : ''}{s.score_at && <span className="ml-1 font-normal text-muted">(actualizat {fmtTime(s.score_at)})</span>}</span>}</p>
                   <p className="mt-1 text-sm"><span className="font-semibold text-cyan">{s.market_label}</span> <span className="text-muted">· {s.market_key}</span></p>
                   {(() => { const p = superbetPick(s.market_key, s.snapshot.home, s.snapshot.away); return <p className="text-xs text-muted">Pe Superbet: <span className="text-text">{p.market} → {p.pick}</span>{p.note ? ` (${p.note})` : ''}</p>; })()}
                   {(() => { const rv = t.summary.review?.legs.find((l) => l.fixtureId === s.fixture_id); return rv ? <p className="mt-1 text-xs"><span className={`chip mr-2 font-bold ${VERDICT[rv.verdict].c}`}>{VERDICT[rv.verdict].t}</span><span className="text-muted">{rv.note}</span></p> : null; })()}

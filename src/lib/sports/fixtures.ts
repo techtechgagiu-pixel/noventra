@@ -63,17 +63,17 @@ export async function persistFixtures(fixtures: Fixture[]) {
   const writes:import('../d1/client').Statement[]=[];
   const write=isD1()?async(text:string,params:unknown[])=>{writes.push({text,params});}:query;
   for (const f of fixtures) {
-    const contentHash = hash([f.home, f.away, f.kickoff, f.status, f.homeScore, f.awayScore]);
+    const contentHash = hash([f.home, f.away, f.kickoff, f.status, f.homeScore, f.awayScore, f.clock ?? null]);
     await write(
-      `INSERT INTO fixtures (id, provider, provider_id, league_id, home_team, away_team, home_team_id, away_team_id, home_logo, away_logo, kickoff_utc, status, home_score, away_score, content_hash, source_observed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+      `INSERT INTO fixtures (id, provider, provider_id, league_id, home_team, away_team, home_team_id, away_team_id, home_logo, away_logo, kickoff_utc, status, home_score, away_score, content_hash, source_observed_at, live_clock)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        ON CONFLICT (id) DO UPDATE SET home_team=EXCLUDED.home_team, away_team=EXCLUDED.away_team, kickoff_utc=EXCLUDED.kickoff_utc,
-         status=EXCLUDED.status, home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, content_hash=EXCLUDED.content_hash, source_observed_at=EXCLUDED.source_observed_at,
+         status=EXCLUDED.status, home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, content_hash=EXCLUDED.content_hash, source_observed_at=EXCLUDED.source_observed_at, live_clock=EXCLUDED.live_clock,
          updated_at=CASE WHEN fixtures.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN ${SQL_NOW()} ELSE fixtures.updated_at END
        WHERE (fixtures.source_observed_at IS NULL OR EXCLUDED.source_observed_at>=fixtures.source_observed_at)
          AND NOT (fixtures.status='post' AND EXCLUDED.status IN ('pre','in'))
          ${isD1()? 'AND fixtures.content_hash IS DISTINCT FROM EXCLUDED.content_hash':''}`,
-      [f.id, f.provider, f.providerId, f.leagueId, f.home, f.away, f.homeTeamId ?? null, f.awayTeamId ?? null, f.homeLogo ?? null, f.awayLogo ?? null, f.kickoff, f.status, f.homeScore ?? null, f.awayScore ?? null, contentHash, f.fetchedAt],
+      [f.id, f.provider, f.providerId, f.leagueId, f.home, f.away, f.homeTeamId ?? null, f.awayTeamId ?? null, f.homeLogo ?? null, f.awayLogo ?? null, f.kickoff, f.status, f.homeScore ?? null, f.awayScore ?? null, contentHash, f.fetchedAt, f.clock ?? null],
     );
     if (f.odds) {
       const oddsHash = hash([f.odds.bookmaker, f.odds.markets]);

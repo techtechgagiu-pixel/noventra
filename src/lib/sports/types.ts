@@ -39,6 +39,8 @@ export type Fixture = {
   status: FixtureStatus;
   homeScore?: number | null;
   awayScore?: number | null;
+  /** Match minute when the score was read ("67'", "Pauză"); only while the match is in play. */
+  clock?: string | null;
   odds: OddsSnapshot | null;
   fetchedAt: string;
 };
