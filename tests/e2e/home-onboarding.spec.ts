@@ -9,7 +9,7 @@ test('first visit explains AI debate and reaches a compact Custom form without s
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Biletul tău începe cu o dezbatere.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agenții dezbat. Tu primești biletul.' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Fragment real din dezbatere' })).toBeVisible();
   await expect(page.getByText('mercury-3', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Contradicție', exact: true }).click();
@@ -17,7 +17,8 @@ test('first visit explains AI debate and reaches a compact Custom form without s
   await page.getByRole('button', { name: 'Decizie', exact: true }).click();
   await expect(page.getByText(/Consens 4\/7\. Intră pe bilet/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole('link', { name: 'Creează bilet custom', exact: true }).first().click();
+  await expect(page.getByRole('main').getByRole('link', { name: 'Intră cu Google' }).first()).toHaveAttribute('href', '/auth/google');
+  await page.getByRole('link', { name: 'Am un cod de acces', exact: true }).first().click();
   await expect(page).toHaveURL(/login\?next=custom/);
   await expect(page.getByRole('link', { name: 'Continuă cu Google' })).toHaveAttribute('href', '/auth/google?next=custom');
   await page.getByText('Am un cod de acces (administrator sau invitație)').click();

@@ -1,2 +1,14 @@
+# Link-preview bots may read pages so shared links show the preview card.
+# Search engines stay out (pages also carry noindex).
+User-agent: facebookexternalhit
+User-agent: Facebot
+User-agent: Twitterbot
+User-agent: LinkedInBot
+User-agent: WhatsApp
+User-agent: TelegramBot
+User-agent: Slackbot-LinkExpanding
+User-agent: Discordbot
+Allow: /
+
 User-agent: *
 Disallow: /
