@@ -353,7 +353,14 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
     const res = round === 0
       ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user, temperature: agent.temperature, maxOutputTokens: Math.min(config.limits.maxOutputTokens, 320 * snaps.length + 250) }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL' } })
       : await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: DebateOutputSchema, input: { system: systemPrompt(agent), user, temperature: agent.temperature, maxOutputTokens: Math.min(config.limits.maxOutputTokens, 300 * snaps.length + 300) }, log: { jobId: job.id, agentId: agent.id, stage: `DEBATE${round}` } });
-    let items: Array<Prediction | Revision> = 'predictions' in res.data ? res.data.predictions : res.data.revisions;
+    // Some models answer "1" for "espn:1": map the id back when exactly one fixture of this batch ends that way.
+    const canon = <T extends { fixtureId: string }>(p: T): T => {
+      if (snaps.some((x) => x.fixture.id === p.fixtureId)) return p;
+      const tail = String(p.fixtureId).split(':').pop();
+      const hits = snaps.filter((x) => x.fixture.id.split(':').pop() === tail);
+      return hits.length === 1 ? { ...p, fixtureId: hits[0].fixture.id } : p;
+    };
+    let items: Array<Prediction | Revision> = ('predictions' in res.data ? res.data.predictions : res.data.revisions as Array<Prediction | Revision>).map((p) => canon(p));
     // Which call (and therefore which model) produced each answer: a retry may be served by the fallback model,
     // and statistics must credit the model that actually answered, not the first call's model.
     const source = new Map(items.map((p) => [p.fixtureId, { provider: res.provider, model: res.model, requested: res.requestedModel, usedFallback: res.usedFallback }]));
@@ -366,6 +373,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
           ? await structuredCall({ primary: assignment.primary, fallback: assignment.fallback, schema: InitialOutputSchema, input: { system: systemPrompt(agent), user: `Analizează independent fiecare meci. Bilet: ${ticketBrief(job, policy)}\nSchema răspunsului: ${INITIAL_SCHEMA_TEXT}\nMeciuri (${subset.length}):\n${JSON.stringify(subset)}`, temperature: agent.temperature, maxOutputTokens: 320 * subset.length + 250 }, log: { jobId: job.id, agentId: agent.id, stage: 'INITIAL_RETRY' } })
           : null;
         if (retry) {
+          retry.data.predictions = retry.data.predictions.map(canon);
           for (const p of retry.data.predictions) if (!source.has(p.fixtureId)) source.set(p.fixtureId, { provider: retry.provider, model: retry.model, requested: retry.requestedModel, usedFallback: retry.usedFallback });
           items = [...items, ...retry.data.predictions];
         }
