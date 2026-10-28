@@ -266,11 +266,36 @@ export const PredictionSchema = z.object({
   alternatives: z.preprocess((v) => (Array.isArray(v) ? v.filter((a) => a && typeof a === 'object' && typeof (a as { marketKey?: unknown }).marketKey === 'string' && (a as { marketKey: string }).marketKey.trim()).slice(0, 3) : []),
     z.array(z.object({ marketKey: z.string(), estimatedProbability: probability, reason: text(300) })).max(3)).default([]),
 });
-const wrap = (key: string) => (v: unknown) => {
-  const shaped = Array.isArray(v) ? { [key]: v } : v && typeof v === 'object' && !(key in (v as object)) && 'fixtureId' in (v as object) ? { [key]: [v] } : v;
-  return shaped && typeof shaped === 'object' && Array.isArray((shaped as Record<string, unknown>)[key]) ? { ...(shaped as object), [key]: objects((shaped as Record<string, unknown>)[key]) } : shaped;
+/** Same field under another common name (fixture_id, market_key…): only the NAME changes, never the value. */
+const ALIASES: Record<string, string[]> = {
+  fixtureId: ['fixture_id', 'fixtureID', 'fixture', 'id', 'matchId', 'match_id'],
+  marketKey: ['market_key', 'market', 'key', 'pick'],
+  estimatedProbability: ['estimated_probability', 'probability', 'prob'],
 };
-export const InitialOutputSchema = z.preprocess(wrap('predictions'), z.object({ predictions: z.array(PredictionSchema).min(1) }));
+const aliased = (x: unknown) => {
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return x;
+  const o = { ...(x as Record<string, unknown>) };
+  for (const [field, names] of Object.entries(ALIASES)) {
+    if (o[field] !== undefined && o[field] !== null) continue;
+    const alt = names.find((n) => o[n] !== undefined && o[n] !== null && typeof o[n] !== 'object');
+    if (alt) o[field] = o[alt];
+  }
+  return o;
+};
+/**
+ * Token economy: one malformed element (a missing fixtureId, an unknown decision) no longer throws away the whole,
+ * already-paid answer. Valid elements are kept; the fixtures that lost theirs are asked again on their own
+ * (INITIAL_RETRY), so nothing is guessed. `item` is the element schema; when given, invalid elements are dropped.
+ */
+const wrap = (key: string, item?: z.ZodTypeAny) => (v: unknown) => {
+  const shaped = Array.isArray(v) ? { [key]: v } : v && typeof v === 'object' && !(key in (v as object)) && ('fixtureId' in (v as object) || 'fixture_id' in (v as object)) ? { [key]: [v] } : v;
+  if (!shaped || typeof shaped !== 'object' || !Array.isArray((shaped as Record<string, unknown>)[key])) return shaped;
+  const list = (objects((shaped as Record<string, unknown>)[key]) as unknown[]).map(aliased);
+  const valid = item ? list.filter((x) => item.safeParse(x).success) : list;
+  // If nothing is valid, keep the original list so the error message still says what was wrong.
+  return { ...(shaped as object), [key]: valid.length ? valid : list };
+};
+export const InitialOutputSchema = z.preprocess(wrap('predictions', PredictionSchema), z.object({ predictions: z.array(PredictionSchema).min(1) }));
 export type Prediction = z.infer<typeof PredictionSchema>;
 
 export const RevisionSchema = z.object({
@@ -285,7 +310,7 @@ export const RevisionSchema = z.object({
   response: text(600),
   rationale: text(900),
 });
-export const DebateOutputSchema = z.preprocess(wrap('revisions'), z.object({ revisions: z.array(RevisionSchema).min(1) }));
+export const DebateOutputSchema = z.preprocess(wrap('revisions', RevisionSchema), z.object({ revisions: z.array(RevisionSchema).min(1) }));
 export type Revision = z.infer<typeof RevisionSchema>;
 
 export const ScoutOutputSchema = z.preprocess(wrap('fixtures'), z.object({
