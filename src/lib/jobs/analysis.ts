@@ -131,13 +131,15 @@ export function consensus(positions: FinalPosition[], threshold: number, totalAg
  */
 export function characterViolation(
   p: FinalPosition,
-  agent: { name: string; maxOdds: number; minProbability: number },
+  agent: { name: string; maxOdds: number; minProbability: number; blockedFamilies?: string[] },
   policy: { minOdds: number; maxOdds: number; minProbability: number; agentCapBonus?: number },
   market: { odds: number; estimatedProbability: number | null } | undefined,
 ): string | null {
   if (p.decision !== 'BET_CANDIDATE' || !p.marketKey) return null;
   if (!market) return 'piața nu există în cotele observate';
   if (isBannedMarket(p.marketKey)) return 'pronosticurile „sub” sunt interzise';
+  const family = p.marketKey.split(':')[0];
+  if (agent.blockedFamilies?.includes(family)) return `${agent.name} este în antrenament: tipul de pariu ${family} îi este închis (pierdea des pe el)`;
   const cap = Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds);
   if (market.odds > cap + 1e-9) return `cota ${market.odds.toFixed(2)} depășește limita ${cap.toFixed(2)} (${agent.name} max ${agent.maxOdds.toFixed(2)}, bilet max ${policy.maxOdds.toFixed(2)})`;
   if (market.odds < policy.minOdds - 1e-9) return `cota ${market.odds.toFixed(2)} este sub minimul biletului (${policy.minOdds.toFixed(2)})`;

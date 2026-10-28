@@ -7,7 +7,7 @@ import type { ModelRef } from './router';
 export type VotingAgentId = 'victor' | 'andrei' | 'mihai' | 'alex' | 'diana' | 'robert' | 'ioana' | 'radu' | 'elena' | 'cosmin' | 'hantu' | 'becali' | 'ilie' | 'sumudica' | 'petrescu' | 'stoica' | 'prunea' | 'porumboiu' | 'ianis' | 'dragusin' | 'man' | 'tamas' | NewAiAgentId;
 export type AgentId = VotingAgentId | 'scout' | 'corina';
 
-export const PROMPT_VERSION = 'v5.4-research-brief';
+export const PROMPT_VERSION = 'v5.5-coaching';
 
 export type AgentDefinition = {
   id: AgentId;
