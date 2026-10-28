@@ -5,6 +5,7 @@ import { espnLeagueDay, espnMatchDays } from './espn';
 import { lpfFixtures } from './lpf';
 import type { Fixture, League } from './types';
 import { withTheOddsPrices } from './the-odds-prices';
+import { withImportedPrices } from './imported-prices';
 
 export type FixtureProvider = (leagues: League[], days: string[]) => Promise<{ fixtures: Fixture[]; errors: string[] }>;
 
@@ -75,12 +76,14 @@ export async function persistFixtures(fixtures: Fixture[]) {
          ${isD1()? 'AND fixtures.content_hash IS DISTINCT FROM EXCLUDED.content_hash':''}`,
       [f.id, f.provider, f.providerId, f.leagueId, f.home, f.away, f.homeTeamId ?? null, f.awayTeamId ?? null, f.homeLogo ?? null, f.awayLogo ?? null, f.kickoff, f.status, f.homeScore ?? null, f.awayScore ?? null, contentHash, f.fetchedAt, f.clock ?? null],
     );
+    // The current prices of a fixture are its LAST saved snapshot (by id), not the one observed most recently:
+    // merged prices keep the time their main source observed them (The Odds API cache, an imported export).
     if (f.odds) {
       const oddsHash = hash([f.odds.bookmaker, f.odds.markets]);
       await write(
         `INSERT INTO odds_snapshots (fixture_id, bookmaker, source, markets, observed_at, provider_updated_at, content_hash)
          SELECT $1,$2,$3,$4,$5,$6,$7
-         WHERE NOT EXISTS (SELECT 1 FROM (SELECT content_hash FROM odds_snapshots WHERE fixture_id=$1 ORDER BY observed_at DESC LIMIT 1) last WHERE last.content_hash=$7)`,
+         WHERE NOT EXISTS (SELECT 1 FROM (SELECT content_hash FROM odds_snapshots WHERE fixture_id=$1 ORDER BY id DESC LIMIT 1) last WHERE last.content_hash=$7)`,
         [f.id, f.odds.bookmaker, f.odds.source, JSON.stringify(f.odds.markets), f.odds.observedAt, f.odds.providerUpdatedAt, oddsHash],
       );
     }
@@ -102,7 +105,9 @@ export async function loadFixtures(startDate: string, days: number, opts: { top1
   const provided = await activeProvider()(leagues, window);
   const { errors } = provided;
   // Fixtures without any price at ESPN/LPF get The Odds API prices when available (cached, credit-budgeted).
-  const fixtures = g.__bmFixtureOverride ? provided.fixtures : await withTheOddsPrices(provided.fixtures).catch(() => provided.fixtures);
+  const priced = g.__bmFixtureOverride ? provided.fixtures : await withTheOddsPrices(provided.fixtures).catch(() => provided.fixtures);
+  // Odds the owner imported from his Stake export (no network): main prices for 4 days after the export.
+  const fixtures = await withImportedPrices(priced).catch(() => priced);
   if (opts.persist !== false) await persistFixtures(fixtures);
   return { fixtures, errors, leagues, days: window, fetchedAt: new Date().toISOString() };
 }

@@ -40,6 +40,8 @@ export const config = {
     oddsMaxAgeMinutes: num('ODDS_MAX_AGE_MINUTES', 180),
     /** Owner decision 28.10: The Odds API prices are fetched every 3 days and used as they are for up to 4 days. */
     oddsApiMaxAgeMinutes: num('ODDS_API_MAX_AGE_MINUTES', 4 * 24 * 60),
+    /** Odds imported by hand from the owner's Stake export (29.10): used as they are for 4 days after the export. */
+    importedOddsMaxAgeMinutes: num('IMPORTED_ODDS_MAX_AGE_MINUTES', 4 * 24 * 60),
     targetTolerance: num('TARGET_TOLERANCE', 0.15),
   },
   /** DEMO data is only allowed in test runs. Production never substitutes synthetic data. */

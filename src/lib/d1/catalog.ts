@@ -11,7 +11,7 @@ export async function storedCatalog(start=localDate(),count=8) {
     one<{payload:{fetchedAt?:string;errors?:string[]}}>("SELECT payload FROM sports_catalog_cache WHERE provider='espn-catalog'"),
     many<{id:string;provider:Fixture['provider'];provider_id:string;league_id:string;home_team:string;away_team:string;home_team_id:string|null;away_team_id:string|null;home_logo:string|null;away_logo:string|null;kickoff_utc:Date;status:Fixture['status'];home_score:number|null;away_score:number|null;source_observed_at:Date|null;bookmaker:string|null;source:string|null;markets:OddsSnapshot['markets']|null;observed_at:Date|null;provider_updated_at:Date|null}>(
       `SELECT f.*,o.bookmaker,o.source,o.markets,o.observed_at,o.provider_updated_at FROM fixtures f
-       LEFT JOIN odds_snapshots o ON o.id=(SELECT id FROM odds_snapshots WHERE fixture_id=f.id ORDER BY observed_at DESC,id DESC LIMIT 1)
+       LEFT JOIN odds_snapshots o ON o.id=(SELECT id FROM odds_snapshots WHERE fixture_id=f.id ORDER BY id DESC LIMIT 1)
        WHERE f.kickoff_utc >= $1 AND f.kickoff_utc < $2 ORDER BY f.kickoff_utc LIMIT 2000`,
       [localMidnightUtc(start).toISOString().replace('Z','000Z'),localMidnightUtc(addDays(start,count)).toISOString().replace('Z','000Z')]),
   ]);

@@ -119,7 +119,7 @@ export async function matchMarkets(id: string): Promise<{ bookmaker: string | nu
     }
     return { bookmaker: null, observedAt: null, markets: [] };
   }
-  const row = await one<{ bookmaker: string; markets: MarketQuote[] | string; observed_at: Date | string }>('SELECT bookmaker, markets, observed_at FROM odds_snapshots WHERE fixture_id=$1 ORDER BY observed_at DESC, id DESC LIMIT 1', [id]);
+  const row = await one<{ bookmaker: string; markets: MarketQuote[] | string; observed_at: Date | string }>('SELECT bookmaker, markets, observed_at FROM odds_snapshots WHERE fixture_id=$1 ORDER BY id DESC LIMIT 1', [id]);
   if (!row) return { bookmaker: null, observedAt: null, markets: [] };
   const markets = (typeof row.markets === 'string' ? JSON.parse(row.markets) : row.markets) as MarketQuote[];
   return { bookmaker: row.bookmaker, observedAt: new Date(row.observed_at).toISOString(), markets: markets.map((m) => ({ ...m, bookmaker: m.bookmaker ?? row.bookmaker })) };

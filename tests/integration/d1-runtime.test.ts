@@ -30,12 +30,29 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("D1 local test")}}', compatibilityDate: '2026-10-25', d1Databases: ['DB'] }));
     const binding = await mf.getD1Database('DB');
     db = d1Database(binding);
-    for (const file of ['0001_legacy_schema.sql', '0002_agent_configuration.sql', '0003_request_coordination.sql', '0004_league_configuration.sql', '0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0009_feedback.sql','0010_ticket_hidden.sql','0013_perf_indexes.sql','0015_custom_daily_limits.sql','0016_live_clock.sql']) {
+    for (const file of ['0001_legacy_schema.sql', '0002_agent_configuration.sql', '0003_request_coordination.sql', '0004_league_configuration.sql', '0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0009_feedback.sql','0010_ticket_hidden.sql','0013_perf_indexes.sql','0015_custom_daily_limits.sql','0016_live_clock.sql','0017_imported_odds.sql']) {
       const statements = splitSqlScript(await readFile('cloudflare/d1/migrations/' + file, 'utf8'));
       for (let i = 0; i < statements.length; i += 20) await binding.batch(statements.slice(i, i + 20).map(s => binding.prepare(s)));
     }
   });
   afterAll(async () => { await mf?.dispose(); });
+
+  it('imports a Stake export on D1: newest capture wins, past matches dropped, prices merged by name and kickoff', async () => scope(async () => {
+    const { importStakeExport, withImportedPrices, importStatus } = await import('@/lib/sports/imported-prices');
+    const kick = new Date(Date.now() + 30 * 3600_000).toISOString();
+    const exp = (odds: number, at: Date) => ({ meta: { source: 'stake', finished_at: at.toISOString() }, data: { matches: [
+      { source_id: 'd1-s1', starts_at: new Date(kick).toUTCString(), participants: [{ name: 'Toronto' }, { name: 'DC United' }], tournament: { name: 'MLS' },
+        markets: [{ name: '1x2', status: 'active', outcomes: [{ name: 'Toronto', odds, active: true }, { name: 'Draw', odds: 3.4, active: true }, { name: 'DC United', odds: 4.1, active: true }] }] }] } });
+    setFixtureProviderForTests(async () => ({ fixtures: [], errors: [] }));
+    try {
+      expect(await importStakeExport(exp(1.9, new Date(Date.now() - 3600_000)))).toMatchObject({ saved: 1 });
+      await importStakeExport(exp(9, new Date(Date.now() - 7200_000))); // older export: ignored
+      const [f] = await withImportedPrices([{ ...demoFixtures(1)[0], home: 'Toronto FC', away: 'D.C. United', kickoff: kick }]);
+      expect(f.odds).toMatchObject({ source: 'stake-import', bookmaker: 'Stake' });
+      expect(f.odds!.markets.find((m) => m.key === '1X2:HOME')).toMatchObject({ odds: 1.9, label: 'Toronto FC câștigă (1)' });
+      expect(await importStatus()).toMatchObject({ matches: 1, usable: 1 });
+    } finally { setFixtureProviderForTests(null); }
+  }));
 
   it('binds numbered/repeated parameters without altering quoted text', async () => scope(async () => {
     expect(sqliteParameters("SELECT $2, '$1', \"$3\", $1, $2 -- $4\n/* $5 */")).toBe("SELECT ?2, '$1', \"$3\", ?1, ?2 -- $4\n/* $5 */");
