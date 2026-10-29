@@ -25,7 +25,7 @@ describe('authenticated Render → Cloudflare D1 bridge',()=>{
   beforeAll(async()=>{
     mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:'export default {fetch(){return new Response("test")}}',compatibilityDate:'2026-10-25',d1Databases:['DB']}));
     binding=await mf.getD1Database('DB');
-    for(const file of ['0001_legacy_schema.sql','0002_agent_configuration.sql','0003_request_coordination.sql','0004_league_configuration.sql','0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0015_custom_daily_limits.sql','0016_live_clock.sql','0017_imported_odds.sql']){
+    for(const file of ['0001_legacy_schema.sql','0002_agent_configuration.sql','0003_request_coordination.sql','0004_league_configuration.sql','0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0015_custom_daily_limits.sql','0016_live_clock.sql','0017_imported_odds.sql','0018_user_custom_limit.sql']){
       const statements=splitSqlScript(await readFile('cloudflare/d1/migrations/'+file,'utf8'));
       for(let i=0;i<statements.length;i+=20)await binding.batch(statements.slice(i,i+20).map(s=>binding.prepare(s)));
     }
