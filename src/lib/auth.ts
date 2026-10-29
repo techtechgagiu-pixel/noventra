@@ -7,7 +7,9 @@ export const SESSION_COOKIE = 'bm_sid';
 export const OAUTH_COOKIE = 'bm_oauth';
 export const VISITOR_DAYS = 7;
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
-export type User = { id: string; email: string; name: string | null; picture: string | null; role: 'user' | 'admin'; soundEnabled: boolean; soundVolume: number };
+export type User = { id: string; email: string; name: string | null; picture: string | null; role: 'user' | 'admin'; soundEnabled: boolean; soundVolume: number;
+  /** Daily custom-ticket limit set for this account by the owner; null = the default. */
+  customDailyLimit?: number | null };
 export const hashAccessCode = (code: string) => sha256(code.trim().toUpperCase().replace(/[\s-]/g, ''));
 export const newAccessCode = () => `P11-${randomBytes(16).toString('hex').toUpperCase().match(/.{8}/g)!.join('-')}`;
 export const cookieBase = { httpOnly: true, sameSite: 'lax' as const, secure: isProduction || config.appBaseUrl.startsWith('https://'), path: '/' };
@@ -27,8 +29,8 @@ export async function createSession(userId: string, userAgent?: string, access: 
 /** Expiration, revocation and administrator-code rotation take effect on every request. */
 export async function userFromToken(raw: string | undefined): Promise<User | null> {
   if (!raw || raw.length > 100) return null;
-  const r = await one<{ id: string; email: string; name: string | null; picture: string | null; role: 'user' | 'admin'; sound_enabled: boolean; sound_volume: number }>(
-    `SELECT u.id,u.email,u.name,u.picture,
+  const r = await one<{ id: string; email: string; name: string | null; picture: string | null; role: 'user' | 'admin'; sound_enabled: boolean; sound_volume: number; custom_daily_limit: number | null }>(
+    `SELECT u.id,u.email,u.name,u.picture,u.custom_daily_limit,
        CASE WHEN s.owner_code_hash=$2 AND $2<>'' THEN 'admin' WHEN $3 THEN u.role ELSE 'user' END AS role,
        u.sound_enabled,u.sound_volume
      FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN invitation_codes i ON i.id=s.invitation_id
@@ -38,7 +40,7 @@ export async function userFromToken(raw: string | undefined): Promise<User | nul
        (s.google_login AND u.blocked_at IS NULL) OR
        ($3 AND s.invitation_id IS NULL AND s.owner_code_hash IS NULL))`,
     [sha256(raw), config.ownerAccessCodeHash, config.allowDemoProviders]);
-  return r ? { id: r.id, email: r.email, name: r.name, picture: r.picture, role: r.role, soundEnabled: r.sound_enabled, soundVolume: r.sound_volume } : null;
+  return r ? { id: r.id, email: r.email, name: r.name, picture: r.picture, role: r.role, soundEnabled: r.sound_enabled, soundVolume: r.sound_volume, customDailyLimit: r.custom_daily_limit ?? null } : null;
 }
 
 /** Reuses the existing owner's identity and archive, only after verifying the permanent code. */
