@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { csFixture, parseCsMatch } from '@/lib/cs/pandascore';
+import { csFixture, parseCsMatch, reachedStop } from '@/lib/cs/pandascore';
 import { candidateDates, parseStandings, rankingFor } from '@/lib/cs/rankings';
 import { mapWinProbability, modelCsFixture, seriesScores } from '@/lib/cs/model';
 import { parseMarketCatalog, parseOddsBoard, parseOddsFixtures } from '@/lib/cs/oddspapi';
@@ -20,6 +20,14 @@ describe('PandaScore', () => {
     expect(csFixture(m)).toMatchObject({ id: 'ps:1201', provider: 'pandascore', leagueId: 'CS2', home: 'Team Spirit', away: 'Vitality', status: 'post', homeScore: 2, awayScore: 1 });
     expect(csFixture({ ...m, status: 'not_started' })).toMatchObject({ status: 'pre', homeScore: null });
     expect(parseCsMatch({ ...psMatch, opponents: [psMatch.opponents[0]] })).toBeNull();
+  });
+
+  it('keeps paging results past a single row with a stale date', () => {
+    const stop = Date.parse('2026-08-01T00:00:00Z');
+    const recent = Array.from({ length: 99 }, () => ({ beginAt: '2026-10-29T12:00:00.000Z' }));
+    expect(reachedStop([...recent, { beginAt: '2021-01-31T20:00:00.000Z' }], stop)).toBe(false);
+    expect(reachedStop(Array.from({ length: 60 }, () => ({ beginAt: '2026-07-01T00:00:00.000Z' })).concat(recent.slice(0, 40)), stop)).toBe(true);
+    expect(reachedStop([], stop)).toBe(true);
   });
 });
 

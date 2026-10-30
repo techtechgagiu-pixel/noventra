@@ -78,6 +78,16 @@ async function saveMatches(list: CsMatch[]) {
 }
 
 /**
+ * Pure: whether a page of results (newest first) has reached the stop date. Decided by the majority of the page, not by
+ * one row: PandaScore returns the odd finished match with a stale date years back on its first pages (30.10: a match
+ * dated 2021 on page 1 ended the backfill after 99 results).
+ */
+export function reachedStop(list: Array<{ beginAt: string }>, stopAt: number): boolean {
+  if (!list.length) return true;
+  return list.filter((m) => Date.parse(m.beginAt) < stopAt).length * 2 > list.length;
+}
+
+/**
  * Upcoming (next 8 days) and running matches, recent results (incremental; the first run backfills ~90 days for team
  * history), and a direct re-read of site fixtures that should have finished. Free plan: 1,000 requests/hour; one run
  * uses about 5–15 (the first one up to ~45).
@@ -107,7 +117,7 @@ export async function syncCsMatches(now = new Date()) {
     // Finished matches only: the past list also holds cancelled ones, which carry no result.
     const batch = await fetchPage('/csgo/matches/past', { 'filter[status]': 'finished', sort: '-begin_at', per_page: '100', page: String(p) }, 10 * 60_000);
     past.push(...batch.list);
-    if (!batch.full || batch.list.some((m) => Date.parse(m.beginAt) < stopAt)) break;
+    if (!batch.full || reachedStop(batch.list, stopAt)) break;
   }
   // Site fixtures still open after their start: read them by id (results can be late in the paged lists).
   const open = await many<{ provider_id: string }>(`SELECT provider_id FROM fixtures WHERE provider='pandascore' AND status IN ('pre','in') AND kickoff_utc < $1 AND kickoff_utc > $2`,
