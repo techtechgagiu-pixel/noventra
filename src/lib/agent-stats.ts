@@ -3,7 +3,7 @@ import { many, timeCompare, dialect } from './db';
 import { config } from './config';
 import { AGENTS, VOTING_AGENTS } from './ai/agents';
 import { OPENROUTER_MODELS, OPENROUTER_PRICE } from './ai/openrouter-models';
-import { finalAgentPicksCte } from './final-agent-picks';
+import { finalAgentPicksCte, type PickSport } from './final-agent-picks';
 import { activeAssignments } from './ai/assignments';
 import { romanianMonthWindow } from './time';
 import { sameModel } from './calibration';
@@ -30,10 +30,10 @@ const usd = (model: string, provider: string, i: number, o: number) => {
   return (i * p.inPerM + o * p.outPerM) / 1e6;
 };
 
-function loadAgentPicks(userId: string, month: string, scope: 'all' | 'mine', agentId?: string) {
+function loadAgentPicks(userId: string, month: string, scope: 'all' | 'mine', agentId?: string, sport: PickSport = 'football') {
   const window = romanianMonthWindow(month === 'all' ? currentMonth() : month);
   return many<{ id: string; round: number; agent_id: string; decision: string; outcome: string | null; odds: string | null; estimated_probability: string | null; label: string | null; market_key: string | null; home: string; away: string; created_at: Date; model_id: string; fixture_id: string; job_id: string; kickoff_utc: Date; status: string; home_score: number | null; away_score: number | null; league: string }>(
-    `${finalAgentPicksCte(true)}
+    `${finalAgentPicksCte(true, sport)}
      SELECT p.id,p.round,p.agent_id,p.decision,p.outcome,p.odds,p.estimated_probability,p.market_key,p.created_at,p.model_id,p.fixture_id,p.job_id,
             p.payload->>'marketLabel' AS label, f.home_team AS home, f.away_team AS away,
             f.kickoff_utc, f.status, f.home_score, f.away_score, l.name AS league
@@ -45,8 +45,8 @@ function loadAgentPicks(userId: string, month: string, scope: 'all' | 'mine', ag
 
 const historyOf = (rows: Awaited<ReturnType<typeof loadAgentPicks>>): AgentStat['recent'] => rows.map((p) => ({ predictionId: String(p.id), decision: p.decision, round: p.round, model: p.model_id, fixtureId: p.fixture_id, jobId: p.job_id, match: `${p.home} – ${p.away}`, league: p.league, label: p.label ?? p.market_key ?? '', odds: p.odds === null ? null : Number(p.odds), outcome: p.outcome, at: p.created_at.toISOString(), kickoff: p.kickoff_utc.toISOString(), status: p.status, score: p.home_score !== null && p.away_score !== null ? `${p.home_score}–${p.away_score}` : null }));
 
-export async function agentHistory(userId: string, agentId: string, month: string, scope: 'all' | 'mine') {
-  const [rows, assignments] = await Promise.all([loadAgentPicks(userId, month, scope, agentId), activeAssignments()]);
+export async function agentHistory(userId: string, agentId: string, month: string, scope: 'all' | 'mine', sport: PickSport = 'football') {
+  const [rows, assignments] = await Promise.all([loadAgentPicks(userId, month, scope, agentId, sport), activeAssignments()]);
   const own = assignments.get(agentId)?.primary.model ?? OPENROUTER_MODELS[agentId]?.model ?? null;
   // Same rule as the cards: the role's current model, picks saved before kickoff.
   return historyOf(rows.filter((p) => sameModel(p.model_id, own) && p.created_at.getTime() < p.kickoff_utc.getTime()));
@@ -54,10 +54,10 @@ export async function agentHistory(userId: string, agentId: string, month: strin
 
 /** Per-agent record (each agent's final pick per match, settled after the match) and real model consumption. */
 /** month = 'YYYY-MM' (Romanian calendar): the record covers only that month; consumption always shows today, 7 days, the month and total. */
-export async function agentStats(userId: string, admin = false, month = currentMonth(), scope: 'all' | 'mine' = 'all') {
+export async function agentStats(userId: string, admin = false, month = currentMonth(), scope: 'all' | 'mine' = 'all', sport: Exclude<PickSport, 'all'> = 'football') {
   void admin;
   const window = romanianMonthWindow(month === 'all' ? currentMonth() : month);
-  const picksPromise = loadAgentPicks(userId, month, scope);
+  const picksPromise = loadAgentPicks(userId, month, scope, undefined, sport);
   const usagePromise = many<{ agent_id: string | null; provider: string; model_id: string; requested_model_id: string; calls: string; successful: string; failed: string; i: string | null; o: string | null; lat: string | null; today_i: string | null; today_o: string | null; week_i: string | null; week_o: string | null; month_i: string | null; month_o: string | null }>(
     `SELECT agent_id, provider, model_id, requested_model_id, count(*) AS calls, count(*) FILTER (WHERE ok) AS successful, count(*) FILTER (WHERE NOT ok) AS failed,
             sum(input_tokens) AS i, sum(output_tokens) AS o, avg(latency_ms) FILTER (WHERE ok) AS lat,
@@ -71,7 +71,7 @@ export async function agentStats(userId: string, admin = false, month = currentM
      GROUP BY 1,2,3,4`, [userId, scope === 'all', new Date(new Date().toISOString().slice(0,10) + 'T00:00:00Z'), new Date(Date.now() - 7 * 86400_000), ...window]);
   const [picks, usage, assignments, careerRows] = await Promise.all([
     picksPromise, usagePromise, activeAssignments(),
-    many<{ agent_id: string; model_id: string; won: number; lost: number }>(`${finalAgentPicksCte(true)}
+    many<{ agent_id: string; model_id: string; won: number; lost: number }>(`${finalAgentPicksCte(true, sport)}
       SELECT p.agent_id,p.model_id,CAST(count(*) FILTER(WHERE p.outcome='WON') AS INTEGER) AS won,CAST(count(*) FILTER(WHERE p.outcome='LOST') AS INTEGER) AS lost
       FROM final_picks p JOIN fixtures f ON f.id=p.fixture_id WHERE p.decision='BET_CANDIDATE' AND ${timeCompare('p.created_at','<','f.kickoff_utc')}
         AND ($2='all' OR (${timeCompare('f.kickoff_utc','>=','$3')} AND ${timeCompare('f.kickoff_utc','<','$4')})) GROUP BY p.agent_id,p.model_id`, [scope === 'mine' ? userId : null, month, ...window]),
@@ -113,7 +113,7 @@ export async function agentStats(userId: string, admin = false, month = currentM
       career: career.get(a.id) ?? { won: 0, lost: 0 },
       excluded: { won: left.filter((p) => p.outcome === 'WON').length, lost: left.filter((p) => p.outcome === 'LOST').length, otherModel: left.filter((p) => !sameModel(p.model_id, ownModel)).length, afterKickoff: left.filter((p) => sameModel(p.model_id, ownModel)).length },
       character: { role: a.title.split(' · ')[0], specialty: a.specialty, risk: a.risk, maxOdds: a.maxOdds, minProbability: a.minProbability },
-      coaching: (() => { const c = coachingMap.get(a.id); return c ? { level: c.level, n: c.n, hitRate: c.hitRate, teamRate: c.teamRate, maxOdds: c.maxOdds, minProbability: c.minProbability, blocked: c.blocked.map((b) => ({ label: b.label, won: b.won, n: b.n })) } : null; })(),
+      coaching: sport === 'cs' ? null : (() => { const c = coachingMap.get(a.id); return c ? { level: c.level, n: c.n, hitRate: c.hitRate, teamRate: c.teamRate, maxOdds: c.maxOdds, minProbability: c.minProbability, blocked: c.blocked.map((b) => ({ label: b.label, won: b.won, n: b.n })) } : null; })(),
       hitRate: won + lost ? won / (won + lost) : null,
       avgOdds: priced.length ? priced.reduce((s, p) => s + Number(p.odds), 0) / priced.length : null,
       avgEstimated: est.length ? est.reduce((s, p) => s + Number(p.estimated_probability), 0) / est.length : null,
@@ -138,7 +138,7 @@ export async function agentStats(userId: string, admin = false, month = currentM
     calls: usage.reduce((s, r) => s + Number(r.calls), 0),
     cap: config.openRouterDailyUsd,
   };
-  return { agents: stats, totals, month };
+  return { agents: stats, totals, month, sport };
 }
 
 export function currentMonth(at = new Date()) {
