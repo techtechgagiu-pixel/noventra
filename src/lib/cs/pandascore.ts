@@ -78,16 +78,6 @@ async function saveMatches(list: CsMatch[]) {
 }
 
 /**
- * Pure: whether a page of results (newest first) has reached the stop date. Decided by the majority of the page, not by
- * one row: PandaScore returns the odd finished match with a stale date years back on its first pages (30.10: a match
- * dated 2021 on page 1 ended the backfill after 99 results).
- */
-export function reachedStop(list: Array<{ beginAt: string }>, stopAt: number): boolean {
-  if (!list.length) return true;
-  return list.filter((m) => Date.parse(m.beginAt) < stopAt).length * 2 > list.length;
-}
-
-/**
  * Upcoming (next 8 days) and running matches, recent results (incremental; the first run backfills ~90 days for team
  * history), and a direct re-read of site fixtures that should have finished. Free plan: 1,000 requests/hour; one run
  * uses about 5–15 (the first one up to ~45).
@@ -96,7 +86,7 @@ export async function syncCsMatches(now = new Date()) {
   if (!pandascoreConfigured()) return { skipped: 'PANDASCORE_TOKEN lipsește' };
   const parse = (xs: unknown[]) => xs.map(parseCsMatch).filter((x): x is CsMatch => !!x);
   // A page is the last one only when the source returned fewer rows than asked (not when we skipped some of them).
-  const fetchPage = async (path: string, params: Record<string, string>, ttl: number) => { const raw = await page(path, params, ttl); return { full: raw.length >= 100, list: parse(raw) }; };
+  const fetchPage = async (path: string, params: Record<string, string>, ttl: number) => { const raw = await page(path, params, ttl); return { full: raw.length >= 100, raw: raw.length, list: parse(raw) }; };
   const until = new Date(now.getTime() + 8 * 86400_000).toISOString();
   const upcoming: CsMatch[] = [];
   for (let p = 1; p <= 10; p++) {
@@ -111,13 +101,22 @@ export async function syncCsMatches(now = new Date()) {
   // (30.10: the unfiltered "past" list was mostly cancelled matches, so a count check makes sure results are there.)
   const backfill = !span?.oldest || Number(span.n) < 500 || new Date(span.oldest).getTime() > now.getTime() - 85 * 86400_000;
   const stopAt = backfill ? now.getTime() - 90 * 86400_000 : new Date(span!.newest!).getTime() - 2 * 86400_000;
-  const newest = backfill ? null : span;
+  // Results are read in 7-day date windows (newest first), each paged on its own: deep paging of the filtered list
+  // came back empty after the first page (30.10), and a window also keeps out matches with stale dates.
   const past: CsMatch[] = [];
-  for (let p = 1; p <= (newest ? 10 : 60); p++) {
-    // Finished matches only: the past list also holds cancelled ones, which carry no result.
-    const batch = await fetchPage('/csgo/matches/past', { 'filter[status]': 'finished', sort: '-begin_at', per_page: '100', page: String(p) }, 10 * 60_000);
-    past.push(...batch.list);
-    if (!batch.full || reachedStop(batch.list, stopAt)) break;
+  const pages: number[] = [];
+  for (let to = now.getTime(); to > stopAt && pages.length < 60; to -= 7 * 86400_000) {
+    const from = Math.max(stopAt, to - 7 * 86400_000);
+    for (let p = 1; p <= 10 && pages.length < 60; p++) {
+      // Finished matches only: the past list also holds cancelled ones, which carry no result.
+      const batch = await fetchPage('/csgo/matches/past', {
+        'filter[status]': 'finished', 'range[begin_at]': `${new Date(from).toISOString()},${new Date(to).toISOString()}`,
+        sort: '-begin_at', per_page: '100', page: String(p),
+      }, 10 * 60_000);
+      past.push(...batch.list);
+      pages.push(batch.raw);
+      if (!batch.full) break;
+    }
   }
   // Site fixtures still open after their start: read them by id (results can be late in the paged lists).
   const open = await many<{ provider_id: string }>(`SELECT provider_id FROM fixtures WHERE provider='pandascore' AND status IN ('pre','in') AND kickoff_utc < $1 AND kickoff_utc > $2`,
@@ -131,5 +130,5 @@ export async function syncCsMatches(now = new Date()) {
   const from = now.getTime() - 3 * 86400_000;
   const fixtures = [...all.values()].filter((m) => Date.parse(m.beginAt) >= from).map((m) => csFixture(m, now.toISOString()));
   await persistFixtures(fixtures);
-  return { upcoming: upcoming.length, running: running.length, past: past.length, reread: reread.length, fixtures: fixtures.length };
+  return { upcoming: upcoming.length, running: running.length, past: past.length, backfill, pages: pages.join(','), reread: reread.length, fixtures: fixtures.length };
 }
