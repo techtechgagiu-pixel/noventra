@@ -10,12 +10,13 @@ import { LeaguePicker, type LeagueOption } from './league-picker';
 import { MatchMarkets } from './match-markets';
 
 type Data = { rows: MatchRow[]; leagues: LeagueOption[]; refreshing: boolean; updatedAt: string | null; errors: number; additionalSource?: InformationalSourceStatus };
-type Source = 'all' | 'existing' | 'the-odds-api' | 'stake';
+type Source = 'all' | 'existing' | 'the-odds-api' | 'stake' | 'cs2';
 const fromSource = (m: MatchRow, source: Source) => {
   const sources = m.sources ?? (m.source ? [m.source] : []);
   // Stake: matches whose current prices come from the owner's imported Stake export.
   if (source === 'stake') return m.odds?.bookmaker === 'Stake';
-  return source === 'all' || (source === 'existing' ? m.source !== 'the-odds-api' : sources.includes(source));
+  if (source === 'cs2') return m.leagueId === 'CS2';
+  return source === 'all' || (source === 'existing' ? m.source !== 'the-odds-api' && m.source !== 'pandascore' : sources.includes(source));
 };
 const TZ = 'Europe/Bucharest';
 const dayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
@@ -118,7 +119,7 @@ export function MatchesView() {
       </div>}
 
       {data?.additionalSource?.configured && <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sursa meciurilor">
-        {([{ id: 'all', label: 'Toate sursele' }, { id: 'existing', label: 'ESPN / LPF' }, { id: 'the-odds-api', label: 'The Odds API' }, { id: 'stake', label: 'Stake' }] as const).map((s) =>
+        {([{ id: 'all', label: 'Toate sursele' }, { id: 'existing', label: 'ESPN / LPF' }, { id: 'the-odds-api', label: 'The Odds API' }, { id: 'stake', label: 'Stake' }, { id: 'cs2', label: '🎮 Counter-Strike' }] as const).map((s) =>
           <button key={s.id} onClick={() => { setSource(s.id); setLeagues([]); setDay('all'); setStatus('all'); }} aria-pressed={source === s.id} className={`chip ${source === s.id ? 'text-cyan' : 'text-muted'}`}>{s.label}</button>)}
       </div>}
 
@@ -167,8 +168,8 @@ export function MatchesView() {
                     <p className="truncate text-xs"><Verdict m={m} />{m.source !== 'the-odds-api' && m.sources?.includes('the-odds-api') && <span className="ml-2 text-muted/70">· program confirmat și de The Odds API</span>}</p>
                   </div>
                   <div className="col-start-2 flex items-center gap-1.5 text-xs tabular sm:col-start-3 sm:justify-end">
-                    {m.odds && (['home', 'draw', 'away'] as const).map((k, i) => (
-                      <span key={k} className="odds-cell"><span>{['1', 'X', '2'][i]}</span><b>{m.odds![k]?.toFixed(2) ?? '—'}</b></span>
+                    {m.odds && (m.leagueId === 'CS2' ? (['home', 'away'] as const) : (['home', 'draw', 'away'] as const)).map((k) => (
+                      <span key={k} className="odds-cell"><span>{k === 'home' ? '1' : k === 'draw' ? 'X' : '2'}</span><b>{m.odds![k]?.toFixed(2) ?? '—'}</b></span>
                     ))}
                     {m.odds && <span className="whitespace-nowrap text-cyan">{m.odds.markets} piețe {open === m.id ? '▴' : '▾'}</span>}
                     {m.analysis && <Link href={`/?tab=analiza&job=${m.analysis.jobId}`} onClick={(e) => e.stopPropagation()} className="text-cyan hover:underline">jurnal</Link>}
