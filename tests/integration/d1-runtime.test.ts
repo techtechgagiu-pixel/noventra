@@ -64,6 +64,8 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     const realFetch = globalThis.fetch;
     const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const u = new URL(String(input));
+      const range = u.searchParams.get('range[begin_at]')?.split(',').map(Date.parse);
+      if (u.hostname === 'api.pandascore.co' && u.pathname.endsWith('/past') && range && !(Date.parse(past) >= range[0] && Date.parse(past) <= range[1])) return Response.json([]);
       if (u.hostname === 'api.pandascore.co') return Response.json(u.pathname.endsWith('/upcoming') ? [ps(500, soon, 'not_started')] : u.pathname.endsWith('/past') ? (u.searchParams.get('filter[status]') === 'finished' ? [ps(400, past, 'finished', [2, 1])] : [ps(401, past, 'canceled')]) : []);
       if (u.hostname === 'api.oddspapi.io') {
         if (u.pathname.endsWith('/fixtures')) return Response.json([{ fixtureId: 'op1', participant1Name: 'G2', participant2Name: 'Spirit', startTime: soon }]);
