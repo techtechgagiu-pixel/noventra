@@ -101,6 +101,11 @@ describe('OddsPapi', () => {
       { key: 'MT:OVER:2.5', odds: 2.1, books: 1 }, { key: 'MT:UNDER:2.5', odds: 1.7, books: 1 },
     ]);
   });
+  it('drops a two-way pair whose prices cannot both be right', () => {
+    const p = (price: number) => ({ players: { 0: { price, active: true } } });
+    const board = { bookmakerOdds: { a: { markets: { 171: { outcomes: { 171: p(1.83), 172: p(1.83) } }, 173: { outcomes: { 173: p(1.56), 174: p(1.04) } } } } } };
+    expect(parseOddsBoard(board, catalog).map((m) => m.key).sort()).toEqual(['ML:AWAY', 'ML:HOME']);
+  });
   it('reads fixtures by participant names or "A v B"', () => {
     expect(parseOddsFixtures([{ fixtureId: 'f1', participant1Name: 'Spirit', participant2Name: 'G2', startTime: '2026-10-31T15:00:00Z' }, { fixtureId: 'f2', fixtureName: 'MOUZ v FaZe', startTime: '2026-10-31T18:00:00Z' }, { fixtureId: 'x' }]))
       .toEqual([{ id: 'f1', home: 'Spirit', away: 'G2', kickoff: '2026-10-31T15:00:00.000Z', tournament: null }, { id: 'f2', home: 'MOUZ', away: 'FaZe', kickoff: '2026-10-31T18:00:00.000Z', tournament: null }]);

@@ -72,7 +72,12 @@ export function parseOddsBoard(raw: unknown, catalog: MarketDef[]): Array<{ key:
       }
     }
   }
-  return [...prices].map(([k, xs]) => ({ key: k, odds: r2(median(xs)), books: xs.length }));
+  const out = [...prices].map(([k, xs]) => ({ key: k, odds: r2(median(xs)), books: xs.length }));
+  // Both sides of a two-way market must make sense together (implied sum between 0.98 and 1.25); a pair mixing
+  // different lines or stale books (e.g. over 1.56 / under 1.04) is dropped instead of reaching the agents.
+  const pairOf = (k: string) => { const [f, s, l] = k.split(':'); return f === 'ML' ? `ML:${s === 'HOME' ? 'AWAY' : 'HOME'}` : f === 'MH' ? `MH:${s === 'HOME' ? 'AWAY' : 'HOME'}:${-Number(l)}` : `MT:${s === 'OVER' ? 'UNDER' : 'OVER'}:${l}`; };
+  const byKey = new Map(out.map((m) => [m.key, m]));
+  return out.filter((m) => { const o = byKey.get(pairOf(m.key)); if (!o) return true; const sum = 1 / m.odds + 1 / o.odds; return sum >= 0.98 && sum <= 1.25; });
 }
 
 async function get(path: string, params: Record<string, string>, ttlMs: number) {
