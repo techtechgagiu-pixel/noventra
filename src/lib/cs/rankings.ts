@@ -48,10 +48,14 @@ export async function syncCsRankings(now = new Date()) {
     if (!res?.ok) continue;
     const rows = parseStandings(await res.text());
     if (rows.length < 20) continue;
-    await atomic([{ text: 'DELETE FROM cs_rankings' }, ...rows.map((r) => ({
-      text: `INSERT INTO cs_rankings(team_key,team,rank,points,roster,as_of) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(team_key) DO NOTHING`,
+    // Written in small batches (the D1 bridge limits one batch), then the previous month's rows are removed.
+    const statements = rows.map((r) => ({
+      text: `INSERT INTO cs_rankings(team_key,team,rank,points,roster,as_of) VALUES($1,$2,$3,$4,$5,$6)
+        ON CONFLICT(team_key) DO UPDATE SET team=EXCLUDED.team,rank=EXCLUDED.rank,points=EXCLUDED.points,roster=EXCLUDED.roster,as_of=EXCLUDED.as_of`,
       params: [teamKey(r.team), r.team, r.rank, r.points, r.roster.join(', '), date],
-    }))]);
+    }));
+    for (let i = 0; i < statements.length; i += 40) await atomic(statements.slice(i, i + 40));
+    await atomic([{ text: 'DELETE FROM cs_rankings WHERE as_of<>$1', params: [date] }]);
     return { asOf: date, teams: rows.length };
   }
   return { asOf: current?.as_of ?? null, error: 'Clasamentul Valve nu a putut fi descărcat' };

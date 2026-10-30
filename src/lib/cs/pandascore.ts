@@ -85,22 +85,27 @@ async function saveMatches(list: CsMatch[]) {
 export async function syncCsMatches(now = new Date()) {
   if (!pandascoreConfigured()) return { skipped: 'PANDASCORE_TOKEN lipsește' };
   const parse = (xs: unknown[]) => xs.map(parseCsMatch).filter((x): x is CsMatch => !!x);
+  // A page is the last one only when the source returned fewer rows than asked (not when we skipped some of them).
+  const fetchPage = async (path: string, params: Record<string, string>, ttl: number) => { const raw = await page(path, params, ttl); return { full: raw.length >= 100, list: parse(raw) }; };
   const until = new Date(now.getTime() + 8 * 86400_000).toISOString();
   const upcoming: CsMatch[] = [];
   for (let p = 1; p <= 10; p++) {
-    const batch = parse(await page('/csgo/matches/upcoming', { 'range[begin_at]': `${now.toISOString()},${until}`, sort: 'begin_at', per_page: '100', page: String(p) }, 10 * 60_000));
-    upcoming.push(...batch);
-    if (batch.length < 100) break;
+    const batch = await fetchPage('/csgo/matches/upcoming', { 'range[begin_at]': `${now.toISOString()},${until}`, sort: 'begin_at', per_page: '100', page: String(p) }, 10 * 60_000);
+    upcoming.push(...batch.list);
+    if (!batch.full) break;
   }
   const running = parse(await page('/csgo/matches/running', { per_page: '100' }, 5 * 60_000));
   // Results: newest first, until we reach what is already stored (or 90 days on the first run).
-  const newest = await one<{ at: string | Date | null }>("SELECT MAX(begin_at) AS at FROM cs_matches WHERE status='finished'");
-  const stopAt = newest?.at ? new Date(newest.at).getTime() - 2 * 86400_000 : now.getTime() - 90 * 86400_000;
+  const span = await one<{ newest: string | Date | null; oldest: string | Date | null }>("SELECT MAX(begin_at) AS newest, MIN(begin_at) AS oldest FROM cs_matches WHERE status='finished'");
+  // Backfill (first runs) until the stored history reaches 90 days back; then only what is new since the last run.
+  const backfill = !span?.oldest || new Date(span.oldest).getTime() > now.getTime() - 85 * 86400_000;
+  const stopAt = backfill ? now.getTime() - 90 * 86400_000 : new Date(span!.newest!).getTime() - 2 * 86400_000;
+  const newest = backfill ? null : span;
   const past: CsMatch[] = [];
-  for (let p = 1; p <= (newest?.at ? 10 : 40); p++) {
-    const batch = parse(await page('/csgo/matches/past', { sort: '-begin_at', per_page: '100', page: String(p) }, 10 * 60_000));
-    past.push(...batch);
-    if (batch.length < 100 || batch.some((m) => Date.parse(m.beginAt) < stopAt)) break;
+  for (let p = 1; p <= (newest ? 10 : 60); p++) {
+    const batch = await fetchPage('/csgo/matches/past', { sort: '-begin_at', per_page: '100', page: String(p) }, 10 * 60_000);
+    past.push(...batch.list);
+    if (!batch.full || batch.list.some((m) => Date.parse(m.beginAt) < stopAt)) break;
   }
   // Site fixtures still open after their start: read them by id (results can be late in the paged lists).
   const open = await many<{ provider_id: string }>(`SELECT provider_id FROM fixtures WHERE provider='pandascore' AND status IN ('pre','in') AND kickoff_utc < $1 AND kickoff_utc > $2`,
