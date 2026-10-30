@@ -96,14 +96,16 @@ export async function syncCsMatches(now = new Date()) {
   }
   const running = parse(await page('/csgo/matches/running', { per_page: '100' }, 5 * 60_000));
   // Results: newest first, until we reach what is already stored (or 90 days on the first run).
-  const span = await one<{ newest: string | Date | null; oldest: string | Date | null }>("SELECT MAX(begin_at) AS newest, MIN(begin_at) AS oldest FROM cs_matches WHERE status='finished'");
-  // Backfill (first runs) until the stored history reaches 90 days back; then only what is new since the last run.
-  const backfill = !span?.oldest || new Date(span.oldest).getTime() > now.getTime() - 85 * 86400_000;
+  const span = await one<{ newest: string | Date | null; oldest: string | Date | null; n: number | string }>("SELECT MAX(begin_at) AS newest, MIN(begin_at) AS oldest, COUNT(*) AS n FROM cs_matches WHERE status='finished'");
+  // Backfill (first runs) until the stored results reach 90 days back; then only what is new since the last run.
+  // (30.10: the unfiltered "past" list was mostly cancelled matches, so a count check makes sure results are there.)
+  const backfill = !span?.oldest || Number(span.n) < 500 || new Date(span.oldest).getTime() > now.getTime() - 85 * 86400_000;
   const stopAt = backfill ? now.getTime() - 90 * 86400_000 : new Date(span!.newest!).getTime() - 2 * 86400_000;
   const newest = backfill ? null : span;
   const past: CsMatch[] = [];
   for (let p = 1; p <= (newest ? 10 : 60); p++) {
-    const batch = await fetchPage('/csgo/matches/past', { sort: '-begin_at', per_page: '100', page: String(p) }, 10 * 60_000);
+    // Finished matches only: the past list also holds cancelled ones, which carry no result.
+    const batch = await fetchPage('/csgo/matches/past', { 'filter[status]': 'finished', sort: '-begin_at', per_page: '100', page: String(p) }, 10 * 60_000);
     past.push(...batch.list);
     if (!batch.full || batch.list.some((m) => Date.parse(m.beginAt) < stopAt)) break;
   }
