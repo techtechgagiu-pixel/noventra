@@ -64,7 +64,7 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     const realFetch = globalThis.fetch;
     const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const u = new URL(String(input));
-      if (u.hostname === 'api.pandascore.co') return Response.json(u.pathname.endsWith('/upcoming') ? [ps(500, soon, 'not_started')] : u.pathname.endsWith('/past') ? [ps(400, past, 'finished', [2, 1])] : []);
+      if (u.hostname === 'api.pandascore.co') return Response.json(u.pathname.endsWith('/upcoming') ? [ps(500, soon, 'not_started')] : u.pathname.endsWith('/past') ? (u.searchParams.get('filter[status]') === 'finished' ? [ps(400, past, 'finished', [2, 1])] : [ps(401, past, 'canceled')]) : []);
       if (u.hostname === 'api.oddspapi.io') {
         if (u.pathname.endsWith('/fixtures')) return Response.json([{ fixtureId: 'op1', participant1Name: 'G2', participant2Name: 'Spirit', startTime: soon }]);
         if (u.pathname.endsWith('/markets')) return Response.json([{ sportId: 17, marketId: 171, marketName: 'Winner', handicap: 0, outcomes: [{ outcomeId: 171, outcomeName: '1' }, { outcomeId: 172, outcomeName: '2' }] }]);

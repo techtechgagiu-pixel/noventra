@@ -412,7 +412,8 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
       if (!item) { await recordEvent(job.id, { type: 'AGENT_FAILED', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { round, error: 'Agentul nu a răspuns pentru acest meci (abținere).' } }); continue; }
       const from = source.get(item.fixtureId) ?? { provider: res.provider, model: res.model, requested: res.requestedModel, usedFallback: res.usedFallback };
       let pos = toPosition(agent.id, item, round, from.provider, from.model, validKeys.get(s.fixture.id)!);
-      if (agent.id === 'hantu' && pos.decision === 'BET_CANDIDATE' && !(('evidence' in item ? item.evidence : []) as string[]).some((x) => /\[H\d+\]/.test(x))) {
+      // The news-only rule applies where there is news (football); for Counter-Strike he reads the same facts as everyone.
+      if (agent.id === 'hantu' && s.fixture.provider !== 'pandascore' && pos.decision === 'BET_CANDIDATE' && !(('evidence' in item ? item.evidence : []) as string[]).some((x) => /\[H\d+\]/.test(x))) {
         await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage, agentId: agent.id, fixtureId: s.fixture.id, payload: { marketKey: pos.marketKey, marketLabel: s.model.markets.find((m) => m.key === pos.marketKey)?.label ?? null, reason: 'Nemotron 3.5 Super VL lucrează doar din știri, dar nu a citat niciun titlu — votul devine NO BET' } });
         pos = { ...pos, decision: 'NO_BET', marketKey: null, alternatives: [] };
       }
