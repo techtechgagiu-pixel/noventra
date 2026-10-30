@@ -49,20 +49,28 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const win = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
   const [chosen, setChosen] = useState<string[]>(['victor', 'andrei', 'alex', 'robert', 'ioana']);
   const [leagues, setLeagues] = useState<string[]>([]);
+  // Owner request 30.10: a ticket made only of Counter-Strike matches, one tap away.
+  const [sport, setSport] = useState<'football' | 'cs'>('football');
+  const chooseSport = (s: 'football' | 'cs') => {
+    setSport(s); setLeagues([]);
+    // CS prices exist for the next ~72 h and favourites are short: a smaller, closer ticket by default.
+    if (s === 'cs') { setTarget(3); setLegs(3); setToI(STOPS.indexOf(48)); }
+  };
+  const sentLeagues = sport === 'cs' ? ['CS2'] : leagues;
   const [catalog, setCatalog] = useState<{ rows: MatchRow[]; leagues: LeagueOption[] } | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [catalogError, setCatalogError] = useState(false);
   const [catalogAttempt, setCatalogAttempt] = useState(0);
   // The full fixture catalogue is only needed when the user opens league/interval options.
   useEffect(() => {
-    if (!optionsOpen || catalog) return;
+    if ((!optionsOpen && sport !== 'cs') || catalog) return;
     const controller = new AbortController();
     setCatalogError(false);
     api<{ rows: MatchRow[]; leagues: LeagueOption[] }>('/api/matches', { signal: controller.signal })
       .then((data) => { if (!controller.signal.aborted) setCatalog(data); })
       .catch(() => { if (!controller.signal.aborted) setCatalogError(true); });
     return () => controller.abort();
-  }, [optionsOpen, catalog, catalogAttempt]);
+  }, [optionsOpen, sport, catalog, catalogAttempt]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,9 +83,9 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
     const now = Date.now();
     return (catalog?.rows ?? []).filter((m) => m.odds && m.status === 'pre' && Date.parse(m.kickoff) >= now + fromHours * 3600_000 && Date.parse(m.kickoff) <= now + toHours * 3600_000);
   }, [catalog, fromHours, toHours]);
-  const leagueOptions = useMemo(() => (catalog?.leagues ?? []).map((l) => ({ ...l, count: inWindow.filter((m) => m.leagueId === l.id).length })), [catalog, inWindow]);
-  // Counter-Strike (CS2) is analysed only when ticked; "Toate ligile" means all football leagues.
-  const available = leagues.length ? inWindow.filter((m) => leagues.includes(m.leagueId)).length : inWindow.filter((m) => m.leagueId !== 'CS2').length;
+  const leagueOptions = useMemo(() => (catalog?.leagues ?? []).filter((l) => l.id !== 'CS2').map((l) => ({ ...l, count: inWindow.filter((m) => m.leagueId === l.id).length })), [catalog, inWindow]);
+  // Counter-Strike has its own switch; on a football ticket "Toate ligile" means every football league.
+  const available = sport === 'cs' ? inWindow.filter((m) => m.leagueId === 'CS2').length : leagues.length ? inWindow.filter((m) => leagues.includes(m.leagueId)).length : inWindow.filter((m) => m.leagueId !== 'CS2').length;
   const fits = (a: AgentCard) => Math.min(a.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds) >= perLeg * 0.92;
   const topSix = topAgentIds.filter((id) => agents.some((a) => a.id === id));
   const topSixReady = topSix.length === 6;
@@ -94,7 +102,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true); setError(null);
-    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues, count });
+    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues: sentLeagues, count });
     if (attempt.current?.body !== body) attempt.current = { body, requestId: crypto.randomUUID() };
     try {
       const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ ...JSON.parse(body), requestId: attempt.current.requestId }) });
@@ -104,6 +112,16 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Sportul biletului">
+        {([['football', '⚽ Fotbal'], ['cs', '🎮 Counter-Strike 2']] as const).map(([id, label]) => (
+          <button key={id} type="button" role="radio" aria-checked={sport === id} onClick={() => chooseSport(id)}
+            className={`chip px-4 py-2 text-sm font-semibold ${sport === id ? 'border-cyan text-cyan' : 'text-muted'}`}>{label}</button>
+        ))}
+        {sport === 'cs' && <span className="text-xs text-muted">
+          Doar meciuri CS2 cu cote (Stake, OddsPapi): câștigător, handicap pe hărți, total hărți.
+          {catalog ? ` ${available} ${available === 1 ? 'meci disponibil' : 'meciuri disponibile'} în intervalul ales.` : ''}
+        </span>}
+      </div>
       <div className="custom-basics">
         <div className="card p-4">
           <label htmlFor="target" className="text-xs font-semibold text-muted">Cota dorită</label>
@@ -129,7 +147,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
       </div>
 
       <details className="custom-options" onToggle={(e) => setOptionsOpen(e.currentTarget.open)}>
-        <summary><span>Interval și ligi</span><span>Peste {dur(fromHours)}–{dur(toHours)} · {leagues.length ? `${leagues.length} ligi` : 'toate ligile'}</span></summary>
+        <summary><span>{sport === 'cs' ? 'Interval' : 'Interval și ligi'}</span><span>Peste {dur(fromHours)}–{dur(toHours)} · {sport === 'cs' ? 'Counter-Strike 2' : leagues.length ? `${leagues.length} ligi` : 'toate ligile'}</span></summary>
         <div className="custom-options-body">
           <fieldset className="mt-3 space-y-2" aria-label="Intervalul meciurilor">
             <legend className="text-xs text-muted">Meciuri care încep între <strong className="text-text">peste {dur(fromHours)}</strong> și <strong className="text-text">peste {dur(toHours)}</strong></legend>
@@ -141,6 +159,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
             </label>
             <p className="text-[11px] text-muted tabular" suppressHydrationWarning>{span(fromHours, toHours)}</p>
           </fieldset>
+        {sport === 'football' && <>
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-display text-lg font-bold">Din ce ligi</h3>
           <p className="text-xs text-muted">Bifează ligile din care să-ți facă biletul. Nimic bifat = toate ligile.</p>
@@ -150,8 +169,9 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
             : catalogError ? <p role="status" className="text-sm text-gold">Ligile nu s-au încărcat. Setarea rămâne „Toate ligile”. <button type="button" className="underline" onClick={() => setCatalogAttempt((n) => n + 1)}>Reîncearcă</button></p>
             : <p className="rounded-xl border border-line bg-ink px-3 py-2.5 text-sm text-muted">Încarc ligile disponibile…</p>}
         </div>
+        </>}
         {catalog && <p className={`mt-2 text-xs ${available < legs * 2 ? 'text-gold' : 'text-muted'}`}>
-          {available} {available === 1 ? 'meci cu cote' : 'meciuri cu cote'} în intervalul ales{leagues.length ? ` din ${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : ''}.
+          {available} {available === 1 ? 'meci cu cote' : 'meciuri cu cote'} în intervalul ales{sport === 'cs' ? ' (Counter-Strike 2)' : leagues.length ? ` din ${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : ''}.
           {available < legs * 2 && ' Puține pentru un bilet de ' + legs + ' meciuri: echipa poate refuza multe — adaugă ligi sau lărgește intervalul.'}
         </p>}
         </div>
@@ -225,11 +245,11 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
       </section>
       <div className="custom-submit">
         <p className="text-sm text-muted md:flex-1">
-          {count} {count === 1 ? 'bilet' : 'bilete'} · fiecare cu cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> voturi pentru o selecție. GPT-6 Luna Pro dă verdictul final.
+          {count} {count === 1 ? 'bilet' : 'bilete'} · fiecare cu cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {sport === 'cs' ? 'Counter-Strike 2' : leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> voturi pentru o selecție. GPT-6 Luna Pro dă verdictul final.
         </p>
         {!chosen.length && <p className="text-sm text-gold">Alege cel puțin un agent din „Echipa de agenți”.</p>}
         {error && <p className="text-sm text-rose" role="alert">{error}</p>}
-        <button onClick={create} disabled={busy || remaining === 0 || count < 1 || count > remaining || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && leagues.length > 0 && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : count === 1 ? 'Pornește dezbaterea' : `Creează ${count} bilete`}</button>
+        <button onClick={create} disabled={busy || remaining === 0 || count < 1 || count > remaining || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && (leagues.length > 0 || sport === 'cs') && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : count === 1 ? 'Pornește dezbaterea' : `Creează ${count} bilete`}</button>
       </div>
       <p className="text-xs leading-relaxed text-muted">După pornire vezi agenții pe hartă și argumentele în chat. Cota este o țintă; echipa poate refuza meciuri și poate încheia fără un bilet complet.</p>
     </div>
