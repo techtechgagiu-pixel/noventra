@@ -85,7 +85,10 @@ export async function matchList(userId: string, scope: 'all' | 'mine' = 'all', i
       source: f.provider,
       id: f.id, leagueId: f.leagueId, league: f.leagueName, country: f.country, home: f.home, away: f.away, homeLogo: f.homeLogo ?? null, awayLogo: f.awayLogo ?? null,
       kickoff, status, score: homeScore != null && awayScore != null ? `${homeScore}–${awayScore}` : null,
-      odds: f.odds ? { home: price(f, '1X2:HOME'), draw: price(f, '1X2:DRAW'), away: price(f, '1X2:AWAY'), markets: f.odds.markets.length, bookmaker: f.odds.bookmaker } : null,
+      // Counter-Strike has no draw: the row shows the match-winner prices (1 / 2).
+      odds: f.odds ? (f.provider === 'pandascore'
+        ? { home: price(f, 'ML:HOME'), draw: null, away: price(f, 'ML:AWAY'), markets: f.odds.markets.length, bookmaker: f.odds.bookmaker }
+        : { home: price(f, '1X2:HOME'), draw: price(f, '1X2:DRAW'), away: price(f, '1X2:AWAY'), markets: f.odds.markets.length, bookmaker: f.odds.bookmaker }) : null,
       analysis: d ? { outcome: d.outcome, selectionOutcome: d.selection_outcome, label: d.label ?? labels.get(`${d.job_id}|${d.fixture_id}|${d.market_key}`) ?? d.market_key, odds: d.odds === null ? null : Number(d.odds), votes: d.votes_for, onTicket: d.on_ticket, at: new Date(d.created_at).toISOString(), jobId: d.job_id } : null,
     };
   });
