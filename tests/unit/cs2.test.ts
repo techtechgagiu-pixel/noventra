@@ -35,6 +35,8 @@ describe('Valve standings and team names', () => {
     expect(sameTeam('FUT Esports', 'FUT')).toBe(true); // same key once "Esports" is dropped
     expect(sameTeam('Natus Vincere', 'NAVI')).toBe(false);
     expect(sameTeam('Team Vitality', 'Vitality')).toBe(true);
+    expect(sameTeam('BTH E-Sports', 'BTH')).toBe(true);
+    expect(sameTeam('Nemiga Gaming', 'Nemiga')).toBe(true);
   });
   it('tries Valve publication dates, newest first', () => {
     const d = candidateDates(new Date('2026-10-30T10:00:00Z'));
@@ -118,7 +120,10 @@ describe('Stake CS export', () => {
     const at = new Date(Date.now() - 3600_000).toISOString(), k = new Date(Date.now() + 86400_000).toUTCString();
     const o = (name: string, odds: number) => ({ name, odds, active: true });
     const p = parseStakeExport({ meta: { source: 'stake', sport: 'counter-strike', finished_at: at }, data: { matches: [{ source_id: 's1', starts_at: k, participants: [{ name: 'Spirit' }, { name: 'G2' }], markets: [
-      { name: 'Winner', status: 'active', outcomes: [o('Spirit', 1.5), o('G2', 2.6)] },
+      { name: 'Match Winner - Twoway', status: 'active', outcomes: [o('Spirit', 1.5), o('G2', 2.6)] },
+      { name: 'Match Winner / Map 1 Winner', status: 'active', outcomes: [o('Spirit / Spirit', 2), o('G2 / G2', 2.9)] },
+      { name: 'Match Round Handicap', status: 'active', outcomes: [o('Spirit (-10.5)', 4), o('G2 (10.5)', 1.2)] },
+      { name: 'Match Total Rounds', status: 'active', outcomes: [o('Under 40.5', 4.8), o('Over 40.5', 1.15)] },
       { name: 'Map Handicap', status: 'active', outcomes: [o('Spirit (-1.5)', 2.4), o('G2 (+1.5)', 1.55)] },
       { name: 'Total Maps', status: 'active', specifiers: 'total=2.5', outcomes: [o('over 2.5', 2.1), o('under 2.5', 1.7)] },
       { name: 'Map 1 - Winner', status: 'active', outcomes: [o('Spirit', 1.6), o('G2', 2.2)] },

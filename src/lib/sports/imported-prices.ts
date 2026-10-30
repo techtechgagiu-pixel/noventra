@@ -94,7 +94,8 @@ function mapCsMarket(m: Obj, home: string, away: string): { family: string | nul
   const h = norm(home), a = norm(away);
   const side = (n: string) => (n === h || n === '1' || n === 'home' ? 'HOME' : n === a || n === '2' || n === 'away' ? 'AWAY' : null);
   const spec = (k: string) => { const x = new RegExp(`${k}=([+-]?[\\d.]+)`).exec(str(m.specifiers)); return x ? Number(x[1]) : NaN; };
-  if (['winner', '1x2', 'match winner', 'match winner (incl. overtime)', '2way', 'moneyline'].includes(name) && !/map \d/.test(name)) {
+  // Stake: "Match Winner - Twoway"; never "Map 1 Winner" or "Match Winner / Map 1 Winner".
+  if ((['winner', '1x2', '2way', 'moneyline'].includes(name) || name.startsWith('match winner')) && !/map/.test(name)) {
     if (outcomes.length !== 2) return { family: 'ML', quotes: [] };
     const q = outcomes.map((o) => ({ s: side(o.n), odds: o.odds }));
     if (!q.every((x) => x.s) || q[0].s === q[1].s) return { family: 'ML', quotes: [] };

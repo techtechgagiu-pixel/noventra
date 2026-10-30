@@ -6,7 +6,7 @@
 const NOISE = new Set(['team', 'esports', 'esport', 'gaming', 'club', 'gg', 'clan', 'academy_', 'org', 'the']);
 
 export function teamKey(name: string): string {
-  const words = name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  const words = name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\be[-\s.]?sports?\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
   const kept = words.filter((w) => !NOISE.has(w));
   return (kept.length ? kept : words).join('');
 }
