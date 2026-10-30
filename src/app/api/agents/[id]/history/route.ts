@@ -12,5 +12,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const q = req.nextUrl.searchParams, requested = q.get('month');
   const month = requested === 'all' || /^\d{4}-(0[1-9]|1[0-2])$/.test(requested ?? '') ? requested! : currentMonth();
   const scope = q.get('scope') === 'mine' ? 'mine' : 'all';
-  return json({ entries: await agentHistory(user.id, id, month, scope), month, scope });
+  const sport = q.get('sport') === 'cs' ? 'cs' : 'football';
+  return json({ entries: await agentHistory(user.id, id, month, scope, sport), month, scope, sport });
 }

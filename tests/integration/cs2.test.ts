@@ -7,6 +7,8 @@ import { csFixture, type CsMatch } from '@/lib/cs/pandascore';
 import { csQuote } from '@/lib/cs/markets';
 import { teamKey } from '@/lib/cs/teams';
 import { settlePending } from '@/lib/settlement';
+import { agentStats } from '@/lib/agent-stats';
+import { decidedPicks } from '@/lib/decided-picks';
 import { clearFakes, closePool, demoFixtures, installFakes, makeUser, resetDb } from './helpers';
 
 beforeEach(async () => { await resetDb(); clearFakes(); });
@@ -47,6 +49,13 @@ it('builds a Counter-Strike ticket from stored data and settles it from the map 
   await query("UPDATE fixtures SET status='post',home_score=2,away_score=1 WHERE provider='pandascore'");
   await settlePending();
   expect(await one('SELECT outcome_status FROM tickets WHERE job_id=$1', [r.jobId])).toEqual({ outcome_status: 'WON' });
+  // Separate statistics: the CS picks count only in the Counter-Strike view, never in the football records.
+  const cs = await agentStats(user, false, 'all', 'all', 'cs');
+  const football = await agentStats(user, false, 'all', 'all', 'football');
+  const andreiCs = cs.agents.find((x) => x.id === 'andrei')!, andreiFootball = football.agents.find((x) => x.id === 'andrei')!;
+  expect(andreiCs.bets + andreiCs.excluded.won + andreiCs.excluded.lost).toBeGreaterThan(0);
+  expect(andreiFootball.bets + andreiFootball.excluded.won + andreiFootball.excluded.lost).toBe(0);
+  expect((await decidedPicks(true)).some((p) => /^(ML|MH|MT):/.test(p.market_key ?? ''))).toBe(false);
 });
 
 it('never puts Counter-Strike on a football ticket unless CS2 is ticked', async () => {

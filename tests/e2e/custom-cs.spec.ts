@@ -19,3 +19,16 @@ test('a custom ticket made only of Counter-Strike: one switch sends the CS2 leag
   await page.getByRole('button', { name: /Pornește dezbaterea/ }).click();
   await expect.poll(() => sent?.leagues).toEqual([]);
 });
+
+test('statistics: football and Counter-Strike records on separate tabs', async ({ page }) => {
+  await page.goto('/auth/test-login?email=cs-stats@test.local');
+  await page.goto('/?tab=statistici');
+  await expect(page.getByRole('link', { name: '⚽ Fotbal' })).toHaveAttribute('aria-current', 'page');
+  await page.getByRole('link', { name: '🎮 Counter-Strike' }).click();
+  await expect(page).toHaveURL(/sport=cs/);
+  await expect(page.getByRole('link', { name: '🎮 Counter-Strike' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByText('Doar pronosticurile pe meciuri Counter-Strike 2')).toBeVisible();
+  // Month and scope links keep the Counter-Strike view.
+  await page.getByRole('link', { name: 'Analizele mele' }).click();
+  await expect(page).toHaveURL(/scope=mine.*sport=cs|sport=cs.*scope=mine/);
+});

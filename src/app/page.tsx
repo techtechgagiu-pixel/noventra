@@ -44,7 +44,7 @@ const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
 /** PRIMUL 11 — public introduction and authenticated application sections. */
-export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string; scope?: string; luna?: string; vedere?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string; scope?: string; luna?: string; vedere?: string; sport?: string }> }) {
   let user;
   try { user = await currentUser(); }
   catch (error) {
@@ -105,12 +105,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {user.role === 'admin' ? 'Creditele OpenRouter s-au terminat: agenții lucrează acum pe modelele gratuite de rezervă (Gemini, Groq) — merge, dar mai încet. Încarcă credite pe openrouter.ai → Credits și modelele plătite revin singure în cel mult 30 de minute.' : 'Analizele merg mai încet acum; biletele în lucru se completează singure, poți închide pagina.'}
       </p></div>}
       <main className="app-main mx-auto max-w-6xl px-4 pb-24 pt-8">
-        <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
+        <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.sport,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
         {tab === 'custom' && <CustomTab limit={customLimitFor(user)} userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
-        {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} />}
+        {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} sport={sp.sport} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} admin={user.role === 'admin'} canRemove={canRemoveTickets(user)} />}
         </Suspense>
       </main>
@@ -245,11 +245,12 @@ async function CustomTab({ userId, job, limit }: { userId: string; job?: string;
   );
 }
 
-async function StatisticiTab({ userId, admin, month, scope }: { userId: string; admin: boolean; month?: string; scope?: string }) {
+async function StatisticiTab({ userId, admin, month, scope, sport }: { userId: string; admin: boolean; month?: string; scope?: string; sport?: string }) {
   const m = month === 'all' || /^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ? month! : currentMonth();
   const selected = scope === 'mine' ? 'mine' : 'all';
-  const [{ agents, totals }, automation] = await Promise.all([agentStats(userId, admin, m, selected), admin ? automationHealth() : null]);
-  return <div className="space-y-6">{automation && <AutomationPanel initial={plain(automation)} />}<StatsView agents={agents} totals={totals} month={m} scope={selected} /></div>;
+  const kind: 'cs' | 'football' = sport === 'cs' ? 'cs' : 'football';
+  const [{ agents, totals }, automation] = await Promise.all([agentStats(userId, admin, m, selected, kind), admin ? automationHealth() : null]);
+  return <div className="space-y-6">{automation && <AutomationPanel initial={plain(automation)} />}<StatsView agents={agents} totals={totals} month={m} scope={selected} sport={kind} /></div>;
 }
 
 async function IstoricTab({ userId, ticket, fresh, admin = false, canRemove = false }: { userId: string; ticket?: string; fresh: boolean; admin?: boolean; canRemove?: boolean }) {

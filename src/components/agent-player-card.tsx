@@ -10,7 +10,7 @@ export const HOT_MIN_DECIDED = 1;
 export const isHot = (a: Pick<AgentStat, 'editorial' | 'won' | 'lost'>) => !a.editorial && a.won + a.lost >= HOT_MIN_DECIDED && a.won / (a.won + a.lost) > 0.8;
 const num = (x: number) => new Intl.NumberFormat('ro-RO').format(Math.round(x));
 
-export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: { agent: AgentStat; place: number; monthLabel: string; historyScope?: { month: string; scope: 'all' | 'mine' } }) {
+export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: { agent: AgentStat; place: number; monthLabel: string; historyScope?: { month: string; scope: 'all' | 'mine'; sport?: 'football' | 'cs' } }) {
   const p = agentProgression(a.career, a.editorial), decided = a.won + a.lost;
   const rarity = p?.rank.id ?? 'editorial';
   const ai = aiCardIdentity(a);
@@ -53,7 +53,7 @@ export function AgentPlayerCard({ agent: a, place, monthLabel, historyScope }: {
       </div></details>
       {a.recent.length > 0 && <AgentPredictionHistory agent={`${displayName} · ${ai.role}`} total={a.recent.length}
         entries={historyScope ? undefined : a.recent}
-        source={historyScope ? { url: `/api/agents/${a.id}/history?month=${historyScope.month}&scope=${historyScope.scope}`, revision: createHash('sha256').update(JSON.stringify(a.recent)).digest('hex') } : undefined} />}
+        source={historyScope ? { url: `/api/agents/${a.id}/history?month=${historyScope.month}&scope=${historyScope.scope}${historyScope.sport === 'cs' ? '&sport=cs' : ''}`, revision: createHash('sha256').update(JSON.stringify(a.recent)).digest('hex') } : undefined} />}
     </div>
   </article>;
 }

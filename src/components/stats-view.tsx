@@ -11,11 +11,12 @@ const MONTHS = ['ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie', 'i
 const monthName = (m: string) => (m === 'all' ? 'de la început' : `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`);
 const shift = (m: string, k: number) => { const d = new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)) - 1 + k, 1)); return d.toISOString().slice(0, 7); };
 
-export function StatsView({ agents, totals, month, scope = 'all' }: { agents: AgentStat[]; totals: { today: number; week: number; total: number; calls: number; cap: number }; month: string; scope?: 'all' | 'mine' }) {
+export function StatsView({ agents, totals, month, scope = 'all', sport = 'football' }: { agents: AgentStat[]; totals: { today: number; week: number; total: number; calls: number; cap: number }; month: string; scope?: 'all' | 'mine'; sport?: 'football' | 'cs' }) {
   const now = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7);
   const choices = [now, shift(now, -1), shift(now, -2), 'all'];
   const sorted = rankAgents(agents);
-  const identityQuery = '';
+  // Football and Counter-Strike records are kept apart (owner request 30.10); the choice travels with every link.
+  const identityQuery = sport === 'cs' ? '&sport=cs' : '';
   const used = Math.min(1, totals.cap ? totals.today / totals.cap : 0);
   return (
     <div className="space-y-8">
@@ -23,6 +24,11 @@ export function StatsView({ agents, totals, month, scope = 'all' }: { agents: Ag
         <h1 className="page-title">Statistici</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">Ultima poziție a fiecărui agent pe fiecare meci, fără dublarea analizelor repetate. Luna se referă la data meciului. Rata și mediile folosesc doar selecțiile decise (verde/roșu), inclusiv cele rămase în afara biletelor. Data analizei este afișată separat.</p>
         <p className="stats-ai-note">Modele AI cu roluri, stiluri și limite de risc diferite. Portretele sunt ilustrative. Fiecare rol își păstrează istoricul și poate folosi un model de rezervă; rezultatele nu sunt cumulate între roluri.</p>
+        <nav aria-label="Sportul" className="mt-3 flex gap-2">
+          <Link href={`/?tab=statistici&luna=${month}&scope=${scope}`} aria-current={sport === 'football' ? 'page' : undefined} className={`chip px-4 py-2 text-sm font-semibold ${sport === 'football' ? 'border-cyan text-cyan' : 'text-muted'}`}>⚽ Fotbal</Link>
+          <Link href={`/?tab=statistici&luna=${month}&scope=${scope}&sport=cs`} aria-current={sport === 'cs' ? 'page' : undefined} className={`chip px-4 py-2 text-sm font-semibold ${sport === 'cs' ? 'border-cyan text-cyan' : 'text-muted'}`}>🎮 Counter-Strike</Link>
+        </nav>
+        {sport === 'cs' && <p className="mt-2 max-w-2xl text-xs text-muted">Doar pronosticurile pe meciuri Counter-Strike 2, decise din scorul pe hărți. Nu intră în procentele de fotbal ale agenților.</p>}
         <nav aria-label="Sfera statisticilor" className="mt-3 flex gap-2"><Link href={`/?tab=statistici&luna=${month}&scope=all${identityQuery}`} aria-current={scope === 'all' ? 'page' : undefined} className={`chip ${scope === 'all' ? 'text-cyan' : 'text-muted'}`}>Toată comunitatea</Link><Link href={`/?tab=statistici&luna=${month}&scope=mine${identityQuery}`} aria-current={scope === 'mine' ? 'page' : undefined} className={`chip ${scope === 'mine' ? 'text-cyan' : 'text-muted'}`}>Analizele mele</Link></nav>
         <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Luna">
           {choices.map((c) => <Link key={c} href={`/?tab=statistici&luna=${c}&scope=${scope}${identityQuery}`} aria-current={c === month ? 'page' : undefined} className={`chip ${c === month ? 'text-cyan' : 'text-muted'}`}>{c === 'all' ? 'De la început' : monthName(c)}</Link>)}
@@ -47,7 +53,7 @@ export function StatsView({ agents, totals, month, scope = 'all' }: { agents: Ag
         <details className="text-xs text-muted"><summary className="cursor-pointer text-cyan">Cum cresc nivelul și rangul</summary><div className="mt-2 space-y-2"><p>Un rezultat verde adaugă 30 XP; unul roșu scade 15 XP, până la minimum zero. Fiecare 100 XP înseamnă un nivel. Rezultatele în așteptare, anulate și NO BET nu modifică nivelul.</p><div className="flex flex-wrap gap-2">{AGENT_RANKS.map((r) => <span key={r.id} className="player-rank-rule" data-rarity={r.id}><strong>{r.name}</strong> {r.minimum ? `≥ ${r.minimum} decise · ${r.strict ? '>' : '≥'} ${Math.round(r.rate * 100)}% verzi` : 'rang inițial'}</span>)}</div><p>Diamond Super cere peste 80% verzi în carieră și minimum 15 rezultate decise; la exact 80% rangul este Super. Rangul poate scădea după rezultate roșii sau corecții oficiale. Indicator vizual al istoricului; nu estimează rezultatele viitoare. Rolurile de știri și cercetare sunt editoriale.</p></div></details>
       </div>
       <section aria-label="Agenții" className="agent-player-grid">
-        {sorted.map((a, rank) => <AgentPlayerCard key={a.id} agent={a} place={rank + 1} monthLabel={month === 'all' ? 'luna curentă' : monthName(month)} historyScope={{ month, scope }} />)}
+        {sorted.map((a, rank) => <AgentPlayerCard key={a.id} agent={a} place={rank + 1} monthLabel={month === 'all' ? 'luna curentă' : monthName(month)} historyScope={{ month, scope, sport }} />)}
       </section>
     </div>
   );
