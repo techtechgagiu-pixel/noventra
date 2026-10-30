@@ -3,6 +3,8 @@ import { atomic, many, one } from '../db';
 import type { Statement } from '../d1/client';
 import type { Fixture, MarketQuote, MarketType } from './types';
 import { sameMatch } from './the-odds-prices';
+import { csLabel, isCsKey, swapSide } from '../cs/markets';
+import { sameCsMatch } from '../cs/teams';
 
 /**
  * Odds imported by hand (owner decision 29.10): the owner exports the Stake football offer on his laptop
@@ -72,6 +74,7 @@ const DOUBLE = new Set(['double chance']);
 
 /** Label in Romanian for a canonical key, with the site's own team names. */
 export function labelFor(key: string, home: string, away: string): string {
+  if (isCsKey(key)) return csLabel(key, home, away);
   const [family, a, b] = key.split(':');
   if (family === '1X2') return a === 'HOME' ? `${home} câștigă (1)` : a === 'AWAY' ? `${away} câștigă (2)` : 'Egal (X)';
   if (family === 'DC') return a === '1X' ? `${home} sau egal (1X)` : a === 'X2' ? `Egal sau ${away} (X2)` : `${home} sau ${away} (12)`;
@@ -82,6 +85,41 @@ export function labelFor(key: string, home: string, away: string): string {
 }
 
 /** Pure: one Stake market → our canonical selections (empty when the meaning is not certain). */
+/** Counter-Strike export (`--sport-type esport`): winner, map handicap and total maps, x.5 lines only. */
+function mapCsMarket(m: Obj, home: string, away: string): { family: string | null; quotes: ImportedMarket[] } {
+  const name = norm(str(m.name) || str(m.template));
+  const status = norm(str(m.status));
+  if (status && !['active', 'open', '1'].includes(status)) return { family: null, quotes: [] };
+  const outcomes = arr(m.outcomes).map(obj).filter((o) => o.active !== false).map((o) => ({ n: norm(str(o.name)), odds: Number(o.odds) })).filter((o) => o.odds > 1.01 && o.odds < 100);
+  const h = norm(home), a = norm(away);
+  const side = (n: string) => (n === h || n === '1' || n === 'home' ? 'HOME' : n === a || n === '2' || n === 'away' ? 'AWAY' : null);
+  const spec = (k: string) => { const x = new RegExp(`${k}=([+-]?[\\d.]+)`).exec(str(m.specifiers)); return x ? Number(x[1]) : NaN; };
+  if (['winner', '1x2', 'match winner', 'match winner (incl. overtime)', '2way', 'moneyline'].includes(name) && !/map \d/.test(name)) {
+    if (outcomes.length !== 2) return { family: 'ML', quotes: [] };
+    const q = outcomes.map((o) => ({ s: side(o.n), odds: o.odds }));
+    if (!q.every((x) => x.s) || q[0].s === q[1].s) return { family: 'ML', quotes: [] };
+    return { family: 'ML', quotes: q.map((x) => ({ key: `ML:${x.s}`, marketType: 'MONEYLINE' as const, odds: r3(x.odds) })) };
+  }
+  if (/handicap/.test(name) && !/round/.test(name) && !/map \d/.test(name)) {
+    const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) {
+      const x = /^(.*?)\s*\(([+-]?\d+(?:\.\d+)?)\)$/.exec(o.n);
+      const sd = x ? side(x[1].trim()) : null; const line = Number(x?.[2]);
+      if (sd && Number.isFinite(line) && Math.abs(line % 1) === 0.5) quotes.push({ key: `MH:${sd}:${line}`, marketType: 'HANDICAP', odds: r3(o.odds), line });
+    }
+    return { family: 'MH', quotes };
+  }
+  if (/total/.test(name) && !/round|kill/.test(name) && !/map \d/.test(name)) {
+    const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) {
+      const x = /^(over|under)\s*([\d.]+)?$/.exec(o.n); const line = Number(x?.[2] ?? spec('total'));
+      if (x && Number.isFinite(line) && Math.abs(line % 1) === 0.5) quotes.push({ key: `MT:${x[1] === 'over' ? 'OVER' : 'UNDER'}:${line}`, marketType: 'TOTAL', odds: r3(o.odds), line });
+    }
+    return { family: 'MT', quotes };
+  }
+  return { family: null, quotes: [] };
+}
+
 function mapMarket(m: Obj, home: string, away: string): { family: string | null; quotes: ImportedMarket[] } {
   const name = norm(str(m.name) || str(m.template));
   const status = norm(str(m.status));
@@ -155,6 +193,9 @@ export function parseStakeExport(raw: unknown): ParsedExport {
   if (!Number.isFinite(Date.parse(capturedAt))) throw new ImportError('Fișierul nu are momentul exportului (meta.finished_at); nu pot ști cât de proaspete sunt cotele.');
   if (meta.source && str(meta.source) !== 'stake') throw new ImportError('Fișierul nu este un export Stake.');
   const matches = arr(obj(root.data).matches ?? root.matches).map(obj);
+  const sport = str(meta.sport).toLowerCase();
+  const esport = !!sport && sport !== 'soccer' && sport !== 'football';
+  if (esport && !/counter|cs2|csgo/.test(sport)) throw new ImportError(`Fișierul este pentru „${sport}”; site-ul folosește doar fotbal și Counter-Strike.`);
   const stats: ParsedExport['stats'] = { matches: matches.length, priced: 0, mapped: {}, skipped: {} };
   const events: ImportedEvent[] = [];
   for (const m of matches) {
@@ -164,7 +205,7 @@ export function parseStakeExport(raw: unknown): ParsedExport {
     if (!sourceId || !home || !away || !Number.isFinite(kickoff)) continue;
     const byKey = new Map<string, ImportedMarket>();
     for (const market of arr(m.markets).map(obj)) {
-      const { family, quotes } = mapMarket(market, home, away);
+      const { family, quotes } = (esport ? mapCsMarket : mapMarket)(market, home, away);
       if (!family) { const n = str(market.name) || str(market.template) || '?'; stats.skipped[n] = (stats.skipped[n] ?? 0) + 1; continue; }
       for (const q of quotes) if (!byKey.has(q.key)) byKey.set(q.key, q);
       if (quotes.length) stats.mapped[family] = (stats.mapped[family] ?? 0) + 1;
@@ -203,7 +244,7 @@ export async function withImportedPrices(fixtures: Fixture[]): Promise<Fixture[]
   const rows = await many<Row>(
     `SELECT source_id,home,away,league,kickoff_utc,markets,captured_at FROM imported_odds
       WHERE source='stake' AND kickoff_utc >= $1 AND kickoff_utc <= $2 AND captured_at >= $3`,
-    [new Date(Math.min(...times) - 20 * 60_000).toISOString(), new Date(Math.max(...times) + 20 * 60_000).toISOString(), new Date(Date.now() - maxAgeMs()).toISOString()],
+    [new Date(Math.min(...times) - 35 * 60_000).toISOString(), new Date(Math.max(...times) + 35 * 60_000).toISOString(), new Date(Date.now() - maxAgeMs()).toISOString()],
   ).catch(() => [] as Row[]);
   if (!rows.length) return fixtures;
   const events: ImportedEvent[] = rows.map((r) => ({ sourceId: r.source_id, home: r.home, away: r.away, league: r.league, kickoff: iso(r.kickoff_utc), capturedAt: iso(r.captured_at),
@@ -214,7 +255,16 @@ export async function withImportedPrices(fixtures: Fixture[]): Promise<Fixture[]
     if (f.status !== 'pre') return f;
     const t = Date.parse(f.kickoff);
     const near = timed.filter((x) => Math.abs(x.t - t) <= 15 * 60_000).map((x) => x.e);
-    const e = near.find((x) => sameMatch(f, x)) ?? near.find((x) => sameImportedMatch(f, x));
+    if (f.provider === 'pandascore') {
+      // Counter-Strike: only CS prices, teams may be listed in the other order, schedules slip up to 30 minutes.
+      const cs = timed.filter((x) => Math.abs(x.t - t) <= 30 * 60_000 && x.e.markets.some((m) => isCsKey(m.key)));
+      for (const { e } of cs) {
+        const o = sameCsMatch(f, e);
+        if (o) return mergeImported(f, o === 'same' ? e : { ...e, home: e.away, away: e.home, markets: e.markets.map((m) => ({ ...m, key: swapSide(m.key) })) });
+      }
+      return f;
+    }
+    const e = near.find((x) => sameMatch(f, x) && !x.markets.some((m) => isCsKey(m.key))) ?? near.find((x) => sameImportedMatch(f, x) && !x.markets.some((m) => isCsKey(m.key)));
     return e ? mergeImported(f, e) : f;
   });
 }

@@ -42,6 +42,8 @@ export const config = {
     oddsApiMaxAgeMinutes: num('ODDS_API_MAX_AGE_MINUTES', 4 * 24 * 60),
     /** Odds imported by hand from the owner's Stake export (29.10): used as they are for 4 days after the export. */
     importedOddsMaxAgeMinutes: num('IMPORTED_ODDS_MAX_AGE_MINUTES', 4 * 24 * 60),
+    /** CS2 prices from OddsPapi (refreshed every 6 h; esports prices move fast): accepted up to 12 hours. */
+    oddspapiMaxAgeMinutes: num('ODDSPAPI_MAX_AGE_MINUTES', 12 * 60),
     targetTolerance: num('TARGET_TOLERANCE', 0.15),
   },
   /** DEMO data is only allowed in test runs. Production never substitutes synthetic data. */

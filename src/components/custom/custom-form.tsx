@@ -76,7 +76,8 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
     return (catalog?.rows ?? []).filter((m) => m.odds && m.status === 'pre' && Date.parse(m.kickoff) >= now + fromHours * 3600_000 && Date.parse(m.kickoff) <= now + toHours * 3600_000);
   }, [catalog, fromHours, toHours]);
   const leagueOptions = useMemo(() => (catalog?.leagues ?? []).map((l) => ({ ...l, count: inWindow.filter((m) => m.leagueId === l.id).length })), [catalog, inWindow]);
-  const available = leagues.length ? inWindow.filter((m) => leagues.includes(m.leagueId)).length : inWindow.length;
+  // Counter-Strike (CS2) is analysed only when ticked; "Toate ligile" means all football leagues.
+  const available = leagues.length ? inWindow.filter((m) => leagues.includes(m.leagueId)).length : inWindow.filter((m) => m.leagueId !== 'CS2').length;
   const fits = (a: AgentCard) => Math.min(a.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds) >= perLeg * 0.92;
   const topSix = topAgentIds.filter((id) => agents.some((a) => a.id === id));
   const topSixReady = topSix.length === 6;
@@ -145,7 +146,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <p className="text-xs text-muted">Bifează ligile din care să-ți facă biletul. Nimic bifat = toate ligile.</p>
         </div>
         <div className="mt-3">
-          {catalog ? <LeaguePicker leagues={leagueOptions} value={leagues} onChange={setLeagues} allLabel="Toate ligile" />
+          {catalog ? <LeaguePicker leagues={leagueOptions} value={leagues} onChange={setLeagues} allLabel="Toate ligile de fotbal" />
             : catalogError ? <p role="status" className="text-sm text-gold">Ligile nu s-au încărcat. Setarea rămâne „Toate ligile”. <button type="button" className="underline" onClick={() => setCatalogAttempt((n) => n + 1)}>Reîncearcă</button></p>
             : <p className="rounded-xl border border-line bg-ink px-3 py-2.5 text-sm text-muted">Încarc ligile disponibile…</p>}
         </div>

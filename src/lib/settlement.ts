@@ -3,6 +3,7 @@ import { espnLeagueDay, espnSummary } from './sports/espn';
 import { getLeagues, persistFixtures } from './sports/fixtures';
 import { localDate, yyyymmdd } from './time';
 import { runAutomation } from './automation';
+import { csSelectionWins } from './cs/markets';
 
 export type MatchFacts = { ht?: [number, number] | null; corners?: [number, number] | null };
 
@@ -27,6 +28,7 @@ export function settleMarket(key: string, home: number, away: number, facts: Mat
     case 'BTTS': return r(side === 'YES' ? home > 0 && away > 0 : !(home > 0 && away > 0));
     case 'CS': { const conceded = side === 'HOME' ? away : home; return r(key.split(':')[2] === 'YES' ? conceded === 0 : conceded > 0); }
     case 'WIN2': return r(side === 'HOME' ? home - away >= 2 : away - home >= 2);
+    case 'ML': case 'MH': case 'MT': return r(csSelectionWins(key, home, away)!); // Counter-Strike: score in maps
     case 'HT1X2': return ht ? r(side === 'HOME' ? ht[0] > ht[1] : side === 'AWAY' ? ht[1] > ht[0] : ht[0] === ht[1]) : null;
     case 'H21X2': { if (!ht) return null; const h = home - ht[0], a = away - ht[1]; return r(side === 'HOME' ? h > a : side === 'AWAY' ? a > h : h === a); }
     case 'HTTOT': return ht ? r(side === 'OVER' ? ht[0] + ht[1] > line : ht[0] + ht[1] < line) : null;

@@ -32,7 +32,7 @@ const TTL_MS = 30 * 60_000;
 const FAMILY_RO: Record<string, string> = {
   AH: 'handicap asiatic', TOTAL: 'total goluri peste', BTTS: 'ambele marchează', DC: 'șansă dublă', CS: 'echipa (nu) primește gol',
   '1X2': 'rezultat final', TT: 'goluri pe echipă', HTTOT: 'goluri în prima repriză', CORN: 'cornere', TCORN: 'cornere pe echipă',
-  WIN2: 'victorie la 2+ goluri', WBH: 'câștigă ambele reprize', HT1X2: 'rezultat la pauză', H21X2: 'rezultat în repriza a doua',
+  WIN2: 'victorie la 2+ goluri', ML: 'câștigător meci CS2', MH: 'handicap hărți CS2', MT: 'total hărți CS2', WBH: 'câștigă ambele reprize', HT1X2: 'rezultat la pauză', H21X2: 'rezultat în repriza a doua',
 };
 export const familyOf = (key: string | null) => (key ?? '').split(':')[0] || '—';
 export const familyLabel = (f: string) => FAMILY_RO[f] ?? f;

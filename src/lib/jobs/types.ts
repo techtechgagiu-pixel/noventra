@@ -52,6 +52,8 @@ export type FixtureSnapshot = {
   dataQuality: { historyHome: number; historyAway: number; shotsAvailable: boolean; standings: boolean; oddsObservedAt: string };
   /** Hanțu's pre-match research brief (h2h, home/away form, table, lineups, absences, finances). */
   brief?: MatchBrief;
+  /** Counter-Strike only: format, event, Valve standings and the model's map probability. */
+  cs?: import('../cs/analysis').CsContext;
   /** Real dated headlines for Nemotron 3.5 Super VL (Google News); absent for older snapshots and demo data. */
   news?: { home: NewsItem[]; away: NewsItem[]; errors: string[] };
 };

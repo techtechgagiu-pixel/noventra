@@ -10,6 +10,9 @@ export async function GET() {
   if(process.env.BETMIND_DATABASE==='d1-http'&&process.env.BETMIND_MAINTENANCE!=='1'){
     const {refreshStoredCatalog}=await import('@/lib/d1/catalog');
     void refreshStoredCatalog().catch(()=>console.warn(JSON.stringify({event:'catalog_refresh_failed'})));
+    // Counter-Strike schedule, results and prices (keys live on the runner only); refreshed when due.
+    const {maybeSyncCs}=await import('@/lib/cs/sync');
+    void maybeSyncCs().catch(()=>console.warn(JSON.stringify({event:'cs_sync_failed'})));
   }
   let database = 'ok';
   let issue: 'quota' | 'unavailable' | undefined;

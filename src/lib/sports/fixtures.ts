@@ -3,7 +3,7 @@ import { many, query, SQL_NOW, isD1, atomic } from '../db';
 import { dateRange, localDate, yyyymmdd } from '../time';
 import { espnLeagueDay, espnMatchDays } from './espn';
 import { lpfFixtures } from './lpf';
-import type { Fixture, League } from './types';
+import type { Fixture, League, MarketQuote } from './types';
 import { withTheOddsPrices } from './the-odds-prices';
 import { withImportedPrices } from './imported-prices';
 
@@ -29,6 +29,7 @@ export const liveProvider: FixtureProvider = async (leagues, days) => {
   const ttlFor = (d: string) => (d <= shiftDay(nowDay, 1) ? 10 * 60_000 : 60 * 60_000);
   const tasks: Array<() => Promise<Fixture[]>> = [];
   await Promise.all(leagues.map(async (league) => {
+    if (league.provider === 'pandascore') return; // Counter-Strike: stored by the CS sync, read from the database
     if (league.provider === 'lpf') { tasks.push(() => lpfFixtures(league, days).catch((e: Error) => { errors.push(`${league.name}: ${e.message}`); return [] as Fixture[]; })); return; }
     const calendar = await espnMatchDays(league).catch(() => null);
     for (const d of espnDays) {
@@ -91,6 +92,23 @@ export async function persistFixtures(fixtures: Fixture[]) {
   for(let i=0;i<writes.length;i+=20)await atomic(writes.slice(i,i+20));
 }
 
+/** Stored Counter-Strike fixtures of the window, each with its latest saved prices. */
+async function storedCsFixtures(window: string[]): Promise<Fixture[]> {
+  const first = window[0], last = window[window.length - 1];
+  const from = new Date(Date.parse(`${first}T00:00:00Z`) - 3 * 3600_000).toISOString(), to = new Date(Date.parse(`${last}T23:59:59Z`) + 3 * 3600_000).toISOString();
+  const rows = await many<{ id: string; provider_id: string; home_team: string; away_team: string; home_team_id: string | null; away_team_id: string | null; home_logo: string | null; away_logo: string | null; kickoff_utc: string | Date; status: Fixture['status']; home_score: number | null; away_score: number | null; bookmaker: string | null; source: string | null; markets: unknown; observed_at: string | Date | null; provider_updated_at: string | Date | null }>(
+    `SELECT f.id,f.provider_id,f.home_team,f.away_team,f.home_team_id,f.away_team_id,f.home_logo,f.away_logo,f.kickoff_utc,f.status,f.home_score,f.away_score,o.bookmaker,o.source,o.markets,o.observed_at,o.provider_updated_at
+       FROM fixtures f LEFT JOIN odds_snapshots o ON o.id=(SELECT id FROM odds_snapshots WHERE fixture_id=f.id ORDER BY id DESC LIMIT 1)
+      WHERE f.provider='pandascore' AND f.kickoff_utc >= $1 AND f.kickoff_utc <= $2`, [from, to]);
+  const daySet = new Set(window);
+  return rows.filter((r) => daySet.has(localDate(new Date(r.kickoff_utc)))).map((r) => ({
+    id: r.id, provider: 'pandascore', providerId: r.provider_id, leagueId: 'CS2', leagueKey: 'csgo', leagueName: 'Counter-Strike 2', country: 'Esports',
+    home: r.home_team, away: r.away_team, homeTeamId: r.home_team_id ?? undefined, awayTeamId: r.away_team_id ?? undefined, homeLogo: r.home_logo ?? undefined, awayLogo: r.away_logo ?? undefined,
+    kickoff: new Date(r.kickoff_utc).toISOString(), status: r.status, homeScore: r.home_score, awayScore: r.away_score, fetchedAt: new Date().toISOString(),
+    odds: r.markets && r.bookmaker && r.observed_at ? { bookmaker: r.bookmaker, source: r.source ?? '', markets: (typeof r.markets === 'string' ? JSON.parse(r.markets) : r.markets) as MarketQuote[], observedAt: new Date(r.observed_at).toISOString(), providerUpdatedAt: r.provider_updated_at ? new Date(r.provider_updated_at).toISOString() : null } : null,
+  }));
+}
+
 /** Fixtures for a window of local days. Cached by the HTTP layer; DB writes only on change. */
 export async function loadFixtures(startDate: string, days: number, opts: { top10Only?: boolean; persist?: boolean } = {}) {
   if(process.env.BETMIND_RUNTIME?.startsWith('cloudflare')&&!g.__bmFixtureOverride){
@@ -105,7 +123,9 @@ export async function loadFixtures(startDate: string, days: number, opts: { top1
   const provided = await activeProvider()(leagues, window);
   const { errors } = provided;
   // Fixtures without any price at ESPN/LPF get The Odds API prices when available (cached, credit-budgeted).
-  const priced = g.__bmFixtureOverride ? provided.fixtures : await withTheOddsPrices(provided.fixtures).catch(() => provided.fixtures);
+  const football = g.__bmFixtureOverride ? provided.fixtures : await withTheOddsPrices(provided.fixtures).catch(() => provided.fixtures);
+  // Counter-Strike fixtures come from the CS sync (PandaScore + OddsPapi), already stored with their latest prices.
+  const priced = leagues.some((l) => l.provider === 'pandascore') ? [...football, ...(await storedCsFixtures(window).catch(() => []))] : football;
   // Odds the owner imported from his Stake export (no network): main prices for 4 days after the export.
   const fixtures = await withImportedPrices(priced).catch(() => priced);
   if (opts.persist !== false) await persistFixtures(fixtures);

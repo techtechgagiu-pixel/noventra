@@ -39,8 +39,8 @@ export async function fixtureCatalog() {
 }
 
 export type MatchRow = {
-  source?: 'espn' | 'lpf' | 'the-odds-api' | 'demo';
-  sources?: Array<'espn' | 'lpf' | 'the-odds-api' | 'demo'>;
+  source?: 'espn' | 'lpf' | 'the-odds-api' | 'demo' | 'pandascore';
+  sources?: Array<'espn' | 'lpf' | 'the-odds-api' | 'demo' | 'pandascore'>;
   id: string; leagueId: string; league: string; country: string; home: string; away: string; homeLogo: string | null; awayLogo: string | null;
   kickoff: string; status: string; score: string | null; odds: { home: number | null; draw: number | null; away: number | null; markets: number; bookmaker: string } | null;
   analysis: { outcome: string; selectionOutcome: string | null; label: string | null; odds: number | null; votes: number; onTicket: boolean; at: string; jobId: string } | null;

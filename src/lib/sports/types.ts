@@ -1,6 +1,6 @@
 export type FixtureStatus = 'pre' | 'in' | 'post' | 'postponed' | 'cancelled';
 
-export type MarketType = '1X2' | 'DOUBLE_CHANCE' | 'TOTAL' | 'HANDICAP' | 'TEAM_TOTAL' | 'BTTS' | 'CLEAN_SHEET' | 'TEAM_SPECIAL' | 'HALF' | 'CORNERS';
+export type MarketType = '1X2' | 'DOUBLE_CHANCE' | 'TOTAL' | 'HANDICAP' | 'TEAM_TOTAL' | 'BTTS' | 'CLEAN_SHEET' | 'TEAM_SPECIAL' | 'HALF' | 'CORNERS' | 'MONEYLINE';
 
 /** A priced market selection, exactly as observed at the source. Never altered. */
 export type MarketQuote = {
@@ -23,7 +23,7 @@ export type OddsSnapshot = {
 
 export type Fixture = {
   id: string; // provider:eventId
-  provider: 'espn' | 'lpf' | 'demo';
+  provider: 'espn' | 'lpf' | 'demo' | 'pandascore';
   providerId: string;
   leagueId: string; // canonical league id (ENG1…)
   leagueKey: string; // provider league key (eng.1)
@@ -49,7 +49,7 @@ export type League = {
   id: string;
   country: string;
   name: string;
-  provider: 'espn' | 'lpf';
+  provider: 'espn' | 'lpf' | 'pandascore';
   providerKey: string;
   priority: number;
   top10: boolean;

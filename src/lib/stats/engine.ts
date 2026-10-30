@@ -1,4 +1,5 @@
 import type { HistoricalMatch, MarketQuote } from '../sports/types';
+import { csSelectionWins } from '../cs/markets';
 
 /**
  * Deterministic statistical engine. Language models never compute these numbers;
@@ -39,6 +40,7 @@ export function selectionWins(key: string, hg: number, ag: number): boolean | nu
     case 'BTTS': return parts[1] === 'YES' ? hg > 0 && ag > 0 : !(hg > 0 && ag > 0);
     case 'CS': { const conceded = parts[1] === 'HOME' ? ag : hg; return parts[2] === 'YES' ? conceded === 0 : conceded > 0; }
     case 'WIN2': return parts[1] === 'HOME' ? hg - ag >= 2 : ag - hg >= 2;
+    case 'ML': case 'MH': case 'MT': return csSelectionWins(key, hg, ag); // Counter-Strike, scores in maps
     default: return null; // half-time, second-half and corner markets need data beyond the final score
   }
 }
@@ -106,12 +108,15 @@ export function fairProbabilities(markets: MarketQuote[]) {
       : parts[0] === 'TCORN' ? `TCORN:${parts[1]}:${m.line}|${book}`
       : parts[0] === 'BTTS' ? `BTTS|${book}`
       : parts[0] === 'CS' ? `CS:${parts[1]}|${book}`
+      : parts[0] === 'ML' ? `ML|${book}`
+      : parts[0] === 'MH' ? `MH:${Math.abs(m.line ?? 0)}|${book}`
+      : parts[0] === 'MT' ? `MT:${m.line}|${book}`
       : m.key;
     groups.set(g, [...(groups.get(g) ?? []), m]);
   }
   for (const [g, list] of groups) {
     const three = /^(1X2|HT1X2|H21X2)\|/.test(g);
-    const two = /^(TOTAL|AH|TT:|HTTOT|CORN|TCORN|BTTS|CS:)/.test(g);
+    const two = /^(TOTAL|AH|TT:|HTTOT|CORN|TCORN|BTTS|CS:|ML\||MH:|MT:)/.test(g);
     const complete = three ? list.length === 3 : two ? list.length === 2 : false;
     const sum = list.reduce((s, m) => s + 1 / m.odds, 0);
     for (const m of list) out.set(m.key, { implied: 1 / m.odds, fair: complete ? 1 / m.odds / sum : null, groupMargin: complete ? sum - 1 : null });

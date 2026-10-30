@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { readFile } from 'node:fs/promises';
 import { d1Database, sqliteParameters, decodeRow } from '@/lib/d1/client';
@@ -30,7 +30,7 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("D1 local test")}}', compatibilityDate: '2026-10-25', d1Databases: ['DB'] }));
     const binding = await mf.getD1Database('DB');
     db = d1Database(binding);
-    for (const file of ['0001_legacy_schema.sql', '0002_agent_configuration.sql', '0003_request_coordination.sql', '0004_league_configuration.sql', '0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0009_feedback.sql','0010_ticket_hidden.sql','0013_perf_indexes.sql','0015_custom_daily_limits.sql','0016_live_clock.sql','0017_imported_odds.sql','0018_user_custom_limit.sql']) {
+    for (const file of ['0001_legacy_schema.sql', '0002_agent_configuration.sql', '0003_request_coordination.sql', '0004_league_configuration.sql', '0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0009_feedback.sql','0010_ticket_hidden.sql','0013_perf_indexes.sql','0015_custom_daily_limits.sql','0016_live_clock.sql','0017_imported_odds.sql','0018_user_custom_limit.sql','0019_cs2.sql']) {
       const statements = splitSqlScript(await readFile('cloudflare/d1/migrations/' + file, 'utf8'));
       for (let i = 0; i < statements.length; i += 20) await binding.batch(statements.slice(i, i + 20).map(s => binding.prepare(s)));
     }
@@ -52,6 +52,37 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
       expect(f.odds!.markets.find((m) => m.key === '1X2:HOME')).toMatchObject({ odds: 1.9, label: 'Toronto FC câștigă (1)' });
       expect(await importStatus()).toMatchObject({ matches: 1, usable: 1 });
     } finally { setFixtureProviderForTests(null); }
+  }));
+
+  it('syncs Counter-Strike schedule, results and OddsPapi prices on D1 (no real network)', async () => scope(async () => {
+    const { syncCsMatches } = await import('@/lib/cs/pandascore');
+    const { syncCsOdds } = await import('@/lib/cs/oddspapi');
+    const soon = new Date(Date.now() + 5 * 3600_000).toISOString(), past = new Date(Date.now() - 3 * 86400_000).toISOString();
+    const ps = (id: number, at: string, status: string, r?: [number, number]) => ({ id, begin_at: at, status, match_type: 'best_of', number_of_games: 3, winner_id: r ? (r[0] > r[1] ? 1 : 2) : null,
+      opponents: [{ opponent: { id: 1, name: 'Team Spirit' } }, { opponent: { id: 2, name: 'G2 Esports' } }], results: r ? [{ team_id: 1, score: r[0] }, { team_id: 2, score: r[1] }] : [], tournament: { name: 'BLAST', tier: 'a' } });
+    const p = (price: number) => ({ players: { 0: { price, active: true } } });
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const u = new URL(String(input));
+      if (u.hostname === 'api.pandascore.co') return Response.json(u.pathname.endsWith('/upcoming') ? [ps(500, soon, 'not_started')] : u.pathname.endsWith('/past') ? [ps(400, past, 'finished', [2, 1])] : []);
+      if (u.hostname === 'api.oddspapi.io') {
+        if (u.pathname.endsWith('/fixtures')) return Response.json([{ fixtureId: 'op1', participant1Name: 'G2', participant2Name: 'Spirit', startTime: soon }]);
+        if (u.pathname.endsWith('/markets')) return Response.json([{ sportId: 17, marketId: 171, marketName: 'Winner', handicap: 0, outcomes: [{ outcomeId: 171, outcomeName: '1' }, { outcomeId: 172, outcomeName: '2' }] }]);
+        if (u.pathname.endsWith('/odds')) return Response.json({ bookmakerOdds: { pinnacle: { markets: { 171: { outcomes: { 171: p(2.4), 172: p(1.6) } } } } } });
+      }
+      return realFetch(input, init);
+    });
+    process.env.PANDASCORE_TOKEN = 'test-token'; process.env.ODDSPAPI_KEY = 'test-key';
+    try {
+      expect(await syncCsMatches()).toMatchObject({ upcoming: 1, past: 1 });
+      expect(await one("SELECT status,score1,score2,winner_id FROM cs_matches WHERE id='400'")).toEqual({ status: 'finished', score1: 2, score2: 1, winner_id: '1' });
+      expect(await one("SELECT league_id,home_team,status FROM fixtures WHERE id='ps:500'")).toEqual({ league_id: 'CS2', home_team: 'Team Spirit', status: 'pre' });
+      expect(await syncCsOdds()).toMatchObject({ priced: 1 });
+      const snap = await one<{ source: string; markets: string }>("SELECT source,markets FROM odds_snapshots WHERE fixture_id='ps:500' ORDER BY id DESC LIMIT 1");
+      expect(snap!.source).toBe('oddspapi');
+      // OddsPapi lists G2 first: the prices are turned around to the site's order (Spirit = home).
+      expect(typeof snap!.markets === "string" ? JSON.parse(snap!.markets) : snap!.markets).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'ML:HOME', odds: 1.6, label: 'Team Spirit câștigă meciul' }), expect.objectContaining({ key: 'ML:AWAY', odds: 2.4 })]));
+    } finally { spy.mockRestore(); delete process.env.PANDASCORE_TOKEN; delete process.env.ODDSPAPI_KEY; }
   }));
 
   it('binds numbered/repeated parameters without altering quoted text', async () => scope(async () => {

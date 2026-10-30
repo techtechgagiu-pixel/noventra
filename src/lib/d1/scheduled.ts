@@ -1,6 +1,7 @@
 import { one, query } from '../db';
 import { settlePending } from '../settlement';
 import { autoContinueJobs } from './auto-continue';
+import { csWakeDue } from '../cs/sync';
 
 /** Only wakes an existing runner, which drains already-authorized queued jobs.
  * A wake never creates a ticket or calls a model by itself. */
@@ -24,7 +25,9 @@ export async function scheduledMaintenance(runner:string|undefined){
   // Paused or incomplete tickets continue on their own, even with nobody on the site.
   const auto=await autoContinueJobs().catch(()=>({resumed:0,completed:0}));
   const queued=await one<{n:number}>("SELECT count(*) AS n FROM ticket_generation_jobs WHERE status IN ('QUEUED','WAITING','RUNNING')");
-  const wake=queued?.n?await wakeAnalysisRunner(runner):{status:'idle'};
-  return {queued:queued?.n??0,wake,auto};
+  // The runner also refreshes Counter-Strike data every 30 minutes (it holds the PandaScore/OddsPapi keys).
+  const cs=!!runner&&!queued?.n&&await csWakeDue().catch(()=>false);
+  const wake=queued?.n||cs?await wakeAnalysisRunner(runner):{status:'idle'};
+  return {queued:queued?.n??0,wake,auto,...(cs?{csSync:true}:{})};
 }
 export const scheduledSettlementPage=()=>settlePending();
