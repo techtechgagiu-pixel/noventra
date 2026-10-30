@@ -1,3 +1,4 @@
+import { csFacts } from '../cs/analysis';
 import { briefForPrompt } from '../scout/match-brief';
 import { selectionImplies } from '../stats/engine';
 import type { Prediction, Revision } from '../ai/agents';
@@ -63,6 +64,7 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
 
 /** Atlas cross-checks sourced news with statistics; Nemotron 3.5 Super VL keeps his news-only role. */
 export function factsForAgent(id: string, s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
+  if (s.fixture.provider === 'pandascore') return csFacts(s, band); // Counter-Strike: one set of facts for everyone
   if (id === 'hantu') return newsFacts(s, band);
   const facts = agentFacts(s, band);
   return id === 'atlas' ? { ...facts, news: newsFacts(s, band).news } : facts;

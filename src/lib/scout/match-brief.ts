@@ -9,6 +9,8 @@ import type { NewsItem } from '../news/google-news';
 export type BriefMatch = { date: string; text: string; result?: 'W' | 'D' | 'L' };
 export type BriefFlag = { team: string; kind: 'absențe' | 'financiar' | 'formă'; title: string; source: string | null; date: string; link?: string };
 export type MatchBrief = {
+  /** Counter-Strike brief: recent matches instead of home/away form, Valve standings, rosters as lineups. */
+  sport?: 'cs2';
   home: string; away: string;
   h2h: BriefMatch[];
   homeAtHome: BriefMatch[];
@@ -92,11 +94,17 @@ export function buildMatchBrief(input: {
 }
 
 const pos = (s: MatchBrief['standings']['home']) => (s && s.rank ? `locul ${s.rank}${s.points !== null ? `, ${s.points} pct` : ''}${s.played ? ` din ${s.played} meciuri` : ''}` : 'n/d');
+const posCs = (s: MatchBrief['standings']['home']) => (s && s.rank ? `#${s.rank}${s.points !== null ? ` (${s.points} pct)` : ''}` : 'neclasată');
 const form = (ms: BriefMatch[]) => (ms.length ? ms.map((m) => m.text).join('; ') : 'n/d');
 
 /** Compact text for agent prompts (the same facts the chat shows). */
 export function briefForPrompt(b: MatchBrief | undefined) {
   if (!b) return undefined;
+  if (b.sport === 'cs2') return {
+    directeUltimele5: form(b.h2h), gazdeUltimele5: form(b.homeAtHome), oaspetiUltimele5: form(b.awayAway),
+    clasamentValve: `${b.home}: ${posCs(b.standings.home)} · ${b.away}: ${posCs(b.standings.away)}`,
+    rostere: b.lineups.home && b.lineups.away ? `${b.home}: ${b.lineups.home.join(', ')} | ${b.away}: ${b.lineups.away.join(', ')}` : 'n/d',
+  };
   return {
     h2hUltimele5: form(b.h2h),
     gazdeleAcasaUltimele5: form(b.homeAtHome),
@@ -109,6 +117,14 @@ export function briefForPrompt(b: MatchBrief | undefined) {
 
 /** Chat text, one section per line. */
 export function briefForChat(b: MatchBrief) {
+  if (b.sport === 'cs2') return [
+    `🎮 Counter-Strike 2`,
+    `⚔ Ultimele directe: ${form(b.h2h)}`,
+    `📈 ${b.home} (ultimele 5): ${form(b.homeAtHome)}`,
+    `📈 ${b.away} (ultimele 5): ${form(b.awayAway)}`,
+    `🏆 Clasament Valve: ${b.home} ${posCs(b.standings.home)} · ${b.away} ${posCs(b.standings.away)}`,
+    `👥 Rostere: ${b.lineups.home && b.lineups.away ? `${b.home}: ${b.lineups.home.join(', ')} · ${b.away}: ${b.lineups.away.join(', ')}` : 'n/d'}`,
+  ].join('\n');
   const lines = [
     `⚔ Ultimele 5 directe: ${form(b.h2h)}`,
     `🏠 ${b.home} acasă (ultimele 5): ${form(b.homeAtHome)}`,
