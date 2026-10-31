@@ -65,7 +65,9 @@ async function save(job: JobRow) {
 async function discover(job: JobRow) {
   const cp = job.checkpoint;
   await setStage(job, 'SELECTING', cp);
+  const t0 = Date.now();
   const loaded = await loadFixtures(job.config.windowStart, job.config.windowDays, { top10Only: job.config.top10Only });
+  console.log(JSON.stringify({ event: 'discover_loaded', jobId: job.id, fixtures: loaded.fixtures.length, errors: loaded.errors.length, ms: Date.now() - t0 }));
   const { errors } = loaded;
   if (job.config.review) return discoverReview(job, loaded.fixtures, errors);
   // Custom tickets may be limited to the leagues the user ticked.
@@ -114,6 +116,7 @@ async function discover(job: JobRow) {
       else thin.push({ fixtureId: e.fixtureId, match: `${e.home} – ${e.away}`, league: e.league, markets: counts[k] });
     });
   }
+  console.log(JSON.stringify({ event: 'discover_markets_checked', jobId: job.id, accepted: prioritized.length, thin: thin.length, ms: Date.now() - t0 }));
   if (thin.length) await recordEvent(job.id, { type: 'MARKETS_CHECKED', stage: 'SELECTING', payload: { minimum: config.limits.minMarkets, accepted: prioritized.length, rejected: thin.length, items: thin.slice(0, 40) } });
   const batches: string[][] = [];
   for (let i = 0; i < prioritized.length; i += job.config.batchSize) batches.push(prioritized.slice(i, i + job.config.batchSize).map((e) => e.fixtureId));

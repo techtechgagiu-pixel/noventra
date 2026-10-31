@@ -8,6 +8,18 @@ import { runJobSlice, type JobRow } from './pipeline';
 
 const WORKER_ID = `${process.env.RENDER_INSTANCE_ID || 'local'}:${randomUUID().slice(0, 8)}`;
 const LEASE_MS = 3 * 60_000;
+/**
+ * A slice runs ~50 s plus at most one unit (a model call with its retries). Past this limit it is treated as hung:
+ * the heartbeat would otherwise keep the lease alive forever (31.10: a ticket sat 10 minutes in discovery).
+ */
+export const SLICE_TIMEOUT_MS = 8 * 60_000;
+export class SliceTimeoutError extends Error {}
+
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const limit = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new SliceTimeoutError(`Pasul de analiză nu a răspuns în ${Math.round(ms / 60_000)} minute; se reia automat.`)), ms); });
+  return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+}
 const g = globalThis as unknown as { __betmindWorker?: { running: number; timer: NodeJS.Timeout | null; started: boolean } };
 const state = (g.__betmindWorker ??= { running: 0, timer: null, started: false });
 
@@ -34,7 +46,7 @@ async function wasInterrupted(jobId: string) {
   return r && !['JOB_CREATED', 'TARGET_SELECTED', 'SEED_GENERATED', 'JOB_RESUMED', 'JOB_WAITING'].includes(r.type);
 }
 
-async function processOne(): Promise<boolean> {
+async function processOne(sliceTimeoutMs = SLICE_TIMEOUT_MS): Promise<boolean> {
   const job = await claim();
   if (!job) return false;
   const tick = setInterval(() => { void query(`UPDATE ticket_generation_jobs SET lease_expires_at=${dialect("now()+interval '3 minutes'","strftime('%Y-%m-%dT%H:%M:%fZ','now','+3 minutes')")} WHERE id=$1 AND lease_owner=$2`, [job.id, WORKER_ID]).catch((e) => console.error(JSON.stringify({ event: 'worker_heartbeat_failed', message: (e as Error).message }))); }, 60_000);
@@ -42,7 +54,7 @@ async function processOne(): Promise<boolean> {
     if (job.recovered && job.stage !== 'QUEUED' && (await wasInterrupted(job.id))) {
       await recordEvent(job.id, { type: 'JOB_RESUMED', stage: job.stage, payload: { by: 'system', note: 'Execuția a fost reluată din ultimul checkpoint salvat (serviciul a fost repornit sau a fost inactiv). Între timp nu s-a procesat nimic.' } });
     }
-    const outcome = await runJobSlice(job);
+    const outcome = await withTimeout(runJobSlice(job), sliceTimeoutMs);
     if (outcome === 'CONTINUE') await query(`UPDATE ticket_generation_jobs SET status='QUEUED', next_run_at=${SQL_NOW()}, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1 AND lease_owner=$2`, [job.id, WORKER_ID]);
   } catch (error) {
     await handleError(job, error as Error);
