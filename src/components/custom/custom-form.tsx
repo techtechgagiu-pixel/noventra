@@ -30,8 +30,8 @@ const GROUPS: Array<{ label: string; hint: string; ids: (a: AgentCard[]) => stri
   { label: 'Surpriză (7)', hint: '7 agenți la întâmplare', ids: (a) => [...a].sort(() => Math.random() - 0.5).slice(0, 7).map((x) => x.id) },
 ];
 
-/** Selectable offsets, from 30 minutes to one week. */
-const STOPS = [0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 36, 42, 48, 60, 72, 84, 96, 120, 144, 168];
+/** Selectable offsets, from 20 minutes to one week. */
+const STOPS = [20 / 60, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 36, 42, 48, 60, 72, 84, 96, 120, 144, 168];
 const dur = (h: number) => (h < 1 ? `${Math.round(h * 60)} min` : h < 24 ? `${h} h` : h % 24 === 0 ? `${h / 24} ${h === 24 ? 'zi' : 'zile'}` : `${Math.floor(h / 24)} ${h < 48 ? 'zi' : 'zile'} și ${h % 24} h`);
 const at = (h: number) => new Date(Date.now() + h * 3600_000).toLocaleString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
 const span = (a: number, b: number) => `${at(a)} – ${at(b)}`;
@@ -43,7 +43,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const attempt = useRef<{ body: string; requestId: string } | null>(null);
   const [target, setTarget] = useState(5);
   const [legs, setLegs] = useState(4);
-  const [fromI, setFromI] = useState(STOPS.indexOf(2));
+  const [fromI, setFromI] = useState(0); // owner request 31.10: from 20 minutes on by default
   const [toI, setToI] = useState(STOPS.indexOf(48));
   const fromHours = STOPS[fromI], toHours = STOPS[toI];
   const win = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
