@@ -26,7 +26,7 @@ describe('custom interval', () => {
     expect(p.minLeadHours).toBe(0.5); expect(p.maxAheadHours).toBe(30);
     const { parseCustom } = await import('@/lib/jobs/service');
     const c = parseCustom({ target: 3, legs: 2, agents: ['alex'], fromHours: 0.1, toHours: 500 });
-    expect(c.fromHours).toBe(0.5); expect(c.toHours).toBe(168);
+    expect(c.fromHours).toBeCloseTo(1 / 3, 5); expect(c.toHours).toBe(168);
     const d = parseCustom({ target: 3, legs: 2, agents: ['alex'], fromHours: 10, toHours: 5 });
     expect(d.toHours).toBe(11);
   });

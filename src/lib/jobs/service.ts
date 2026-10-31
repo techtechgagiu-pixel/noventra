@@ -20,6 +20,9 @@ import { isBannedMarket } from './analysis';
 import { SlotError } from './errors';
 export { SlotError } from './errors';
 
+/** Earliest start a custom ticket may ask for: 20 minutes (the pipeline never analyses a match closer than that). */
+export const MIN_FROM_HOURS = 20 / 60;
+
 export type SlotState = {
   slot: SlotDefinition;
   periodKey: string;
@@ -116,10 +119,11 @@ export function parseCustom(input: unknown): CustomConfig {
   const legs = Math.round(Number(o.legs));
   const ids = new Set<string>(VOTING_AGENTS.map((a) => a.id));
   const agents = [...new Set(Array.isArray(o.agents) ? o.agents.map(String) : [])].filter((a) => ids.has(a));
-  let fromHours = o.fromHours === undefined ? 2 : Math.round(Number(o.fromHours) * 4) / 4;
+  // Minute precision on the start (owner request 31.10: matches from 20 minutes on); quarter hours on the end.
+  let fromHours = o.fromHours === undefined ? MIN_FROM_HOURS : Math.round(Number(o.fromHours) * 60) / 60;
   let toHours = o.toHours === undefined ? (o.window === '7d' ? 168 : o.window === '24h' ? 24 : 48) : Math.round(Number(o.toHours) * 4) / 4;
   if (!Number.isFinite(fromHours) || !Number.isFinite(toHours)) throw new SlotError('Intervalul meciurilor nu este valid.');
-  fromHours = Math.min(167, Math.max(0.5, fromHours)); toHours = Math.min(168, Math.max(fromHours + 1, toHours));
+  fromHours = Math.min(167, Math.max(MIN_FROM_HOURS, fromHours)); toHours = Math.min(168, Math.max(fromHours + 1, toHours));
   const window = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
   if (!Number.isFinite(target) || target < 1.2 || target > 1000) throw new SlotError('Cota țintă trebuie să fie între 1.20 și 1000.');
   if (!Number.isInteger(legs) || legs < 1 || legs > 15) throw new SlotError('Numărul de meciuri trebuie să fie între 1 și 15.');
