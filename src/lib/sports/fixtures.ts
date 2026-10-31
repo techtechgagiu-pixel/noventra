@@ -110,7 +110,7 @@ async function storedCsFixtures(window: string[]): Promise<Fixture[]> {
 }
 
 /** Fixtures for a window of local days. Cached by the HTTP layer; DB writes only on change. */
-export async function loadFixtures(startDate: string, days: number, opts: { top10Only?: boolean; persist?: boolean } = {}) {
+export async function loadFixtures(startDate: string, days: number, opts: { top10Only?: boolean; persist?: boolean; leagueIds?: string[] } = {}) {
   if(process.env.BETMIND_RUNTIME?.startsWith('cloudflare')&&!g.__bmFixtureOverride){
     const {storedCatalog}=await import('../d1/catalog');
     const {data}=await storedCatalog(startDate,days);
@@ -118,7 +118,9 @@ export async function loadFixtures(startDate: string, days: number, opts: { top1
     const allowed=new Set(leagues.map(l=>l.id));
     return {...data,leagues,fixtures:data.fixtures.filter(f=>allowed.has(f.leagueId))};
   }
-  const leagues = await getLeagues({ top10Only: opts.top10Only ?? true });
+  // A custom ticket limited to some leagues fetches only those (31.10: all ~100 leagues × 3 days stalled discovery).
+  const only = opts.leagueIds?.length ? new Set(opts.leagueIds) : null;
+  const leagues = (await getLeagues({ top10Only: only ? false : opts.top10Only ?? true })).filter((l) => !only || only.has(l.id));
   const window = dateRange(startDate, days);
   const provided = await activeProvider()(leagues, window);
   const { errors } = provided;
