@@ -38,6 +38,16 @@ describe('slot locking', () => {
     const seeds = await many<{ seed: string }>('SELECT seed FROM ticket_generation_jobs');
     expect(new Set(seeds.map((s) => s.seed)).size).toBe(3);
   });
+  it('a slice that does not answer in time releases the job for a retry instead of holding it forever', async () => {
+    installFakes(demoFixtures(6), { calls: [], pick: () => null });
+    const u = await makeUser();
+    const { jobId } = await createOrGetJob(u, 'FIVE_A');
+    expect(await _processOneForTests(1)).toBe(true);
+    const j = await one<{ status: string; lease_owner: string | null; attempt_count: number; last_error: string }>('SELECT status,lease_owner,attempt_count,last_error FROM ticket_generation_jobs WHERE id=$1', [jobId]);
+    expect(j).toMatchObject({ status: 'WAITING', lease_owner: null, attempt_count: 1 });
+    expect(j!.last_error).toContain('nu a răspuns');
+    await new Promise((r) => setTimeout(r, 1500)); // let the abandoned slice settle before the next test resets the DB
+  });
 });
 
 describe('daily ticket end-to-end (DEMO data, fake AI transport)', () => {
