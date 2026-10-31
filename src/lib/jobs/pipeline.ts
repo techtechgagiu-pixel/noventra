@@ -66,7 +66,7 @@ async function discover(job: JobRow) {
   const cp = job.checkpoint;
   await setStage(job, 'SELECTING', cp);
   const t0 = Date.now();
-  const loaded = await loadFixtures(job.config.windowStart, job.config.windowDays, { top10Only: job.config.top10Only });
+  const loaded = await loadFixtures(job.config.windowStart, job.config.windowDays, { top10Only: job.config.top10Only, leagueIds: job.config.custom?.leagues });
   console.log(JSON.stringify({ event: 'discover_loaded', jobId: job.id, fixtures: loaded.fixtures.length, errors: loaded.errors.length, ms: Date.now() - t0 }));
   const { errors } = loaded;
   if (job.config.review) return discoverReview(job, loaded.fixtures, errors);
@@ -695,7 +695,7 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
     .filter((r) => r.outcome === 'QUALIFIED' || (r.validation?.dataSufficient !== false && r.validation?.probabilityPlausible !== false));
   const snaps = await batchSnapshots(job, rows.map((r) => r.fixture_id));
   // Completion never promotes old scores or expired quotes into a new finalized ticket.
-  const current = recheck ? new Map((await loadFixtures(job.config.windowStart, job.config.windowDays, {top10Only:job.config.top10Only})).fixtures.map((f) => [f.id, f])) : null;
+  const current = recheck ? new Map((await loadFixtures(job.config.windowStart, job.config.windowDays, {top10Only:job.config.top10Only, leagueIds: job.config.custom?.leagues})).fixtures.map((f) => [f.id, f])) : null;
   return (await Promise.all(rows.map(async (r) => {
     const s = snaps.find((x) => x.fixture.id === r.fixture_id);
     if (!s) return [];
