@@ -24,7 +24,12 @@ export function ScrollPreview() {
     if (!el || !v) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const touch = window.matchMedia('(pointer: coarse)').matches;
-    if (reduced || typeof v.canPlayType !== 'function' || (!v.canPlayType('video/mp4') && !v.canPlayType('video/webm'))) { el.classList.add('sv-fallback'); return; }
+    if (reduced || typeof v.canPlayType !== 'function' || (!v.canPlayType('video/mp4') && !v.canPlayType('video/webm'))) {
+      el.classList.add('sv-fallback');
+      const on = () => el.classList.add('sv-playing'), off = () => el.classList.remove('sv-playing');
+      v.addEventListener('play', on); v.addEventListener('ended', off); v.addEventListener('pause', off);
+      return () => { v.removeEventListener('play', on); v.removeEventListener('ended', off); v.removeEventListener('pause', off); };
+    }
     el.classList.add('sv-live');
     const LERP = touch ? 0.22 : 0.14, FRAME = 1 / 24;
     let duration = 0, current = 0, raf = 0, ready = false, unlocked = false, pending: number | null = null, seekAt = 0, visible = false;
@@ -95,10 +100,14 @@ export function ScrollPreview() {
 
   return <section ref={section} className="scroll-preview" aria-label="Pe scurt: cum lucrează agenții">
     <div className="sv-pin">
+      <div className="sv-media">
       <video ref={video} className="sv-video" muted playsInline preload="metadata" poster="/video/primul11-preview.jpg" disablePictureInPicture {...{ 'webkit-playsinline': 'true' }} aria-hidden="true" tabIndex={-1}>
         <source src="/video/primul11-preview.mp4" type="video/mp4" />
         <source src="/video/primul11-preview.webm" type="video/webm" />
       </video>
+      {/* Reduced motion (31.10: the owner's Mac has it on) or no scrubbing: the clip plays only when asked. */}
+      <button type="button" className="sv-play" onClick={() => { const v = video.current; if (!v) return; v.currentTime = 0; void v.play().catch(() => {}); }}>▶ Vezi preview-ul (6 s)</button>
+      </div>
       <div className="sv-scrim" aria-hidden="true" />
       <div className="sv-lines">
         {LINES.map((l, i) => <div key={l.title} ref={(n) => { lines.current[i] = n; }} className="sv-line"><p className="sv-step">{i + 1} / 3</p><h2>{l.title}</h2><p>{l.text}</p></div>)}
