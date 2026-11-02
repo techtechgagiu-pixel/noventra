@@ -23,6 +23,7 @@ import { allTrackRecords } from '@/lib/track-record';
 import { customJobs, jobQueue } from '@/lib/jobs/service';
 import { homeThreads } from '@/lib/home-reel';
 import { HomeIntro, HowItWorks } from '@/components/home/home-intro';
+import { ScrollPreview } from '@/components/home/scroll-preview';
 import { StatsView } from '@/components/stats-view';
 import { AutomationPanel } from '@/components/automation-panel';
 import { automationHealth } from '@/lib/automation';
@@ -127,6 +128,7 @@ async function AcasaTab({ userId }: { userId: string }) {
   const models = Object.fromEntries([...assignments].map(([id, a]) => [id, a.primary.model]));
   return <div className="home-page">
     <HomeIntro signedIn thread={frag.threads[0] ? plain(frag.threads[0]) : undefined} models={models} />
+    <ScrollPreview />
     {queue.length > 0 && <div className="mt-8"><JobQueue initial={plain(queue)} /></div>}
     <HowItWorks />
     <nav aria-label="Ce vrei să faci" className="home-shortcuts">
