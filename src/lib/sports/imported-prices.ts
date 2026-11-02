@@ -33,7 +33,7 @@ type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {});
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const str = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
-const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/ø/g, 'o').replace(/æ/g, 'ae').replace(/ß/g, 'ss').replace(/[łľ]/g, 'l').replace(/đ/g, 'd').replace(/ı/g, 'i').replace(/\s+/g, ' ').trim();
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
 
 // ── Matching a Stake match to the site's fixture ───────────────────────────────
@@ -42,7 +42,11 @@ const r3 = (x: number) => Math.round(x * 1000) / 1000;
 const ALIASES: string[][] = [['koln', 'cologne', 'koeln'], ['rennes', 'rennais'], ['athletic bilbao', 'athletic club'], ['hamkam', 'hamarkameratene'],
   ['athletico', 'paranaense'], ['internazionale', 'inter milan'], ['paris saint germain', 'psg', 'paris sg'], ['manchester united', 'man utd', 'man united'],
   ['tottenham', 'spurs'], ['wolverhampton', 'wolves'], ['nottingham forest', 'nottm forest'], ['munchen', 'munich'], ['monchengladbach', 'gladbach'],
-  ['sporting cp', 'sporting lisbon'], ['olympique lyonnais', 'lyon'], ['olympique marseille', 'marseille'], ['bayern', 'bayern munich']];
+  ['sporting cp', 'sporting lisbon'], ['olympique lyonnais', 'lyon'], ['olympique marseille', 'marseille'], ['bayern', 'bayern munich'],
+  // 02.11: city exonyms and club nicknames seen between Stake and ESPN.
+  ['kobenhavn', 'copenhagen'], ['red star', 'crvena zvezda'], ['aarhus', 'agf'], ['brondby', 'broendby'], ['praha', 'prague'], ['beograd', 'belgrade'],
+  ['warszawa', 'warsaw'], ['bucuresti', 'bucharest'], ['kyiv', 'kiev'], ['moskva', 'moscow'], ['goteborg', 'gothenburg'], ['zurich', 'zuerich'],
+  ['sevilla', 'seville'], ['lisboa', 'lisbon'], ['plzen', 'pilsen'], ['dinamo zagreb', 'gnk dinamo'], ['crb', 'cr brasil'], ['sport recife', 'sc recife']];
 const compact = (s: string) => norm(s).replace(/[^a-z0-9]+/g, '');
 const tokens = (s: string) => norm(s).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((w) => w.length >= 4);
 const edit1 = (a: string, b: string) => {
@@ -62,6 +66,37 @@ export function looseTeam(a: string, b: string) {
   if (tokens(a).some((u) => u.length >= 5 && tokens(b).some((v) => v.length >= 5 && edit1(u, v)))) return true;
   return alias(a, b);
 }
+/** Reserve, youth and women's sides carry their own markers: never the same team as the first team. */
+const SIDE_MARK = /\b(women|woman|femin|ladies|w|u ?1[5-9]|u ?2[0-3]|ii|b|reserves?|youth|juniors?|jong|primavera)\b/;
+// Words that many clubs share: never enough alone to say two names are the same club.
+const GENERIC = new Set(['fc', 'afc', 'cf', 'sc', 'ac', 'as', 'us', 'ss', 'cd', 'ud', 'sd', 'ec', 'fk', 'nk', 'sk', 'if', 'bk', 'club', 'de', 'del', 'la', 'el', 'al',
+  'united', 'city', 'town', 'rovers', 'albion', 'athletic', 'atletico', 'athletico', 'deportivo', 'independiente', 'sporting', 'real', 'racing', 'sport', 'sports',
+  'olympique', 'dinamo', 'dynamo', 'inter', 'internacional', 'nacional', 'universidad', 'union', 'wanderers', 'county', 'fodbold', 'fotball', 'football', 'futbol',
+  'calcio', 'pae', 'ps', 'pr', 'pe', 'go', 'al', 'sp', 'rj', 'mg', 'rs', 'ba', 'esporte', 'clube', 'sociedad', 'gimnasia', 'esportiva']);
+const core = (s: string) => norm(s).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((w) => w.length >= 3 && !GENERIC.has(w));
+/** Strict one-team test for the one-side rule: a distinctive word in common (or an alias), never only generic words. */
+const sameClub = (a: string, b: string) => {
+  const x = core(a), y = core(b);
+  if (alias(a, b)) return true;
+  return x.some((u) => u.length >= 4 && y.some((v) => v === u || (u.length >= 6 && v.length >= 6 && edit1(u, v))));
+};
+const marks = (s: string) => (norm(s).replace(/[^a-z0-9 ]+/g, ' ').match(new RegExp(SIDE_MARK.source, 'g')) ?? []).sort().join(',');
+
+/**
+ * The imported event of a fixture: both teams the same (strict, then tolerant), else (02.11) one team the same on
+ * the same side at the same kickoff (±10 min) when exactly one event qualifies, and neither side is a reserve/youth/
+ * women team the other is not. A club cannot play two matches at once, so "Goiás – CRB" is "Goias EC GO – CR Brasil AL".
+ */
+export function findImported<E extends { home: string; away: string; kickoff: string }>(f: { home: string; away: string; kickoff: string }, near: E[]): E | undefined {
+  const strict = near.find((x) => sameMatch(f, x)) ?? near.find((x) => sameImportedMatch(f, x));
+  if (strict) return strict;
+  const t = Date.parse(f.kickoff);
+  const one = near.filter((x) => Math.abs(Date.parse(x.kickoff) - t) <= 10 * 60_000
+    && marks(x.home) === marks(f.home) && marks(x.away) === marks(f.away)
+    && (sameClub(f.home, x.home) || sameClub(f.away, x.away)));
+  return one.length === 1 ? one[0] : undefined;
+}
+
 /** Same match: kickoff within 15 minutes and both teams the same (strict rule, else the tolerant one on each side). */
 export function sameImportedMatch(f: { home: string; away: string; kickoff: string }, e: { home: string; away: string; kickoff: string }) {
   if (Math.abs(Date.parse(f.kickoff) - Date.parse(e.kickoff)) > 15 * 60_000) return false;
@@ -271,7 +306,7 @@ export async function withImportedPrices(fixtures: Fixture[]): Promise<Fixture[]
       return f;
     }
     if (f.provider === 'stake') { const own = events.find((x) => x.sourceId === f.providerId); return own ? mergeImported(f, own) : f; }
-    const e = near.find((x) => sameMatch(f, x) && !x.markets.some((m) => isCsKey(m.key))) ?? near.find((x) => sameImportedMatch(f, x) && !x.markets.some((m) => isCsKey(m.key)));
+    const e = findImported(f, near.filter((x) => !x.markets.some((m) => isCsKey(m.key))));
     return e ? mergeImported(f, e) : f;
   });
 }
@@ -344,7 +379,7 @@ const ESPN_COVERED = new Set([
 ]);
 
 export function stakeOnlyEvents(events: ImportedEvent[], known: Array<{ home: string; away: string; kickoff: string; t: number }>) {
-  const matches = (e: ImportedEvent) => { const t = Date.parse(e.kickoff); return known.some((f) => Math.abs(f.t - t) <= 15 * 60_000 && (sameMatch(f as never, e) || sameImportedMatch(f as never, e))); };
+  const matches = (e: ImportedEvent) => { const t = Date.parse(e.kickoff); return known.some((f) => Math.abs(f.t - t) <= 15 * 60_000 && findImported(f, [e]) === e); };
   const found = events.filter(matches);
   const covered = new Set(found.map((e) => stakeLeague(e).id));
   return events.filter((e) => !found.includes(e) && !covered.has(stakeLeague(e).id) && !ESPN_COVERED.has(stakeLeague(e).providerKey));
@@ -378,4 +413,42 @@ export async function importStatus() {
     `SELECT COUNT(*) AS n, SUM(CASE WHEN captured_at >= $1 AND kickoff_utc > $2 THEN 1 ELSE 0 END) AS fresh, MAX(captured_at) AS captured, MIN(kickoff_utc) AS first, MAX(kickoff_utc) AS last
        FROM imported_odds WHERE source='stake'`, [new Date(Date.now() - maxAgeMs()).toISOString(), new Date().toISOString()]).catch(() => null);
   return { matches: Number(r?.n ?? 0), usable: Number(r?.fresh ?? 0), capturedAt: r?.captured ? iso(r.captured) : null, first: r?.first ? iso(r.first) : null, last: r?.last ? iso(r.last) : null, maxAgeHours: Math.round(maxAgeMs() / 3600_000) };
+}
+
+// ── Live scores from a Stake export (02.11) ───────────────────────────────────
+// `export_matches.py --state live` lists the matches in play with their score. Only Stake-only fixtures use it (ESPN
+// keeps its own results): the score and minute are shown while the match runs; a match Stake marks as ended gets its
+// final score, which the settlement then uses. Nothing here is guessed: no status, no update.
+const ENDED = /ended|finished|full ?time|^ft$|after (extra|overtime|penalt)|^aet$|^ap$|penalties/i;
+export type LiveScore = { sourceId: string; home: number; away: number; ended: boolean; clock: string | null; status: string };
+
+export function parseStakeLive(raw: unknown): LiveScore[] {
+  const root = obj(raw);
+  const out: LiveScore[] = [];
+  for (const m of arr(obj(root.data).matches ?? root.matches).map(obj)) {
+    const es = obj(m.event_status);
+    const h = Number(es.homeScore), a = Number(es.awayScore), status = str(es.matchStatus);
+    if (!str(m.source_id) || !status || !Number.isInteger(h) || !Number.isInteger(a) || es.homeScore === null || es.awayScore === null) continue;
+    const t = obj(es.clock).matchTime;
+    out.push({ sourceId: str(m.source_id), home: h, away: a, ended: ENDED.test(status.trim()), clock: typeof t === 'string' && t ? `${t.split(':')[0]}'` : null, status });
+  }
+  return out;
+}
+
+export async function importStakeLive(raw: unknown) {
+  const scores = parseStakeLive(raw);
+  let live = 0, ended = 0;
+  const writes: Statement[] = [];
+  for (const s of scores) {
+    const id = `stk:${s.sourceId}`;
+    if (s.ended) {
+      writes.push({ text: `UPDATE fixtures SET status='post', home_score=$2, away_score=$3, live_clock=NULL, source_observed_at=$4, results_checked_at=$4 WHERE id=$1 AND provider='stake' AND status<>'post'`, params: [id, s.home, s.away, new Date().toISOString()] });
+      ended++;
+    } else {
+      writes.push({ text: `UPDATE fixtures SET status='in', home_score=$2, away_score=$3, live_clock=$4, source_observed_at=$5 WHERE id=$1 AND provider='stake' AND status IN ('pre','in')`, params: [id, s.home, s.away, s.clock ?? s.status.slice(0, 20), new Date().toISOString()] });
+      live++;
+    }
+  }
+  for (let i = 0; i < writes.length; i += 40) await atomic(writes.slice(i, i + 40));
+  return { live: true, matches: scores.length, inPlay: live, ended };
 }

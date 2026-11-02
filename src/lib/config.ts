@@ -40,8 +40,8 @@ export const config = {
     oddsMaxAgeMinutes: num('ODDS_MAX_AGE_MINUTES', 180),
     /** Owner decision 28.10: The Odds API prices are fetched every 3 days and used as they are for up to 4 days. */
     oddsApiMaxAgeMinutes: num('ODDS_API_MAX_AGE_MINUTES', 4 * 24 * 60),
-    /** Odds imported by hand from the owner's Stake export (29.10): used as they are for 4 days after the export. */
-    importedOddsMaxAgeMinutes: num('IMPORTED_ODDS_MAX_AGE_MINUTES', 4 * 24 * 60),
+    /** Odds from the owner's Stake export: 4 days at first (29.10), 24 hours since the laptop exports on its own (02.11). */
+    importedOddsMaxAgeMinutes: num('IMPORTED_ODDS_MAX_AGE_MINUTES', 24 * 60),
     /** Owner decision 02.11: while a fresh Stake export exists, the football offer is Stake's alone (ESPN = history and
      *  results, its prices are not used). STAKE_ONLY_OFFER=0 restores the mixed offer. */
     stakeOnlyOffer: process.env.STAKE_ONLY_OFFER !== '0',
