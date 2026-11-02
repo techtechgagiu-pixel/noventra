@@ -27,6 +27,11 @@ describe('automatic import key', () => {
 
 describe('Stake live scores', () => {
   const live = (id: string, h: number | null, a: number | null, status: string, time: string | null = null) => ({ source_id: id, event_status: { homeScore: h, awayScore: a, matchStatus: status, clock: { matchTime: time } } });
+  it('knows both spellings Stake uses (seen on a real live export)', () => {
+    const st = (x: string) => parseStakeLive({ data: { matches: [live('a', 0, 0, x)] } })[0].ended;
+    for (const x of ['FirstHalf', 'SecondHalf', 'HalfTime', '1st half', '2nd half']) expect(st(x)).toBe(false);
+    for (const x of ['Ended', 'FullTime', 'Full time', 'AfterExtraTime', 'AfterPenalties', 'Finished']) expect(st(x)).toBe(true);
+  });
   it('reads in-play and ended matches, ignores the rest', () => {
     const s = parseStakeLive({ data: { matches: [live('a', 1, 0, '2nd half', '67:12'), live('b', 2, 2, 'Ended'), live('c', null, null, 'Not started'), { source_id: 'd' }] }, meta: { state: 'live' } });
     expect(s).toEqual([
