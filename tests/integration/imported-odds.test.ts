@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { many, one } from '@/lib/db';
 import { loadFixtures } from '@/lib/sports/fixtures';
 import { setFixtureProviderForTests } from '@/lib/sports/fixtures';
-import { ImportError, importStakeExport, importStatus, mergeImported, parseStakeExport, sameImportedMatch, stakeFixture, stakeLeague, stakeOnlyEvents } from '@/lib/sports/imported-prices';
+import { ImportError, importStakeExport, importStatus, mergeImported, parseStakeExport, sameImportedMatch, stakeFixture, stakeLeague, stakeOnlyEvents, findImported } from '@/lib/sports/imported-prices';
 import { config } from '@/lib/config';
 import { pendingStakeResults, ResultError, saveStakeResult } from '@/lib/sports/stake-results';
 import { query } from '@/lib/db';
@@ -96,6 +96,22 @@ describe('Stake export parsing', () => {
       ev('d', 'Pescara', 'Bari', 3, 'italy', 'serie-d-group-f'),            // tournament ESPN does not carry
     ], known);
     expect(out.map((e) => e.sourceId)).toEqual(['d']);
+  });
+
+  it('matches spellings seen between Stake and ESPN, one known club per side at the same kickoff, never a youth/women side', () => {
+    const k = new Date(Date.now() + 86400_000).toISOString();
+    const at = (min: number) => new Date(Date.parse(k) + min * 60_000).toISOString();
+    const ev = (home: string, away: string, kickoff = k) => ({ home, away, kickoff });
+    expect(findImported({ home: 'Sønderjyske Fodbold', away: 'F.C. København', kickoff: k }, [ev('Sonderjyske', 'Copenhagen')])).toBeTruthy();
+    expect(findImported({ home: 'Red Star Belgrade', away: "Inter D'Escaldes", kickoff: k }, [ev('FK Crvena Zvezda', 'Inter Club de Escaldes')])).toBeTruthy();
+    expect(findImported({ home: 'Operário PR', away: 'Sport', kickoff: k }, [ev('Operario Ferroviario EC PR', 'SC Recife PE'), ev('Botafogo', 'Vasco')])).toBeTruthy();
+    // generic words alone never match ("Dover Athletic" / "Charlton Athletic", "Bristol Rovers" / "Raith Rovers FC")
+    expect(findImported({ home: 'Dover Athletic', away: 'Wealdstone', kickoff: k }, [ev('Charlton Athletic', 'Sheffield United')])).toBeUndefined();
+    expect(findImported({ home: 'Bristol Rovers', away: 'Cambridge United', kickoff: k }, [ev('Raith Rovers FC', 'Dunfermline Athletic FC')])).toBeUndefined();
+    // a women's or youth side is another team
+    expect(findImported({ home: 'Copenhagen', away: 'Midtjylland', kickoff: k }, [ev('Copenhagen W', 'Odense W')])).toBeUndefined();
+    // two candidates with the same club, or a kickoff far apart: no guess
+    expect(findImported({ home: 'Al Faisaly', away: 'Al Diriyah', kickoff: k }, [ev('AL Faisaly FC', 'AL Draih', at(30))])).toBeUndefined();
   });
 
   it('skips Stake virtual leagues (SRL) and keeps country and tournament for Stake-only leagues', () => {
