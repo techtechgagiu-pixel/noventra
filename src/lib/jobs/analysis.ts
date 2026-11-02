@@ -6,7 +6,8 @@ import type { FixtureSnapshot } from './types';
 
 /** Compact, identical factual snapshot for all six agents (token-efficient). */
 /** User rule (2026-10-21): no „Under” selections at all — match totals or team totals. */
-export const isBannedMarket = (key: string | null) => !!key && /:UNDER(:|$)/.test(key);
+/** Owner bans: every "under" line, and (02.11) the double chance "12" (1 or 2 at full time, the most picked market). */
+export const isBannedMarket = (key: string | null) => !!key && (/:UNDER(:|$)/.test(key) || key === 'DC:12');
 
 // Token economy (owner decision 28.10): 12 most likely selections per match and probabilities rounded to 2 decimals.
 // Agents pick the safest selections anyway; the exact numbers stay in the snapshot and every threshold uses them.
@@ -153,7 +154,7 @@ export function characterViolation(
 ): string | null {
   if (p.decision !== 'BET_CANDIDATE' || !p.marketKey) return null;
   if (!market) return 'piața nu există în cotele observate';
-  if (isBannedMarket(p.marketKey)) return 'pronosticurile „sub” sunt interzise';
+  if (isBannedMarket(p.marketKey)) return p.marketKey === 'DC:12' ? 'șansa dublă „12” este interzisă' : 'pronosticurile „sub” sunt interzise';
   const family = p.marketKey.split(':')[0];
   if (agent.blockedFamilies?.includes(family)) return `${agent.name} este în antrenament: tipul de pariu ${family} îi este închis (pierdea des pe el)`;
   const cap = Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds);
