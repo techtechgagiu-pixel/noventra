@@ -2,7 +2,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { many, one } from '@/lib/db';
 import { loadFixtures } from '@/lib/sports/fixtures';
 import { setFixtureProviderForTests } from '@/lib/sports/fixtures';
-import { ImportError, importStakeExport, importStatus, mergeImported, parseStakeExport, sameImportedMatch } from '@/lib/sports/imported-prices';
+import { ImportError, importStakeExport, importStatus, mergeImported, parseStakeExport, sameImportedMatch, stakeFixture, stakeLeague } from '@/lib/sports/imported-prices';
+import { config } from '@/lib/config';
+import { pendingStakeResults, ResultError, saveStakeResult } from '@/lib/sports/stake-results';
+import { query } from '@/lib/db';
 import { localDate } from '@/lib/time';
 import { closePool, demoFixtures, resetDb } from './helpers';
 
@@ -10,6 +13,7 @@ beforeEach(resetDb);
 afterEach(() => setFixtureProviderForTests(null));
 afterAll(closePool);
 
+const fixtureIdNotStake = 'espn:1';
 const o = (name: string, odds: number, active = true) => ({ source_id: name, name, odds, active });
 const match = (id: string, home: string, away: string, kickoff: string, markets: unknown[]) => ({
   source: 'stake', source_id: id, name: `${home} - ${away}`, starts_at: new Date(kickoff).toUTCString(), status: 'active',
@@ -57,7 +61,9 @@ describe('Stake export parsing', () => {
     expect(sameImportedMatch({ home: 'Nice', away: 'Stade Rennais', kickoff: k }, { home: 'Nice', away: 'Rennes', kickoff: new Date(Date.parse(k) + 3600_000).toISOString() })).toBe(false);
   });
 
-  it('keeps newer The Odds API prices main and only fills the gaps', () => {
+  it('mixed offer (STAKE_ONLY_OFFER=0): keeps newer The Odds API prices main and only fills the gaps', () => {
+    config.limits.stakeOnlyOffer = false;
+    try {
     const f = demoFixtures(1)[0];
     const fresh = { ...f, odds: { ...f.odds!, source: 'the-odds-api', observedAt: new Date().toISOString() } };
     const e = { sourceId: 'x', home: f.home, away: f.away, league: null, kickoff: f.kickoff, capturedAt: new Date(Date.now() - 7200_000).toISOString(),
@@ -66,6 +72,26 @@ describe('Stake export parsing', () => {
     expect(merged.odds!.source).toBe('the-odds-api');
     expect(merged.odds!.markets.find((m) => m.key === '1X2:HOME')!.odds).toBe(f.odds!.markets[0].odds);
     expect(merged.odds!.markets.find((m) => m.key === 'BTTS:YES')).toMatchObject({ odds: 1.7, bookmaker: 'Stake', label: 'Ambele echipe marchează – DA' });
+    } finally { config.limits.stakeOnlyOffer = true; }
+  });
+
+  it('Stake-only offer (default): Stake prices replace every other source, no background markets', () => {
+    const f = demoFixtures(1)[0];
+    const fresh = { ...f, odds: { ...f.odds!, source: 'the-odds-api', observedAt: new Date().toISOString() } };
+    const e = { sourceId: 'x', home: f.home, away: f.away, league: null, kickoff: f.kickoff, capturedAt: new Date(Date.now() - 7200_000).toISOString(),
+      markets: [{ key: '1X2:HOME', marketType: '1X2' as const, odds: 9 }, { key: 'BTTS:YES', marketType: 'BTTS' as const, odds: 1.7 }] };
+    const merged = mergeImported(fresh, e);
+    expect(merged.odds).toMatchObject({ source: 'stake-import', bookmaker: 'Stake' });
+    expect(merged.odds!.markets.map((m) => m.key).sort()).toEqual(['1X2:HOME', 'BTTS:YES']);
+  });
+
+  it('skips Stake virtual leagues (SRL) and keeps country and tournament for Stake-only leagues', () => {
+    const v = { ...match('v1', 'Lazio SRL', 'Roma SRL', new Date(Date.now() + 86400_000).toISOString(), [oneXTwo('Lazio SRL', 'Roma SRL', 2, 3, 4)]), tournament: { name: 'Serie A SRL', slug: 'serie-a-srl', category: 'simulated-reality-league' } };
+    const r = { ...match('r1', 'Pescara', 'Bari', new Date(Date.now() + 86400_000).toISOString(), [oneXTwo('Pescara', 'Bari', 2, 3, 4)]), tournament: { name: 'Serie C, Group B', slug: 'serie-c-group-b', category: 'italy' } };
+    const p = parseStakeExport(exportOf([v, r]));
+    expect(p.events.map((e) => e.sourceId)).toEqual(['r1']);
+    expect(stakeLeague(p.events[0])).toEqual({ id: 'STK-italy-serie-c-group-b', provider: 'stake', providerKey: 'italy/serie-c-group-b', name: 'Serie C, Group B', country: 'Italy' });
+    expect(stakeFixture(p.events[0])).toMatchObject({ id: 'stk:r1', provider: 'stake', leagueId: 'STK-italy-serie-c-group-b', status: 'pre', odds: { bookmaker: 'Stake', source: 'stake-import' } });
   });
 });
 
@@ -79,19 +105,40 @@ describe('Stake import', () => {
       match('s2', 'Elsewhere', 'Nobody', new Date(Date.now() + 2 * 86400_000).toISOString(), [oneXTwo('Elsewhere', 'Nobody', 2, 3, 4)]),
       match('s3', 'Past', 'Match', new Date(Date.now() - 3600_000).toISOString(), [oneXTwo('Past', 'Match', 2, 3, 4)]),
     ]));
-    expect(res).toMatchObject({ saved: 2, matchedFixtures: 1, stats: { matches: 3, priced: 3, mapped: { '1X2': 3 } } });
+    expect(res).toMatchObject({ saved: 2, matchedFixtures: 1, stakeOnlyFixtures: 1, stats: { matches: 3, priced: 3, mapped: { '1X2': 3 } } });
     const snap = await one<{ source: string; bookmaker: string; markets: Array<{ key: string; odds: number; bookmaker?: string; label: string }> }>(
       'SELECT source,bookmaker,markets FROM odds_snapshots WHERE fixture_id=$1 ORDER BY id DESC LIMIT 1', [fx[0].id]);
     expect(snap).toMatchObject({ source: 'stake-import', bookmaker: 'Stake' });
     expect(snap!.markets.find((m) => m.key === '1X2:HOME')).toMatchObject({ odds: 1.72, bookmaker: 'Stake', label: 'Villarreal câștigă (1)' });
-    expect(snap!.markets.find((m) => m.key === 'DC:1X')).toMatchObject({ bookmaker: 'DEMO Book' }); // ESPN-side market kept
+    expect(snap!.markets.find((m) => m.key === 'DC:1X')).toBeUndefined(); // Stake-only offer: no ESPN-side markets
     const loaded = (await loadFixtures(localDate(), 8, { top10Only: false, persist: false })).fixtures;
     expect(loaded.find((f) => f.id === fx[0].id)!.odds!.source).toBe('stake-import');
     expect(loaded.find((f) => f.id === fx[1].id)!.odds!.source).toBe('DEMO');
+    // The match the schedule does not carry is offered on its own, in a league of its Stake tournament.
+    expect(loaded.find((f) => f.id === 'stk:s2')).toMatchObject({ provider: 'stake', home: 'Elsewhere', away: 'Nobody', odds: { source: 'stake-import', bookmaker: 'Stake' } });
     expect(await importStatus()).toMatchObject({ matches: 2, usable: 2 });
     // An older export never overwrites a newer one.
     await importStakeExport(exportOf([match('s2', 'Elsewhere', 'Nobody', new Date(Date.now() + 2 * 86400_000).toISOString(), [oneXTwo('Elsewhere', 'Nobody', 9, 9, 9)])], new Date(Date.now() - 2 * 3600_000).toISOString()));
     expect(JSON.stringify((await many<{ markets: unknown }>("SELECT markets FROM imported_odds WHERE source_id='s2'"))[0].markets)).toContain('"odds":2');
+  });
+
+  it('the owner types the score of a Stake-only match once it was analysed and has started', async () => {
+    setFixtureProviderForTests(async () => ({ fixtures: [], errors: [] }));
+    const soon = new Date(Date.now() + 3600_000).toISOString();
+    await importStakeExport(exportOf([match('s9', 'Pescara', 'Bari', soon, [oneXTwo('Pescara', 'Bari', 2, 3, 4)])]));
+    expect(await one("SELECT provider FROM fixtures WHERE id='stk:s9'")).toEqual({ provider: 'stake' });
+    await expect(saveStakeResult({ fixtureId: 'stk:s9', home: 1, away: 0 })).rejects.toBeInstanceOf(ResultError); // not started
+    await query("UPDATE fixtures SET kickoff_utc=$1 WHERE id='stk:s9'", [new Date(Date.now() - 3 * 3600_000).toISOString()]);
+    expect(await pendingStakeResults()).toEqual([]); // nobody analysed it
+    const user = (await one<{ id: string }>("INSERT INTO users(google_sub,email) VALUES('stk','stk@test.local') RETURNING id"))!;
+    const job = (await one<{ id: string }>(`INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,required_legs,seed,config,status,stage,checkpoint) VALUES($1,'CUSTOM_1',$2,2,1,'s','{}','COMPLETED','DONE','{}') RETURNING id`, [user.id, localDate()]))!;
+    await query(`INSERT INTO agent_predictions(job_id,agent_id,fixture_id,round,provider,model_id,prompt_version,decision,market_key,odds,payload) VALUES($1,'victor','stk:s9',0,'groq','m','v1','BET_CANDIDATE','1X2:HOME',2,'{}')`, [job.id]);
+    expect((await pendingStakeResults()).map((p) => p.id)).toEqual(['stk:s9']);
+    await expect(saveStakeResult({ fixtureId: 'stk:s9', home: 1, away: 0, htHome: 2, htAway: 0 })).rejects.toBeInstanceOf(ResultError);
+    expect(await saveStakeResult({ fixtureId: 'stk:s9', home: 2, away: 1, htHome: 1, htAway: 0 })).toMatchObject({ status: 'post', home: 2, away: 1 });
+    expect(await one("SELECT status,home_score,away_score,ht_home FROM fixtures WHERE id='stk:s9'")).toEqual({ status: 'post', home_score: 2, away_score: 1, ht_home: 1 });
+    expect(await pendingStakeResults()).toEqual([]);
+    await expect(saveStakeResult({ fixtureId: fixtureIdNotStake, home: 1, away: 0 })).rejects.toBeInstanceOf(ResultError);
   });
 
   it('refuses exports older than four days', async () => {

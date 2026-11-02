@@ -30,7 +30,7 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("D1 local test")}}', compatibilityDate: '2026-10-25', d1Databases: ['DB'] }));
     const binding = await mf.getD1Database('DB');
     db = d1Database(binding);
-    for (const file of ['0001_legacy_schema.sql', '0002_agent_configuration.sql', '0003_request_coordination.sql', '0004_league_configuration.sql', '0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0009_feedback.sql','0010_ticket_hidden.sql','0013_perf_indexes.sql','0015_custom_daily_limits.sql','0016_live_clock.sql','0017_imported_odds.sql','0018_user_custom_limit.sql','0019_cs2.sql']) {
+    for (const file of ['0001_legacy_schema.sql', '0002_agent_configuration.sql', '0003_request_coordination.sql', '0004_league_configuration.sql', '0005_worker_bridge.sql','0006_ai_budget.sql','0007_model_identities.sql','0009_feedback.sql','0010_ticket_hidden.sql','0013_perf_indexes.sql','0015_custom_daily_limits.sql','0016_live_clock.sql','0017_imported_odds.sql','0018_user_custom_limit.sql','0019_cs2.sql','0020_stake_offer.sql']) {
       const statements = splitSqlScript(await readFile('cloudflare/d1/migrations/' + file, 'utf8'));
       for (let i = 0; i < statements.length; i += 20) await binding.batch(statements.slice(i, i + 20).map(s => binding.prepare(s)));
     }
@@ -255,6 +255,8 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     const calls:Array<{ref:{provider:'groq'|'gemini'|'openrouter';model:string};stage:string}>=[];
     installFakes(demoFixtures(5,()=>({home:1.4,draw:4,away:7,dc:1.35})),{calls,pick:()=> '1X2:HOME'});
     try{
+      // An earlier test imported a Stake export (Stake-only offer); this one runs on the demo prices.
+      await one('DELETE FROM imported_odds'); await one("DELETE FROM odds_snapshots WHERE source='stake-import' OR fixture_id LIKE 'stk:%'"); await one("DELETE FROM fixtures WHERE provider='stake'");
       const user=(await one<{id:string}>("INSERT INTO users(google_sub,email) VALUES('pipeline-d1','pipeline@test.local') RETURNING id"))!;
       const created=await createCustomJob(user.id,{target:2,legs:2,agents:['victor','andrei','robert']});
       for(let i=0;i<40;i++){

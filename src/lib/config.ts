@@ -42,6 +42,9 @@ export const config = {
     oddsApiMaxAgeMinutes: num('ODDS_API_MAX_AGE_MINUTES', 4 * 24 * 60),
     /** Odds imported by hand from the owner's Stake export (29.10): used as they are for 4 days after the export. */
     importedOddsMaxAgeMinutes: num('IMPORTED_ODDS_MAX_AGE_MINUTES', 4 * 24 * 60),
+    /** Owner decision 02.11: while a fresh Stake export exists, the football offer is Stake's alone (ESPN = history and
+     *  results, its prices are not used). STAKE_ONLY_OFFER=0 restores the mixed offer. */
+    stakeOnlyOffer: process.env.STAKE_ONLY_OFFER !== '0',
     /** CS2 prices from OddsPapi (refreshed every 6 h; esports prices move fast): accepted up to 12 hours. */
     oddspapiMaxAgeMinutes: num('ODDSPAPI_MAX_AGE_MINUTES', 12 * 60),
     targetTolerance: num('TARGET_TOLERANCE', 0.15),
