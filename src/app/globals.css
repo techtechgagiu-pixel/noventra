@@ -357,7 +357,12 @@ a.slip:hover { border-color: #3f7a5d; transform: translateY(-1px); }
   .scroll-preview { --sv-h: min(72vh, calc((100vw - 32px) * 1.2)); }
   .scroll-preview:not(.sv-fallback) .sv-pin { aspect-ratio: 5 / 6; }
 }
+.sv-media { position: absolute; inset: 0; }
 .sv-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sv-play { display: none; }
+.scroll-preview.sv-fallback .sv-media { position: relative; inset: auto; }
+.scroll-preview.sv-fallback .sv-play { display: inline-flex; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); align-items: center; gap: .4rem; padding: .7rem 1.1rem; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(4,12,20,.72); color: #fff; font-weight: 700; font-size: .95rem; backdrop-filter: blur(4px); }
+.scroll-preview.sv-fallback.sv-playing .sv-play { display: none; }
 .sv-scrim { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(4,12,20,.86) 0%, rgba(4,12,20,.55) 38%, rgba(4,12,20,0) 70%), linear-gradient(0deg, rgba(4,12,20,.7) 0%, rgba(4,12,20,0) 40%); }
 .sv-lines { position: absolute; inset: 0; display: grid; align-items: center; padding: clamp(16px, 5vw, 56px); }
 .sv-line { grid-area: 1 / 1; max-width: 26rem; opacity: 0; will-change: opacity, transform; }

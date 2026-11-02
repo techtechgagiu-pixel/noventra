@@ -29,5 +29,9 @@ test('entrance preview falls back to a plain section with reduced motion', async
   const section = page.getByRole('region', { name: 'Pe scurt: cum lucrează agenții' });
   await expect(section).toHaveClass(/sv-fallback/);
   await expect(section.getByRole('heading', { name: 'Votează biletul' })).toBeVisible();
+  const video = section.locator('.sv-video');
+  expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true); // never on its own
+  await section.getByRole('button', { name: /Vezi preview-ul/ }).click();
+  await expect.poll(() => section.evaluate((el) => el.classList.contains('sv-playing') || !(el.querySelector('video') as HTMLVideoElement).paused)).toBe(true);
   await ctx.close();
 });
