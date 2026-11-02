@@ -6,6 +6,7 @@ import { DebatePreview } from './debate-preview';
 import { HOME_EXAMPLE, HOME_EXAMPLE_MODELS } from '@/lib/home-example';
 import { publicProof, type PublicProof } from '@/lib/public-proof';
 import { WonTicketRotator } from './won-ticket-rotator';
+import { ScrollPreview } from './scroll-preview';
 
 const odds = (n: number) => n.toFixed(2);
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
@@ -27,6 +28,7 @@ export async function PublicHome({ google, unavailable = false }: { google: bool
     <main className="home-page mx-auto max-w-6xl px-4 pb-16 pt-8 sm:pt-12">
       {unavailable && <p role="status" className="mb-6 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm text-gold">Biletele și conectarea sunt temporar indisponibile din cauza limitei serviciului de date. Poți consulta în continuare prezentarea aplicației.</p>}
       <PublicHero google={google} proof={proof} />
+      <ScrollPreview />
       <HowItWorks />
       <section className="home-process" aria-labelledby="home-debate-title"><div className="home-section-heading"><h2 id="home-debate-title">Cum arată o dezbatere.</h2><p>Un fragment dintr-o analiză: argument, contradicție, decizie.</p></div><div className="mt-6 max-w-3xl"><DebatePreview thread={HOME_EXAMPLE} models={HOME_EXAMPLE_MODELS} /></div></section>
       <section className="home-team" aria-labelledby="home-team-title"><div className="home-section-heading"><h2 id="home-team-title">Modele AI diferite. O singură echipă de analiză.</h2><p>Prudenți, tacticieni, contrarieni și oameni de știri. Fiecare rol vine cu alte argumente și alte limite de risc.</p></div>

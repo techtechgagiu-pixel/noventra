@@ -345,3 +345,35 @@ a.slip:hover { border-color: #3f7a5d; transform: translateY(-1px); }
 .won-dots button { width: 8px; height: 8px; border-radius: 999px; background: var(--color-line); border: 0; padding: 0; cursor: pointer; }
 .won-dots button[aria-pressed='true'] { background: var(--color-emerald); width: 20px; }
 .won-dots button:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
+
+/* Scroll-driven preview at the site entrance (02.11): sticky while the clip is scrubbed by scroll. */
+.scroll-preview { position: relative; margin: 2.5rem 0 1rem; }
+.scroll-preview.sv-live { height: 300vh; }
+@media (max-width: 640px) { .scroll-preview.sv-live { height: 240vh; } }
+.scroll-preview .sv-pin { position: relative; overflow: hidden; border: 1px solid #26503f; border-radius: 22px; background: #07121c; aspect-ratio: 16 / 9; max-height: 82vh; width: 100%; }
+.scroll-preview { --sv-h: min(82vh, calc((100vw - 32px) * .5625), 648px); }
+.scroll-preview.sv-live .sv-pin { position: sticky; top: max(72px, calc((100vh - var(--sv-h)) / 2)); }
+@media (max-width: 640px) {
+  .scroll-preview { --sv-h: min(72vh, calc((100vw - 32px) * 1.2)); }
+  .scroll-preview:not(.sv-fallback) .sv-pin { aspect-ratio: 5 / 6; }
+}
+.sv-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sv-scrim { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(4,12,20,.86) 0%, rgba(4,12,20,.55) 38%, rgba(4,12,20,0) 70%), linear-gradient(0deg, rgba(4,12,20,.7) 0%, rgba(4,12,20,0) 40%); }
+.sv-lines { position: absolute; inset: 0; display: grid; align-items: center; padding: clamp(16px, 5vw, 56px); }
+.sv-line { grid-area: 1 / 1; max-width: 26rem; opacity: 0; will-change: opacity, transform; }
+.sv-line h2 { font-family: var(--font-display, inherit); font-weight: 800; font-size: clamp(1.5rem, 4.2vw, 2.9rem); line-height: 1.05; color: #fff; }
+.sv-line p:last-child { margin-top: .6rem; font-size: clamp(.85rem, 1.6vw, 1.05rem); line-height: 1.45; color: #cfe3ea; }
+.sv-step { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: #5fd4e8; margin-bottom: .4rem; }
+.sv-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.08); }
+.sv-progress > div { height: 100%; background: linear-gradient(90deg, #22c3dd, #f2c14e); transform: scaleX(0); transform-origin: left; }
+.sv-hint { position: absolute; right: 16px; bottom: 12px; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+.scroll-preview.sv-fallback .sv-lines { position: relative; inset: auto; display: flex; flex-wrap: wrap; gap: 1.25rem; padding: 1.25rem 0 0; }
+.scroll-preview.sv-fallback .sv-line { opacity: 1; max-width: 18rem; }
+.scroll-preview.sv-fallback .sv-line h2 { font-size: 1.35rem; }
+.scroll-preview.sv-fallback .sv-pin { aspect-ratio: auto; overflow: visible; border: 0; background: none; }
+.scroll-preview.sv-fallback .sv-video { position: relative; aspect-ratio: 16 / 9; height: auto; border-radius: 22px; border: 1px solid #26503f; }
+.scroll-preview.sv-fallback .sv-scrim, .scroll-preview.sv-fallback .sv-progress, .scroll-preview.sv-fallback .sv-hint { display: none; }
+@media (max-width: 640px) {
+  .scroll-preview .sv-scrim { background: linear-gradient(0deg, rgba(4,12,20,.92) 0%, rgba(4,12,20,.6) 45%, rgba(4,12,20,.1) 75%); }
+  .scroll-preview:not(.sv-fallback) .sv-lines { align-items: end; padding-bottom: 36px; }
+}
