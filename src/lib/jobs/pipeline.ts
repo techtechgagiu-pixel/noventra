@@ -753,6 +753,32 @@ async function tryOptimize(job: JobRow) {
   return { cands, result };
 }
 
+/**
+ * Pure fallback for custom tickets: the requested number of validated matches at the total odds closest to the target
+ * (variety rule kept when possible, else waived). Null when there are not enough validated matches.
+ */
+export function closestCustomTicket(job: Pick<JobRow, 'config' | 'target_odds'>, cands: Array<Parameters<typeof optimizeTicket>[0]['candidates'][number]>, maxLegOdds?: number) {
+  const legs = job.config.custom?.legs;
+  if (!legs || cands.length < legs) return null;
+  const target = Number(job.target_odds);
+  const base = { candidates: cands, target, tolerance: config.limits.targetTolerance, requiredLegs: legs, maxLegOdds };
+  const tryIt = (variety: boolean) => {
+    const r = optimizeTicket({ ...base, variety });
+    const pick = r.status === 'COMPLETED' ? { legs: r.legs, totalOdds: r.totalOdds } : r.closest && r.closest.legs.length === legs ? r.closest : null;
+    return pick ? { r, pick, variety } : null;
+  };
+  const found = tryIt(true) ?? tryIt(false);
+  if (!found) return null;
+  const { pick } = found;
+  const mixed = new Set(pick.legs.map((l) => l.bookmaker)).size > 1;
+  const notes = [
+    Math.abs(Math.log(pick.totalOdds / target)) > Math.log(1 + config.limits.targetTolerance) ? `Cota ${target} nu se putea atinge cu ${legs} selecții validate; biletul are cota cea mai apropiată posibilă, ${pick.totalOdds.toFixed(2)}.` : null,
+    found.variety ? null : 'Excepție: selecțiile validate erau aproape toate de același tip, așa că regula „maximum jumătate pe același tip” nu s-a aplicat acestui bilet.',
+  ].filter(Boolean);
+  return { status: 'COMPLETED' as const, legs: pick.legs, totalOdds: pick.totalOdds, withinTolerance: false, mixedBookmakers: mixed, closest: null,
+    reason: `Combinație de ${legs} selecții cu cota ${pick.totalOdds.toFixed(2)} (țintă ${target}). ${notes.join(' ')}`.trim() };
+}
+
 /** The Odds API prices are refreshed every 3 days and accepted for 4 (owner decision 28.10); ESPN prices for 3 hours. */
 const maxOddsAgeMinutes = (source: string | null | undefined) => source === ODDSPAPI_SOURCE ? config.limits.oddspapiMaxAgeMinutes : source === 'the-odds-api' ? config.limits.oddsApiMaxAgeMinutes : source === IMPORT_SOURCE ? config.limits.importedOddsMaxAgeMinutes : config.limits.oddsMaxAgeMinutes;
 
@@ -766,7 +792,9 @@ export const MAX_INLINE_EXTENSIONS = 4;
  */
 async function build(job: JobRow): Promise<boolean> {
   await setStage(job, 'BUILDING', job.checkpoint);
-  const { cands, result } = await tryOptimize(job);
+  const optimized = await tryOptimize(job);
+  const cands = optimized.cands;
+  let result = optimized.result;
   const cp = job.checkpoint;
   if (result.status !== 'COMPLETED' && job.config.custom && !job.config.review && (cp.extensions ?? 0) < MAX_INLINE_EXTENSIONS && (cp.lastDiscoverBatches ?? 1) > 0) {
     cp.extensions = (cp.extensions ?? 0) + 1;
@@ -777,6 +805,13 @@ async function build(job: JobRow): Promise<boolean> {
     Object.assign(cp, { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [] });
     await save(job);
     return false;
+  }
+  // Last resort for a custom ticket (owner rule 02.11, „pe viitor la fel”): when the searches are over and the chosen
+  // number of matches cannot hit the target, build it anyway with exactly those matches at the closest total odds
+  // the validated picks allow, and, if only the variety rule blocks it, waive that rule for this ticket.
+  if (result.status !== 'COMPLETED' && job.config.custom && !job.config.review) {
+    const fallback = closestCustomTicket(job, cands, jobPolicy(job).maxOdds);
+    if (fallback) result = fallback;
   }
   const analyzed = job.checkpoint.analyzed;
   await recordEvent(job.id, { type: 'OPTIMIZATION_COMPLETED', stage: 'BUILDING', payload: {
