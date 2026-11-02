@@ -69,4 +69,8 @@ describe('variety rule', () => {
     expect(r.status).toBe('INCOMPLETE');
     expect(r.reason).toMatch(/prea asemănătoare/);
   });
+  it('the owner exception for one ticket (variety: false) builds it from the same candidates', () => {
+    const r = optimizeTicket({ candidates: [c('a', 1.5, 'DC'), c('b', 1.5, 'DC'), c('d', 1.55, 'DC'), c('e', 1.5, 'DC')], target: 5, requiredLegs: null, tolerance: 0.15, minLegs: 3, maxLegs: 7, maxLegOdds: 1.65, variety: false });
+    expect(r.status).toBe('COMPLETED');
+  });
 });
