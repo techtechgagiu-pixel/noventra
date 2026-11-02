@@ -200,6 +200,9 @@ async function fixtureFromDb(id: string): Promise<Fixture | null> {
 /** Re-reads the fixture's day from the source (cached ≤10 min) to get the current status and price. */
 async function freshFixture(f: Fixture): Promise<Fixture | null> {
   if (f.provider !== 'espn') return f;
+  // Stake-only offer (02.11): the price is the stored Stake one (refreshed by every import), the status comes from the
+  // catalog and the results; re-reading ESPN here only adds requests (and loses the match when ESPN answers 403).
+  if (config.limits.stakeOnlyOffer && f.odds?.source === IMPORT_SOURCE) return f;
   const leagues = await getLeagues({ top10Only: false });
   const league = leagues.find((l) => l.id === f.leagueId);
   if (!league) return null;
@@ -703,7 +706,8 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
     .filter((r) => r.outcome === 'QUALIFIED' || (r.validation?.dataSufficient !== false && r.validation?.probabilityPlausible !== false));
   const snaps = await batchSnapshots(job, rows.map((r) => r.fixture_id));
   // Completion never promotes old scores or expired quotes into a new finalized ticket.
-  const current = recheck ? new Map((await loadFixtures(job.config.windowStart, job.config.windowDays, {top10Only:job.config.top10Only, leagueIds: job.config.custom?.leagues})).fixtures.map((f) => [f.id, f])) : null;
+  const stored = config.limits.stakeOnlyOffer && (await importStatus().catch(() => null))?.usable ? true : undefined;
+  const current = recheck ? new Map((await loadFixtures(job.config.windowStart, job.config.windowDays, {top10Only:job.config.top10Only, leagueIds: job.config.custom?.leagues, stored})).fixtures.map((f) => [f.id, f])) : null;
   return (await Promise.all(rows.map(async (r) => {
     const s = snaps.find((x) => x.fixture.id === r.fixture_id);
     if (!s) return [];
