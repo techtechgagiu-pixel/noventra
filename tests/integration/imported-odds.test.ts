@@ -170,8 +170,8 @@ describe('Stake import', () => {
     await expect(saveStakeResult({ fixtureId: fixtureIdNotStake, home: 1, away: 0 })).rejects.toBeInstanceOf(ResultError);
   });
 
-  it('refuses exports older than four days', async () => {
-    await expect(importStakeExport(exportOf([match('s1', 'A', 'B', new Date(Date.now() + 86400_000).toISOString(), [oneXTwo('A', 'B', 2, 3, 4)])], new Date(Date.now() - 5 * 86400_000).toISOString())))
+  it('refuses exports older than the 24-hour validity', async () => {
+    await expect(importStakeExport(exportOf([match('s1', 'A', 'B', new Date(Date.now() + 86400_000).toISOString(), [oneXTwo('A', 'B', 2, 3, 4)])], new Date(Date.now() - 25 * 3600_000).toISOString())))
       .rejects.toBeInstanceOf(ImportError);
   });
 });

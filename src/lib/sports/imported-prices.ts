@@ -414,3 +414,41 @@ export async function importStatus() {
        FROM imported_odds WHERE source='stake'`, [new Date(Date.now() - maxAgeMs()).toISOString(), new Date().toISOString()]).catch(() => null);
   return { matches: Number(r?.n ?? 0), usable: Number(r?.fresh ?? 0), capturedAt: r?.captured ? iso(r.captured) : null, first: r?.first ? iso(r.first) : null, last: r?.last ? iso(r.last) : null, maxAgeHours: Math.round(maxAgeMs() / 3600_000) };
 }
+
+// ── Live scores from a Stake export (02.11) ───────────────────────────────────
+// `export_matches.py --state live` lists the matches in play with their score. Only Stake-only fixtures use it (ESPN
+// keeps its own results): the score and minute are shown while the match runs; a match Stake marks as ended gets its
+// final score, which the settlement then uses. Nothing here is guessed: no status, no update.
+const ENDED = /ended|finished|full ?time|^ft$|after (extra|overtime|penalt)|^aet$|^ap$|penalties/i;
+export type LiveScore = { sourceId: string; home: number; away: number; ended: boolean; clock: string | null; status: string };
+
+export function parseStakeLive(raw: unknown): LiveScore[] {
+  const root = obj(raw);
+  const out: LiveScore[] = [];
+  for (const m of arr(obj(root.data).matches ?? root.matches).map(obj)) {
+    const es = obj(m.event_status);
+    const h = Number(es.homeScore), a = Number(es.awayScore), status = str(es.matchStatus);
+    if (!str(m.source_id) || !status || !Number.isInteger(h) || !Number.isInteger(a) || es.homeScore === null || es.awayScore === null) continue;
+    const t = obj(es.clock).matchTime;
+    out.push({ sourceId: str(m.source_id), home: h, away: a, ended: ENDED.test(status.trim()), clock: typeof t === 'string' && t ? `${t.split(':')[0]}'` : null, status });
+  }
+  return out;
+}
+
+export async function importStakeLive(raw: unknown) {
+  const scores = parseStakeLive(raw);
+  let live = 0, ended = 0;
+  const writes: Statement[] = [];
+  for (const s of scores) {
+    const id = `stk:${s.sourceId}`;
+    if (s.ended) {
+      writes.push({ text: `UPDATE fixtures SET status='post', home_score=$2, away_score=$3, live_clock=NULL, source_observed_at=$4, results_checked_at=$4 WHERE id=$1 AND provider='stake' AND status<>'post'`, params: [id, s.home, s.away, new Date().toISOString()] });
+      ended++;
+    } else {
+      writes.push({ text: `UPDATE fixtures SET status='in', home_score=$2, away_score=$3, live_clock=$4, source_observed_at=$5 WHERE id=$1 AND provider='stake' AND status IN ('pre','in')`, params: [id, s.home, s.away, s.clock ?? s.status.slice(0, 20), new Date().toISOString()] });
+      live++;
+    }
+  }
+  for (let i = 0; i < writes.length; i += 40) await atomic(writes.slice(i, i + 40));
+  return { live: true, matches: scores.length, inPlay: live, ended };
+}
