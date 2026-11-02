@@ -22,7 +22,7 @@ import { localDate, yyyymmdd } from '../time';
 import { agentFacts, characterViolation, isBannedMarket, factsForAgent, consensus, contested, setVoteWeights, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
 import { agentTrackRecord, trackRecordText } from '../track-record';
 import { withTheOddsPrices } from '../sports/the-odds-prices';
-import { IMPORT_SOURCE, withImportedPrices } from '../sports/imported-prices';
+import { IMPORT_SOURCE, importStatus, withImportedPrices } from '../sports/imported-prices';
 import { buildCsSnapshot, csFacts, CS_BRIEFING } from '../cs/analysis';
 import { ODDSPAPI_SOURCE } from '../cs/oddspapi';
 import { cachedCalibrations, calibrated, calibrationText, loadCalibrations } from '../calibration';
@@ -66,7 +66,11 @@ async function discover(job: JobRow) {
   const cp = job.checkpoint;
   await setStage(job, 'SELECTING', cp);
   const t0 = Date.now();
-  const loaded = await loadFixtures(job.config.windowStart, job.config.windowDays, { top10Only: job.config.top10Only, leagueIds: job.config.custom?.leagues });
+  // Stake-only offer with a usable export: the offer is what the import stored (Stake prices on ESPN fixtures +
+  // Stake-only matches), so discovery reads it from the database instead of re-reading every ESPN league (02.11: three
+  // tickets at once sat for minutes in this step).
+  const stored = config.limits.stakeOnlyOffer && (await importStatus().catch(() => null))?.usable ? true : undefined;
+  const loaded = await loadFixtures(job.config.windowStart, job.config.windowDays, { top10Only: job.config.top10Only, leagueIds: job.config.custom?.leagues, stored });
   console.log(JSON.stringify({ event: 'discover_loaded', jobId: job.id, fixtures: loaded.fixtures.length, errors: loaded.errors.length, ms: Date.now() - t0 }));
   const { errors } = loaded;
   if (job.config.review) return discoverReview(job, loaded.fixtures, errors);

@@ -131,11 +131,13 @@ async function storedStakeFixtures(window: string[], leagues: League[]): Promise
 }
 
 /** Fixtures for a window of local days. Cached by the HTTP layer; DB writes only on change. */
-export async function loadFixtures(startDate: string, days: number, opts: { top10Only?: boolean; persist?: boolean; leagueIds?: string[] } = {}) {
-  if(process.env.BETMIND_RUNTIME?.startsWith('cloudflare')&&!g.__bmFixtureOverride){
+export async function loadFixtures(startDate: string, days: number, opts: { top10Only?: boolean; persist?: boolean; leagueIds?: string[]; stored?: boolean } = {}) {
+  // Cloudflare always, the runner when asked (Stake-only offer, 02.11): the stored offer, no fan-out to ~100 ESPN leagues.
+  if((process.env.BETMIND_RUNTIME?.startsWith('cloudflare')||opts.stored)&&!g.__bmFixtureOverride){
     const {storedCatalog}=await import('../d1/catalog');
     const {data}=await storedCatalog(startDate,days);
-    const leagues=(opts.top10Only??true)?data.leagues.filter(l=>l.top10):data.leagues;
+    const only=opts.leagueIds?.length?new Set(opts.leagueIds):null;
+    const leagues=only?data.leagues.filter(l=>only.has(l.id)):(opts.top10Only??true)?data.leagues.filter(l=>l.top10):data.leagues;
     const allowed=new Set(leagues.map(l=>l.id));
     return {...data,leagues,fixtures:data.fixtures.filter(f=>allowed.has(f.leagueId))};
   }
