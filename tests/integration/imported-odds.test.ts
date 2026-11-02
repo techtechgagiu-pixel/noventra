@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { many, one } from '@/lib/db';
 import { loadFixtures } from '@/lib/sports/fixtures';
 import { setFixtureProviderForTests } from '@/lib/sports/fixtures';
-import { ImportError, importStakeExport, importStatus, mergeImported, parseStakeExport, sameImportedMatch, stakeFixture, stakeLeague } from '@/lib/sports/imported-prices';
+import { ImportError, importStakeExport, importStatus, mergeImported, parseStakeExport, sameImportedMatch, stakeFixture, stakeLeague, stakeOnlyEvents } from '@/lib/sports/imported-prices';
 import { config } from '@/lib/config';
 import { pendingStakeResults, ResultError, saveStakeResult } from '@/lib/sports/stake-results';
 import { query } from '@/lib/db';
@@ -85,6 +85,19 @@ describe('Stake export parsing', () => {
     expect(merged.odds!.markets.map((m) => m.key).sort()).toEqual(['1X2:HOME', 'BTTS:YES']);
   });
 
+  it('a Stake tournament ESPN covers never yields Stake-only duplicates (spelling or later rounds)', () => {
+    const at = (h: number) => new Date(Date.now() + h * 3600_000).toISOString();
+    const ev = (id: string, home: string, away: string, h: number, category: string, slug: string) => ({ sourceId: id, home, away, kickoff: at(h), league: slug, category, tournamentSlug: slug, capturedAt: at(0), markets: [] });
+    const known = [{ home: 'FC Midtjylland', away: 'Randers FC', kickoff: at(2), t: Date.parse(at(2)) }];
+    const out = stakeOnlyEvents([
+      ev('a', 'Midtjylland', 'Randers', 2, 'denmark', 'superligaen'),       // found in the schedule
+      ev('b', 'Sonderjyske', 'Copenhagen', 2, 'denmark', 'superligaen'),    // spelling mismatch, same tournament
+      ev('c', 'Copenhagen', 'Broendby', 120, 'denmark', 'superligaen'),     // later round not listed yet
+      ev('d', 'Pescara', 'Bari', 3, 'italy', 'serie-d-group-f'),            // tournament ESPN does not carry
+    ], known);
+    expect(out.map((e) => e.sourceId)).toEqual(['d']);
+  });
+
   it('skips Stake virtual leagues (SRL) and keeps country and tournament for Stake-only leagues', () => {
     const v = { ...match('v1', 'Lazio SRL', 'Roma SRL', new Date(Date.now() + 86400_000).toISOString(), [oneXTwo('Lazio SRL', 'Roma SRL', 2, 3, 4)]), tournament: { name: 'Serie A SRL', slug: 'serie-a-srl', category: 'simulated-reality-league' } };
     const r = { ...match('r1', 'Pescara', 'Bari', new Date(Date.now() + 86400_000).toISOString(), [oneXTwo('Pescara', 'Bari', 2, 3, 4)]), tournament: { name: 'Serie C, Group B', slug: 'serie-c-group-b', category: 'italy' } };
@@ -102,7 +115,7 @@ describe('Stake import', () => {
     await loadFixtures(localDate(), 8, { top10Only: false });
     const res = await importStakeExport(exportOf([
       match('s1', 'Villareal', 'Espanyol', new Date(Date.parse(fx[0].kickoff) + 5 * 60_000).toISOString(), [oneXTwo('Villareal', 'Espanyol', 1.72, 3.6, 4.9)]),
-      match('s2', 'Elsewhere', 'Nobody', new Date(Date.now() + 2 * 86400_000).toISOString(), [oneXTwo('Elsewhere', 'Nobody', 2, 3, 4)]),
+      { ...match('s2', 'Elsewhere', 'Nobody', new Date(Date.now() + 2 * 86400_000).toISOString(), [oneXTwo('Elsewhere', 'Nobody', 2, 3, 4)]), tournament: { name: 'Liga 3', slug: 'liga-3', category: 'nowhere' } },
       match('s3', 'Past', 'Match', new Date(Date.now() - 3600_000).toISOString(), [oneXTwo('Past', 'Match', 2, 3, 4)]),
     ]));
     expect(res).toMatchObject({ saved: 2, matchedFixtures: 1, stakeOnlyFixtures: 1, stats: { matches: 3, priced: 3, mapped: { '1X2': 3 } } });

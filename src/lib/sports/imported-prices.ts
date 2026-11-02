@@ -329,6 +329,27 @@ export function stakeFixture(e: ImportedEvent): Fixture {
     odds: { bookmaker: BOOK, source: IMPORT_SOURCE, observedAt: e.capturedAt, providerUpdatedAt: e.capturedAt, markets: quotes } };
 }
 
+/**
+ * Pure: the events to offer as Stake-only fixtures. A Stake tournament with at least one match found in the ESPN/LPF
+ * schedule is covered by ESPN: its other matches are spelling mismatches ("Copenhagen" / "F.C. København") or later
+ * rounds ESPN has not listed yet, never separate matches, so they wait for the schedule instead of being duplicated.
+ */
+/** Stake tournaments whose matches the ESPN schedule already carries (league configured on the site): never Stake-only. */
+const ESPN_COVERED = new Set([
+  'switzerland/super-league', 'israel/premier-league', 'norway/1st-division', 'sweden/superettan', 'turkiye/1-lig', 'greece/super-league-1',
+  'italy/serie-c-group-a', 'italy/serie-c-group-b', 'italy/serie-c-group-c', 'czechia/1-liga', 'international-clubs/copa-libertadores',
+  'international-clubs/copa-sudamericana', 'international-clubs/uefa-champions-league', 'international-clubs/uefa-europa-league',
+  'international-clubs/uefa-europa-conference-league', 'denmark/superligaen', 'denmark/1st-division', 'saudi-arabia/saudi-prof-league',
+  'brazil/brasileiro-serie-a', 'brazil/brasileiro-serie-b', 'argentina/liga-profesional',
+]);
+
+export function stakeOnlyEvents(events: ImportedEvent[], known: Array<{ home: string; away: string; kickoff: string; t: number }>) {
+  const matches = (e: ImportedEvent) => { const t = Date.parse(e.kickoff); return known.some((f) => Math.abs(f.t - t) <= 15 * 60_000 && (sameMatch(f as never, e) || sameImportedMatch(f as never, e))); };
+  const found = events.filter(matches);
+  const covered = new Set(found.map((e) => stakeLeague(e).id));
+  return events.filter((e) => !found.includes(e) && !covered.has(stakeLeague(e).id) && !ESPN_COVERED.has(stakeLeague(e).providerKey));
+}
+
 /** Stake football events no ESPN/LPF fixture covers become fixtures of their own (and their leagues). */
 async function addStakeOnlyFixtures(events: ImportedEvent[]) {
   if (!config.limits.stakeOnlyOffer || !events.length) return 0;
@@ -337,10 +358,8 @@ async function addStakeOnlyFixtures(events: ImportedEvent[]) {
     `SELECT id,home_team,away_team,kickoff_utc,provider FROM fixtures WHERE provider NOT IN ('stake','pandascore') AND kickoff_utc >= $1 AND kickoff_utc <= $2`,
     [new Date(Math.min(...times) - 35 * 60_000).toISOString(), new Date(Math.max(...times) + 35 * 60_000).toISOString()]);
   const known = rows.map((r) => ({ home: r.home_team, away: r.away_team, kickoff: iso(r.kickoff_utc), t: Date.parse(iso(r.kickoff_utc)) }));
-  const missing = events.filter((e) => {
-    const t = Date.parse(e.kickoff);
-    return !known.some((f) => Math.abs(f.t - t) <= 15 * 60_000 && (sameMatch(f as never, e) || sameImportedMatch(f as never, e)));
-  });
+  const unmatched = stakeOnlyEvents(events, known);
+  const missing = unmatched;
   if (!missing.length) return 0;
   const leagues = new Map(missing.map((e) => { const l = stakeLeague(e); return [l.id, l] as const; }));
   const writes: Statement[] = [...leagues.values()].map((l) => ({
