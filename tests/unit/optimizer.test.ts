@@ -74,3 +74,25 @@ describe('variety rule', () => {
     expect(r.status).toBe('COMPLETED');
   });
 });
+
+describe('custom ticket last resort (owner rule 02.11)', async () => {
+  const { closestCustomTicket } = await import('@/lib/jobs/pipeline');
+  const c = (id: string, odds: number, family: string): Candidate => ({ fixtureId: id, teams: [id + 'h', id + 'a'], odds, bookmaker: 'Stake', quality: 0.5, risk: 'LOW', probability: 0.9 / odds, family });
+  const job = (target: number, legs: number) => ({ target_odds: String(target), config: { custom: { legs } } } as never);
+  it('keeps the requested number of matches at the closest odds when the target is out of reach', () => {
+    const cands = ['a', 'b', 'd', 'e', 'f'].map((id, i) => c(id, 1.3 + i * 0.02, i % 2 ? 'DC' : 'TOTAL'));
+    const r = closestCustomTicket(job(1.5, 4), cands)!;
+    expect(r.status).toBe('COMPLETED');
+    expect(r.legs).toHaveLength(4);
+    expect(r.reason).toMatch(/cota cea mai apropiată/);
+  });
+  it('waives the variety rule only when it is the one blocking the ticket', () => {
+    const cands = ['a', 'b', 'd', 'e'].map((id) => c(id, 1.5, 'DC'));
+    const r = closestCustomTicket(job(5, 4), cands)!;
+    expect(r.status).toBe('COMPLETED');
+    expect(r.reason).toMatch(/Excepție/);
+  });
+  it('never invents selections: fewer validated matches than requested gives nothing', () => {
+    expect(closestCustomTicket(job(5, 4), [c('a', 1.5, 'DC'), c('b', 1.5, 'TOTAL')])).toBeNull();
+  });
+});
