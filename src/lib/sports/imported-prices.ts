@@ -419,7 +419,8 @@ export async function importStatus() {
 // `export_matches.py --state live` lists the matches in play with their score. Only Stake-only fixtures use it (ESPN
 // keeps its own results): the score and minute are shown while the match runs; a match Stake marks as ended gets its
 // final score, which the settlement then uses. Nothing here is guessed: no status, no update.
-const ENDED = /ended|finished|full ?time|^ft$|after (extra|overtime|penalt)|^aet$|^ap$|penalties/i;
+// Stake writes both "2nd half" and "SecondHalf" (seen 02.11), so the end of a match may come as "Ended" or "FullTime".
+const ENDED = /ended|finished|full ?time|^ft$|after ?(extra|overtime|penalt)|^aet$|^ap$|penalties/i;
 export type LiveScore = { sourceId: string; home: number; away: number; ended: boolean; clock: string | null; status: string };
 
 export function parseStakeLive(raw: unknown): LiveScore[] {
