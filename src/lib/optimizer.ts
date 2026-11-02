@@ -29,7 +29,7 @@ const BEAM = 200;
  * Among combinations within tolerance of the target, the SAFEST one wins: highest estimated probability that
  * every leg wins (product of leg probabilities). `maxLegOdds` and `minLegs` keep tickets made of small prices.
  */
-export function optimizeTicket(input: { candidates: Candidate[]; target: number; requiredLegs: number | null; tolerance: number; avoidFixtures?: Set<string>; maxLegs?: number; minLegs?: number; maxLegOdds?: number }): OptimizerResult {
+export function optimizeTicket(input: { candidates: Candidate[]; target: number; requiredLegs: number | null; tolerance: number; avoidFixtures?: Set<string>; maxLegs?: number; minLegs?: number; maxLegOdds?: number; variety?: boolean }): OptimizerResult {
   const goal = Math.log(input.target);
   const tol = Math.log(1 + input.tolerance);
   const unique = dedupe(input.candidates.filter((c) => !input.maxLegOdds || c.odds <= input.maxLegOdds + 1e-9));
@@ -67,7 +67,8 @@ export function optimizeTicket(input: { candidates: Candidate[]; target: number;
     for (const i of s.idx) { const f = items[i].family ?? `fixture:${items[i].fixtureId}`; counts.set(f, (counts.get(f) ?? 0) + 1); }
     return Math.max(...counts.values()) <= Math.ceil(s.idx.length / 2);
   };
-  const pool = allPool.filter(varied);
+  // The owner may waive it for one ticket (02.11, config.varietyOverride).
+  const pool = input.variety === false ? allPool : allPool.filter(varied);
   if (!pool.length && allPool.length) return { status: 'INCOMPLETE', legs: [], totalOdds: 0, withinTolerance: false, mixedBookmakers: false, closest: null, reason: 'Selecțiile calificate sunt prea asemănătoare: niciun bilet nu respectă regula „maximum jumătate din meciuri pe același tip de pronostic”.' };
   if (!pool.length) return { status: 'INCOMPLETE', legs: [], totalOdds: 0, withinTolerance: false, mixedBookmakers: false, closest: null, reason: 'Nicio combinație validă din selecțiile calificate.' };
   const avoid = input.avoidFixtures ?? new Set();
