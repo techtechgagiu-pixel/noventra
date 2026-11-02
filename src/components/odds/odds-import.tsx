@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Upload } from 'lucide-react';
 
 type Status = { matches: number; usable: number; capturedAt: string | null; first: string | null; last: string | null; maxAgeHours: number };
-type Result = { capturedAt: string; saved: number; matchedFixtures: number; stats: { matches: number; priced: number; mapped: Record<string, number>; skipped: Record<string, number> } };
+type Result = { capturedAt: string; saved: number; matchedFixtures: number; stakeOnlyFixtures?: number; stats: { matches: number; priced: number; mapped: Record<string, number>; skipped: Record<string, number> } };
 const FAMILY: Record<string, string> = { '1X2': '1X2', TOTAL: 'total goluri', BTTS: 'ambele marchează', DC: 'șansă dublă' };
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('ro-RO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Bucharest' }) : '—');
 
@@ -46,7 +46,7 @@ export function OddsImport({ initial }: { initial: Status }) {
       {error && <p role="alert" className="mt-3 text-sm text-rose">{error}</p>}
       {result && <div role="status" className="mt-4 space-y-1 text-sm">
         <p className="font-semibold text-emerald">Import reușit: {result.saved} meciuri viitoare cu cote, export din {when(result.capturedAt)}.</p>
-        <p className="text-muted">{result.matchedFixtures} {result.matchedFixtures === 1 ? 'meci din site a primit' : 'meciuri din site au primit'} cotele acum; restul se potrivesc când apar în program.</p>
+        <p className="text-muted">{result.matchedFixtures} {result.matchedFixtures === 1 ? 'meci din site a primit' : 'meciuri din site au primit'} cotele acum; restul se potrivesc când apar în program.{result.stakeOnlyFixtures ? ` ${result.stakeOnlyFixtures} meciuri fără program ESPN au intrat ca meciuri doar-Stake.` : ''}</p>
         <p className="text-muted">Piețe preluate: {Object.entries(result.stats.mapped).map(([k, n]) => `${FAMILY[k] ?? k} (${n})`).join(', ') || 'niciuna'}.</p>
         {Object.keys(result.stats.skipped).length > 0 && <p className="text-xs text-muted">Ignorate (nu le putem verifica la rezultat): {Object.entries(result.stats.skipped).slice(0, 8).map(([k, n]) => `${k} (${n})`).join(', ')}.</p>}
       </div>}

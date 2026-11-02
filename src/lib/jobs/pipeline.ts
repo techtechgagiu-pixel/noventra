@@ -82,6 +82,8 @@ async function discover(job: JobRow) {
   const createdAt = latest.length ? Math.max(...latest) : job.created_at ? new Date(job.created_at).getTime() : now;
   const leadMs = pol.minLeadHours ? pol.minLeadHours * 3600_000 : MIN_LEAD_MS;
   const aheadMs = pol.maxAheadHours ? pol.maxAheadHours * 3600_000 : Number.POSITIVE_INFINITY;
+  // Stake-only offer (02.11): with a Stake export in use, football is analysed only at Stake prices.
+  const stakeOffer = config.limits.stakeOnlyOffer && fixtures.some((f) => f.provider !== 'pandascore' && f.odds?.source === IMPORT_SOURCE);
   const entries: CandidateEntry[] = fixtures.map((f) => {
     let reason: string | undefined;
     const ko = Date.parse(f.kickoff);
@@ -89,6 +91,7 @@ async function discover(job: JobRow) {
     else if (ko < Math.max(now + MIN_LEAD_MS, createdAt + leadMs)) reason = pol.minLeadHours ? `Începe în mai puțin de ${pol.minLeadHours} ore` : 'Începe în mai puțin de 20 de minute';
     else if (ko > createdAt + aheadMs) reason = `Începe peste mai mult de ${pol.maxAheadHours} de ore`;
     else if (!f.odds) reason = f.provider === 'lpf' ? 'Sursa oficială LPF nu publică cote verificabile' : 'Fără cote verificabile la sursă';
+    else if (stakeOffer && f.provider !== 'pandascore' && f.odds.source !== IMPORT_SOURCE) reason = 'Fără cote Stake (oferta vine doar din exportul Stake)';
     else if (f.provider === 'pandascore' ? !f.odds.markets.some((m) => m.key === 'ML:HOME') : !f.odds.markets.some((m) => m.marketType === '1X2')) reason = f.provider === 'pandascore' ? 'Cota pe câștigătorul meciului lipsește' : 'Piața 1X2 lipsește';
     return { fixtureId: f.id, home: f.home, away: f.away, league: f.leagueName, kickoff: f.kickoff, eligible: !reason, reason };
   });
@@ -219,6 +222,7 @@ async function freshFixture(f: Fixture): Promise<Fixture | null> {
 /** Adds Bet365 / DraftKings-prop selections (each tagged with its bookmaker) to an ESPN fixture. */
 async function withExtraMarkets(f: Fixture): Promise<Fixture> {
   if (f.provider !== 'espn' || !f.odds) return f;
+  if (config.limits.stakeOnlyOffer && f.odds.source === IMPORT_SOURCE) return f; // Stake markets only (02.11)
   const extra = await espnExtraMarkets(f).catch(() => []);
   return { ...f, odds: { ...f.odds, markets: mergeMarkets(f.odds.markets, extra, f.odds.bookmaker) } };
 }

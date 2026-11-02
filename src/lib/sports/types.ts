@@ -23,7 +23,7 @@ export type OddsSnapshot = {
 
 export type Fixture = {
   id: string; // provider:eventId
-  provider: 'espn' | 'lpf' | 'demo' | 'pandascore';
+  provider: 'espn' | 'lpf' | 'demo' | 'pandascore' | 'stake';
   providerId: string;
   leagueId: string; // canonical league id (ENG1…)
   leagueKey: string; // provider league key (eng.1)
@@ -49,7 +49,7 @@ export type League = {
   id: string;
   country: string;
   name: string;
-  provider: 'espn' | 'lpf' | 'pandascore';
+  provider: 'espn' | 'lpf' | 'pandascore' | 'stake';
   providerKey: string;
   priority: number;
   top10: boolean;

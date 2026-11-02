@@ -1,3 +1,4 @@
+import { config } from './config';
 import { many, one, dialect } from './db';
 import { loadFixtures } from './sports/fixtures';
 import { localDate } from './time';
@@ -39,8 +40,8 @@ export async function fixtureCatalog() {
 }
 
 export type MatchRow = {
-  source?: 'espn' | 'lpf' | 'the-odds-api' | 'demo' | 'pandascore';
-  sources?: Array<'espn' | 'lpf' | 'the-odds-api' | 'demo' | 'pandascore'>;
+  source?: 'espn' | 'lpf' | 'the-odds-api' | 'demo' | 'pandascore' | 'stake';
+  sources?: Array<'espn' | 'lpf' | 'the-odds-api' | 'demo' | 'pandascore' | 'stake'>;
   id: string; leagueId: string; league: string; country: string; home: string; away: string; homeLogo: string | null; awayLogo: string | null;
   kickoff: string; status: string; score: string | null; odds: { home: number | null; draw: number | null; away: number | null; markets: number; bookmaker: string } | null;
   analysis: { outcome: string; selectionOutcome: string | null; label: string | null; odds: number | null; votes: number; onTicket: boolean; at: string; jobId: string } | null;
@@ -92,8 +93,12 @@ export async function matchList(userId: string, scope: 'all' | 'mine' = 'all', i
       analysis: d ? { outcome: d.outcome, selectionOutcome: d.selection_outcome, label: d.label ?? labels.get(`${d.job_id}|${d.fixture_id}|${d.market_key}`) ?? d.market_key, odds: d.odds === null ? null : Number(d.odds), votes: d.votes_for, onTicket: d.on_ticket, at: new Date(d.created_at).toISOString(), jobId: d.job_id } : null,
     };
   });
-  const leagues = (data?.leagues ?? []).map((l) => ({ id: l.id, name: l.name, country: l.country, top10: l.top10, count: rows.filter((r) => r.leagueId === l.id).length }));
-  const merged = mergeInformationalMatches(rows, additional.fixtures);
+  // Stake-only offer (02.11): while a Stake export is in use, upcoming football without Stake prices is not offered
+  // (ESPN stays for history and results; live and finished matches keep showing their scores).
+  const stakeOnly = config.limits.stakeOnlyOffer && rows.some((r) => r.odds?.bookmaker === 'Stake' && r.source !== 'pandascore');
+  const offered = stakeOnly ? rows.filter((r) => r.source === 'pandascore' || r.status !== 'pre' || r.odds?.bookmaker === 'Stake' || !!r.analysis) : rows;
+  const leagues = (data?.leagues ?? []).map((l) => ({ id: l.id, name: l.name, country: l.country, top10: l.top10, count: offered.filter((r) => r.leagueId === l.id).length }));
+  const merged = stakeOnly ? offered : mergeInformationalMatches(rows, additional.fixtures);
   // Schedule-only competitions: show The Odds API prices when they are cached (no new credits spent here).
   if (includeInformational && merged.some((m) => m.source === 'the-odds-api')) {
     const events = new Map<string, Awaited<ReturnType<typeof cachedTheOddsEvents>>[string]['events'][number]>(Object.values(await cachedTheOddsEvents().catch(() => ({}))).flatMap((c) => c.events.map((e) => [`the-odds-api:${e.id}`, e] as [string, typeof e])));

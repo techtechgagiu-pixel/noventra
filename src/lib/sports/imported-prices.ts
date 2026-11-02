@@ -22,7 +22,10 @@ const BOOK = 'Stake';
 const maxAgeMs = () => config.limits.importedOddsMaxAgeMinutes * 60_000;
 
 export type ImportedMarket = { key: string; marketType: MarketType; odds: number; line?: number };
-export type ImportedEvent = { sourceId: string; home: string; away: string; league: string | null; kickoff: string; capturedAt: string; markets: ImportedMarket[] };
+export type ImportedEvent = { sourceId: string; home: string; away: string; league: string | null; kickoff: string; capturedAt: string; markets: ImportedMarket[]; category?: string | null; tournamentSlug?: string | null };
+
+/** Stake's simulated / virtual football ("SRL", eFootball): not real matches, never imported. */
+export const isVirtualLeague = (name: string | null | undefined) => !!name && /\bSRL\b|simulated|e-?football|esoccer|e-soccer|virtual|cyber/i.test(name);
 export type ParsedExport = { capturedAt: string; events: ImportedEvent[]; stats: { matches: number; priced: number; mapped: Record<string, number>; skipped: Record<string, number> } };
 export class ImportError extends Error {}
 
@@ -204,6 +207,7 @@ export function parseStakeExport(raw: unknown): ParsedExport {
     const [home, away] = parts.length >= 2 ? parts : str(m.name).split(/\s+(?:vs\.?|-|–)\s+/).map((s) => s.trim());
     const sourceId = str(m.source_id), kickoff = Date.parse(str(m.starts_at));
     if (!sourceId || !home || !away || !Number.isFinite(kickoff)) continue;
+    if (!esport && isVirtualLeague(str(obj(m.tournament).name))) { stats.skipped['ligă virtuală (SRL)'] = (stats.skipped['ligă virtuală (SRL)'] ?? 0) + 1; continue; }
     const byKey = new Map<string, ImportedMarket>();
     for (const market of arr(m.markets).map(obj)) {
       const { family, quotes } = (esport ? mapCsMarket : mapMarket)(market, home, away);
@@ -214,7 +218,7 @@ export function parseStakeExport(raw: unknown): ParsedExport {
     if (!byKey.size) continue;
     stats.priced++;
     const t = obj(m.tournament);
-    events.push({ sourceId, home, away, league: str(t.name) || null, kickoff: new Date(kickoff).toISOString(), capturedAt: new Date(capturedAt).toISOString(), markets: [...byKey.values()] });
+    events.push({ sourceId, home, away, league: str(t.name) || null, kickoff: new Date(kickoff).toISOString(), capturedAt: new Date(capturedAt).toISOString(), markets: [...byKey.values()], category: str(t.category) || null, tournamentSlug: str(t.slug) || null });
   }
   return { capturedAt: new Date(capturedAt).toISOString(), events, stats };
 }
@@ -224,13 +228,14 @@ export function parseStakeExport(raw: unknown): ParsedExport {
 export function mergeImported(f: Fixture, e: ImportedEvent): Fixture {
   const quotes: MarketQuote[] = e.markets.map((m) => ({ ...m, label: labelFor(m.key, f.home, f.away), bookmaker: BOOK }));
   const own = f.odds?.markets ?? [];
-  if (f.odds && f.odds.source === 'the-odds-api' && Date.parse(f.odds.observedAt) > Date.parse(e.capturedAt)) {
+  if (!config.limits.stakeOnlyOffer && f.odds && f.odds.source === 'the-odds-api' && Date.parse(f.odds.observedAt) > Date.parse(e.capturedAt)) {
     const have = new Set(own.map((m) => m.key));
     const extra = quotes.filter((q) => !have.has(q.key));
     return extra.length ? { ...f, odds: { ...f.odds, markets: [...own, ...extra] } } : f;
   }
   const keys = new Set(quotes.map((q) => q.key));
-  const background = own.filter((m) => !keys.has(m.key)).map((m) => ({ ...m, bookmaker: m.bookmaker ?? f.odds?.bookmaker }));
+  // Stake-only offer (02.11): the agents see Stake's markets alone, nothing from ESPN / The Odds API in the background.
+  const background = config.limits.stakeOnlyOffer ? [] : own.filter((m) => !keys.has(m.key)).map((m) => ({ ...m, bookmaker: m.bookmaker ?? f.odds?.bookmaker }));
   return { ...f, odds: { bookmaker: BOOK, source: IMPORT_SOURCE, observedAt: e.capturedAt, providerUpdatedAt: e.capturedAt, markets: [...quotes, ...background] } };
 }
 
@@ -265,6 +270,7 @@ export async function withImportedPrices(fixtures: Fixture[]): Promise<Fixture[]
       }
       return f;
     }
+    if (f.provider === 'stake') { const own = events.find((x) => x.sourceId === f.providerId); return own ? mergeImported(f, own) : f; }
     const e = near.find((x) => sameMatch(f, x) && !x.markets.some((m) => isCsKey(m.key))) ?? near.find((x) => sameImportedMatch(f, x) && !x.markets.some((m) => isCsKey(m.key)));
     return e ? mergeImported(f, e) : f;
   });
@@ -279,16 +285,18 @@ export async function importStakeExport(raw: unknown) {
   const upcoming = parsed.events.filter((e) => Date.parse(e.kickoff) > Date.now());
   if (!upcoming.length) throw new ImportError('Fișierul nu conține meciuri viitoare cu cote recunoscute.');
   const statements: Statement[] = upcoming.map((e) => ({
-    text: `INSERT INTO imported_odds(source,source_id,home,away,league,kickoff_utc,markets,captured_at,imported_at) VALUES('stake',$1,$2,$3,$4,$5,$6,$7,$8)
+    text: `INSERT INTO imported_odds(source,source_id,home,away,league,kickoff_utc,markets,captured_at,imported_at,category,tournament_slug) VALUES('stake',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       ON CONFLICT(source,source_id) DO UPDATE SET home=EXCLUDED.home,away=EXCLUDED.away,league=EXCLUDED.league,kickoff_utc=EXCLUDED.kickoff_utc,
-        markets=EXCLUDED.markets,captured_at=EXCLUDED.captured_at,imported_at=EXCLUDED.imported_at
+        markets=EXCLUDED.markets,captured_at=EXCLUDED.captured_at,imported_at=EXCLUDED.imported_at,category=EXCLUDED.category,tournament_slug=EXCLUDED.tournament_slug
       WHERE EXCLUDED.captured_at >= imported_odds.captured_at`,
-    params: [e.sourceId, e.home, e.away, e.league, e.kickoff, JSON.stringify(e.markets), e.capturedAt, new Date().toISOString()],
+    params: [e.sourceId, e.home, e.away, e.league, e.kickoff, JSON.stringify(e.markets), e.capturedAt, new Date().toISOString(), e.category ?? null, e.tournamentSlug ?? null],
   }));
   for (let i = 0; i < statements.length; i += 50) await atomic(statements.slice(i, i + 50));
   await atomic([{ text: `DELETE FROM imported_odds WHERE kickoff_utc < $1`, params: [new Date(Date.now() - 6 * 3600_000).toISOString()] }]);
   const matched = await repriceCatalog();
-  return { capturedAt: parsed.capturedAt, saved: upcoming.length, matchedFixtures: matched, stats: parsed.stats };
+  // Football Stake lists but the ESPN schedule does not: fixtures of their own, so the agents see the whole offer.
+  const stakeOnly = parsed.events.some((e) => e.markets.some((m) => isCsKey(m.key))) ? 0 : await addStakeOnlyFixtures(upcoming);
+  return { capturedAt: parsed.capturedAt, saved: upcoming.length, matchedFixtures: matched, stakeOnlyFixtures: stakeOnly, stats: parsed.stats };
 }
 
 /** Writes the merged prices of the next 8 days' stored fixtures, so new analyses see them right away. */
@@ -300,6 +308,49 @@ async function repriceCatalog() {
   const changed = merged.filter((f, i) => f !== fixtures[i] && f.odds?.markets.some((m) => m.bookmaker === BOOK));
   await persistFixtures(changed);
   return changed.length;
+}
+
+const slugify = (v: string) => v.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const title = (v: string) => v.split(/[-_\s]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
+/** The site league of a Stake tournament (one league per country + tournament, created on first sight). */
+export function stakeLeague(e: Pick<ImportedEvent, 'league' | 'category' | 'tournamentSlug'>) {
+  const category = slugify(e.category ?? '') || 'international';
+  const slug = slugify(e.tournamentSlug ?? e.league ?? '') || 'altele';
+  return { id: `STK-${category}-${slug}`.slice(0, 64), provider: 'stake' as const, providerKey: `${category}/${slug}`, name: e.league ?? title(slug), country: title(category) };
+}
+
+/** Pure: the Stake-only fixture of an event (prices exactly as exported). */
+export function stakeFixture(e: ImportedEvent): Fixture {
+  const l = stakeLeague(e);
+  const quotes: MarketQuote[] = e.markets.map((m) => ({ ...m, label: labelFor(m.key, e.home, e.away), bookmaker: BOOK }));
+  return { id: `stk:${e.sourceId}`, provider: 'stake', providerId: e.sourceId, leagueId: l.id, leagueKey: l.providerKey, leagueName: l.name, country: l.country,
+    home: e.home, away: e.away, kickoff: e.kickoff, status: 'pre', homeScore: null, awayScore: null, fetchedAt: e.capturedAt,
+    odds: { bookmaker: BOOK, source: IMPORT_SOURCE, observedAt: e.capturedAt, providerUpdatedAt: e.capturedAt, markets: quotes } };
+}
+
+/** Stake football events no ESPN/LPF fixture covers become fixtures of their own (and their leagues). */
+async function addStakeOnlyFixtures(events: ImportedEvent[]) {
+  if (!config.limits.stakeOnlyOffer || !events.length) return 0;
+  const times = events.map((e) => Date.parse(e.kickoff));
+  const rows = await many<{ id: string; home_team: string; away_team: string; kickoff_utc: string | Date; provider: string }>(
+    `SELECT id,home_team,away_team,kickoff_utc,provider FROM fixtures WHERE provider NOT IN ('stake','pandascore') AND kickoff_utc >= $1 AND kickoff_utc <= $2`,
+    [new Date(Math.min(...times) - 35 * 60_000).toISOString(), new Date(Math.max(...times) + 35 * 60_000).toISOString()]);
+  const known = rows.map((r) => ({ home: r.home_team, away: r.away_team, kickoff: iso(r.kickoff_utc), t: Date.parse(iso(r.kickoff_utc)) }));
+  const missing = events.filter((e) => {
+    const t = Date.parse(e.kickoff);
+    return !known.some((f) => Math.abs(f.t - t) <= 15 * 60_000 && (sameMatch(f as never, e) || sameImportedMatch(f as never, e)));
+  });
+  if (!missing.length) return 0;
+  const leagues = new Map(missing.map((e) => { const l = stakeLeague(e); return [l.id, l] as const; }));
+  const writes: Statement[] = [...leagues.values()].map((l) => ({
+    text: `INSERT INTO leagues (id,country,name,provider,provider_key,priority,top10) VALUES ($1,$2,$3,'stake',$4,950,$5) ON CONFLICT (id) DO NOTHING`,
+    params: [l.id, l.country, l.name, l.providerKey, false],
+  }));
+  for (let i = 0; i < writes.length; i += 40) await atomic(writes.slice(i, i + 40));
+  const { persistFixtures } = await import('./fixtures');
+  await persistFixtures(missing.map(stakeFixture));
+  return missing.length;
 }
 
 /** What /cote shows: the latest import and how much of it is still usable. */
