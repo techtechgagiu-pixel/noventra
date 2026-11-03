@@ -9,14 +9,20 @@ import type { FixtureSnapshot } from './types';
 /** Owner bans: every "under" line, and (02.11) the double chance "12" (1 or 2 at full time, the most picked market). */
 export const isBannedMarket = (key: string | null) => !!key && (/:UNDER(:|$)/.test(key) || key === 'DC:12');
 
-// Token economy (owner decision 28.10): 12 most likely selections per match and probabilities rounded to 2 decimals.
+// Token economy (owner decision 28.10, widened 03.11): at most 16 selections per match, spread over every market type, probabilities rounded to 2 decimals.
 // Agents pick the safest selections anyway; the exact numbers stay in the snapshot and every threshold uses them.
-export const MAX_FACT_MARKETS = 12;
+export const MAX_FACT_MARKETS = 16;
 const r2 = (x: number | null | undefined) => (x === null || x === undefined || !Number.isFinite(x) ? x ?? null : Math.round(x * 100) / 100);
-/** Keeps the most likely selections (by the engine's estimate, then the market's), in their original order. */
+/** Keeps up to `max` selections with a wide spread (owner request 03.11, „dintr-o plajă mai largă”): the most likely selection of every market type
+ *  first (1X2, double chance, goals, both teams, handicap, corners...), then the second most likely of each, and so on; original order kept. */
 export function topMarkets<T extends { key: string; estimatedProbability: number | null; fairMarketProbability?: number | null }>(ms: T[], max = MAX_FACT_MARKETS): T[] {
   if (ms.length <= max) return ms;
-  const keep = new Set([...ms].sort((a, b) => (b.estimatedProbability ?? b.fairMarketProbability ?? 0) - (a.estimatedProbability ?? a.fairMarketProbability ?? 0)).slice(0, max).map((m) => m.key));
+  const p = (m: T) => m.estimatedProbability ?? m.fairMarketProbability ?? 0;
+  const groups = new Map<string, T[]>();
+  for (const m of [...ms].sort((a, b) => p(b) - p(a))) { const f = m.key.split(':')[0]; (groups.get(f) ?? groups.set(f, []).get(f)!).push(m); }
+  const lists = [...groups.values()];
+  const keep = new Set<string>();
+  for (let round = 0; keep.size < max && round < ms.length; round++) for (const l of lists) { if (keep.size >= max) break; if (l[round]) keep.add(l[round].key); }
   return ms.filter((m) => keep.has(m.key));
 }
 
@@ -38,7 +44,7 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
     standings: { home: s.standings.home, away: s.standings.away },
     scout: { home: team(d.home), away: team(d.away) },
     model: { lambdaHome: r2(s.model.lambdaHome), lambdaAway: r2(s.model.lambdaAway), uncertainty: s.model.uncertainty, margin1x2: r2(s.model.bookmakerMargin1x2) },
-    // Token economy: at most MAX_FACT_MARKETS selections per match, the most likely first (agents pick the safest anyway).
+    // Token economy: at most MAX_FACT_MARKETS selections per match, spread over the market types (the most likely of each first).
     markets: topMarkets(s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds)).map((m) => ({ key: m.key, label: m.label, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: r2(m.fairMarketProbability), model: r2(m.modelProbability), est: r2(m.estimatedProbability), ev: r2(m.expectedValue) })),
     missing: d.missing.filter((x) => !/xG|Accident/.test(x)).slice(0, 2),
     /** Hanțu's research brief: every agent must weigh h2h, home/away form, table, absences and finances. */
