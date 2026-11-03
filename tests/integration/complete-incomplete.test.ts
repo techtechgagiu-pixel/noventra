@@ -3,11 +3,20 @@ import { many, one, pool, query } from '@/lib/db';
 import { completeIncompleteTicket, createCustomJob } from '@/lib/jobs/service';
 import { _processOneForTests } from '@/lib/jobs/worker';
 import { clearFakes, closePool, demoFixtures, installFakes, makeUser, resetDb } from './helpers';
+import { config as appConfig } from '@/lib/config';
 const ai=()=>({calls:[],pick:(id:string)=> Number(id.split(':')[1])%2 ? 'TOTAL:OVER:1.5' : '1X2:HOME'});
 const config={target:5,legs:4,agents:['andrei','alex','ioana'],fromHours:2,toHours:48};
 async function drain(id:string){for(let i=0;i<200;i++){const j=await one<{status:string}>('SELECT status FROM ticket_generation_jobs WHERE id=$1',[id]);if(['COMPLETED','INCOMPLETE','NO_BET','FAILED','PAUSED'].includes(j!.status))return j!.status;await _processOneForTests();}throw Error('Not terminal');}
 async function partial(){installFakes(demoFixtures(2,()=>({home:1.4,draw:4,away:6,dc:1.1})),ai());const user=await makeUser();const r=await createCustomJob(user,config);expect(await drain(r.jobId)).toBe('INCOMPLETE');const t=await one<{id:string}>('SELECT id FROM tickets WHERE job_id=$1',[r.jobId]);return{user,job:r.jobId,ticket:t!.id};}
-beforeEach(async()=>{await resetDb();clearFakes();});afterAll(async()=>{clearFakes();await closePool();});
+// These tests cover finishing a ticket that ended incomplete (old tickets, or STAKE/owner rule off).
+beforeEach(async()=>{await resetDb();clearFakes();appConfig.limits.customAlwaysFinish=false;});afterAll(async()=>{appConfig.limits.customAlwaysFinish=true;clearFakes();await closePool();});
+it('owner rule 03.11: with only 2 of 4 matches validated the custom ticket is built from those 2, never left incomplete',async()=>{
+ appConfig.limits.customAlwaysFinish=true;
+ installFakes(demoFixtures(2,()=>({home:1.4,draw:4,away:6,dc:1.1})),ai());const user=await makeUser();const r=await createCustomJob(user,config);
+ expect(await drain(r.jobId)).toBe('COMPLETED');
+ const t=await one<{leg_count:number;generation_status:string;summary:{reason:string}}>('SELECT leg_count,generation_status,summary FROM tickets WHERE job_id=$1',[r.jobId]);
+ expect(t).toMatchObject({leg_count:2,generation_status:'COMPLETED'});expect(t!.summary.reason).toMatch(/doar 2 meciuri potrivite din 4/);
+});
 it('finishes the SAME ticket with new fixtures, preserving the seed, accepted picks and previous predictions',async()=>{
  const p=await partial();const old=await one<{seed:string;analyzed:number}>("SELECT seed,(checkpoint->>'analyzed')::int AS analyzed FROM ticket_generation_jobs WHERE id=$1",[p.job]);
  const predictions=(await many<{id:string}>('SELECT id::text id FROM agent_predictions WHERE job_id=$1 ORDER BY agent_predictions.id',[p.job])).map(x=>x.id);

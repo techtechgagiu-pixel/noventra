@@ -45,6 +45,8 @@ export const config = {
     /** Owner decision 02.11: while a fresh Stake export exists, the football offer is Stake's alone (ESPN = history and
      *  results, its prices are not used). STAKE_ONLY_OFFER=0 restores the mixed offer. */
     stakeOnlyOffer: process.env.STAKE_ONLY_OFFER !== '0',
+    /** Owner rule 03.11: a custom ticket is never left incomplete (built from what was validated). 0 = old behaviour. */
+    customAlwaysFinish: process.env.CUSTOM_ALWAYS_FINISH !== '0',
     /** CS2 prices from OddsPapi (refreshed every 6 h; esports prices move fast): accepted up to 12 hours. */
     oddspapiMaxAgeMinutes: num('ODDSPAPI_MAX_AGE_MINUTES', 12 * 60),
     targetTolerance: num('TARGET_TOLERANCE', 0.15),

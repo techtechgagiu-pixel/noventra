@@ -92,7 +92,10 @@ describe('custom ticket last resort (owner rule 02.11)', async () => {
     expect(r.status).toBe('COMPLETED');
     expect(r.reason).toMatch(/Excepție/);
   });
-  it('never invents selections: fewer validated matches than requested gives nothing', () => {
-    expect(closestCustomTicket(job(5, 4), [c('a', 1.5, 'DC'), c('b', 1.5, 'TOTAL')])).toBeNull();
+  it('fewer validated matches than requested: the ticket has all of them (never left incomplete, never invented)', () => {
+    const r = closestCustomTicket(job(5, 4), [c('a', 1.5, 'DC'), c('b', 1.5, 'TOTAL')])!;
+    expect(r.legs).toHaveLength(2);
+    expect(r.reason).toMatch(/doar 2 meciuri potrivite din 4/);
+    expect(closestCustomTicket(job(5, 4), [])).toBeNull();
   });
 });

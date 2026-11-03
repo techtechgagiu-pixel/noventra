@@ -54,6 +54,12 @@ async function complete(messages: Msg[], paid: boolean) {
 /** One answer: the model may call tools (at most MAX_ROUNDS rounds), then writes the reply. */
 export async function askAssistant(history: ChatMessage[], ctx: ToolCtx) {
   const paid = (await spentToday()) < dailyUsd() && !!config.openRouterApiKey;
+  // A refused paid call (03.11: the OpenRouter key had hit its total limit) answers with the free model instead.
+  if (paid) { try { return await answer(history, ctx, true); } catch { /* fall through to the free model */ } }
+  return answer(history, ctx, false);
+}
+
+async function answer(history: ChatMessage[], ctx: ToolCtx, paid: boolean) {
   const messages: Msg[] = [{ role: 'system', content: system(ctx) }, ...history.slice(-12).map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }))];
   const used: string[] = [];
   for (let round = 0; round < MAX_ROUNDS; round++) {
