@@ -3,19 +3,21 @@ import { many, one, query, SQL_NOW } from '../db';
 /**
  * Stake-only fixtures (02.11) have no automatic results: the owner types the final score here. A fixture is listed
  * once it started at least 105 minutes ago and the agents analysed it (a ticket leg or a vote waits for it).
+ * The last live score seen (if any) is offered as a suggestion. A match last seen at minute 85+ is settled automatically once it leaves Stake's live list (importStakeLive).
  * The settlement automation (every few minutes) then settles the legs exactly as for ESPN results.
  */
-export type PendingResult = { id: string; home: string; away: string; league: string; kickoff: string; legs: number };
+export type PendingResult = { id: string; home: string; away: string; league: string; kickoff: string; legs: number; live: { home: number; away: number; clock: string | null } | null };
 
 export async function pendingStakeResults(): Promise<PendingResult[]> {
-  const rows = await many<{ id: string; home_team: string; away_team: string; league: string; kickoff_utc: string | Date; legs: number | string }>(
-    `SELECT f.id, f.home_team, f.away_team, l.name AS league, f.kickoff_utc,
+  const rows = await many<{ id: string; home_team: string; away_team: string; league: string; kickoff_utc: string | Date; legs: number | string; status: string; home_score: number | null; away_score: number | null; live_clock: string | null }>(
+    `SELECT f.id, f.home_team, f.away_team, l.name AS league, f.kickoff_utc, f.status, f.home_score, f.away_score, f.live_clock,
             (SELECT count(*) FROM ticket_selections s WHERE s.fixture_id=f.id) AS legs
        FROM fixtures f JOIN leagues l ON l.id=f.league_id
       WHERE f.provider='stake' AND f.status NOT IN ('post','cancelled') AND f.kickoff_utc <= $1
         AND (EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id) OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE'))
       ORDER BY f.kickoff_utc LIMIT 200`, [new Date(Date.now() - 105 * 60_000).toISOString()]);
-  return rows.map((r) => ({ id: r.id, home: r.home_team, away: r.away_team, league: r.league, kickoff: new Date(r.kickoff_utc).toISOString(), legs: Number(r.legs) }));
+  return rows.map((r) => ({ id: r.id, home: r.home_team, away: r.away_team, league: r.league, kickoff: new Date(r.kickoff_utc).toISOString(), legs: Number(r.legs),
+    live: r.status === 'in' && r.home_score !== null && r.away_score !== null ? { home: Number(r.home_score), away: Number(r.away_score), clock: r.live_clock } : null }));
 }
 
 export class ResultError extends Error {}

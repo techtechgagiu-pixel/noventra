@@ -49,4 +49,14 @@ describe('Stake live scores', () => {
     await importStakeLive({ data: { matches: [live('b', 3, 1, '2nd half', '89:00')] }, meta: { state: 'live' } });
     expect(await one("SELECT status FROM fixtures WHERE id='stk:b'")).toEqual({ status: 'post' });
   });
+  it('settles a match last seen at 85+ minutes once a complete live export no longer lists it; leaves earlier ones and incomplete exports alone', async () => {
+    await query("INSERT INTO leagues(id,country,name,provider,provider_key,priority,top10) VALUES('STK-x-y','X','Y','stake','x/y',950,false) ON CONFLICT (id) DO NOTHING");
+    const seed = async (id: string, clock: string) => query(`INSERT INTO fixtures(id,provider,provider_id,league_id,home_team,away_team,kickoff_utc,status,home_score,away_score,live_clock,source_observed_at,content_hash) VALUES($1,'stake',$2,'STK-x-y','H','A',now()-interval '3 hours','in',2,1,$3,now()-interval '30 minutes','h') ON CONFLICT (id) DO UPDATE SET status='in', live_clock=$3, source_observed_at=now()-interval '30 minutes'`, [`stk:${id}`, id, clock]);
+    await seed('late', "88'"); await seed('early', "60'");
+    // an incomplete export proves nothing about what is missing
+    expect(await importStakeLive({ data: { matches: [live('other', 0, 0, '1st half', '10:00')] }, meta: { state: 'live', complete: false } })).toMatchObject({ closed: 0 });
+    expect(await importStakeLive({ data: { matches: [live('other', 0, 0, '1st half', '10:00')] }, meta: { state: 'live', complete: true } })).toMatchObject({ closed: 1 });
+    expect(await one("SELECT status,home_score,away_score,live_clock FROM fixtures WHERE id='stk:late'")).toEqual({ status: 'post', home_score: 2, away_score: 1, live_clock: null });
+    expect(await one("SELECT status FROM fixtures WHERE id='stk:early'")).toEqual({ status: 'in' });
+  });
 });

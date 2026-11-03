@@ -451,5 +451,19 @@ export async function importStakeLive(raw: unknown) {
     }
   }
   for (let i = 0; i < writes.length; i += 40) await atomic(writes.slice(i, i + 40));
-  return { live: true, matches: scores.length, inPlay: live, ended };
+  const closed = obj(obj(raw).meta).complete === true && scores.length ? await closeVanishedLive(new Set(scores.map((s) => `stk:${s.sourceId}`))) : 0;
+  return { live: true, matches: scores.length, inPlay: live, ended, closed };
+}
+
+/** Stake drops a finished match from its live list, so ENDED is never seen. A match that was last seen in play at minute 85 or
+ *  later, is no longer listed by a COMPLETE export, last updated 10+ minutes ago and started 105+ minutes ago is settled with its last score. */
+export const AUTO_CLOSE_MINUTE = 85;
+async function closeVanishedLive(listed: Set<string>) {
+  const rows = await many<{ id: string; live_clock: string | null }>(
+    `SELECT id, live_clock FROM fixtures WHERE provider='stake' AND status='in' AND home_score IS NOT NULL AND away_score IS NOT NULL AND kickoff_utc <= $1 AND source_observed_at <= $2`,
+    [new Date(Date.now() - 105 * 60_000).toISOString(), new Date(Date.now() - 10 * 60_000).toISOString()]);
+  const ids = rows.filter((r) => !listed.has(r.id) && Number(/^(\d+)/.exec(r.live_clock ?? '')?.[1] ?? 0) >= AUTO_CLOSE_MINUTE).map((r) => r.id);
+  const now = new Date().toISOString();
+  for (let i = 0; i < ids.length; i += 40) await atomic(ids.slice(i, i + 40).map((id) => ({ text: `UPDATE fixtures SET status='post', live_clock=NULL, source_observed_at=$2, results_checked_at=$2 WHERE id=$1 AND provider='stake' AND status='in'`, params: [id, now] })));
+  return ids.length;
 }
