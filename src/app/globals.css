@@ -376,7 +376,9 @@ a.slip:hover { border-color: #3f7a5d; transform: translateY(-1px); }
 .btn-primary:active, .btn-ghost:active, .btn-gold:active, .chip:active { transform: translateY(0) scale(.97); }
 .btn-ghost, .btn-gold, .chip { transition: transform .12s, background .15s, border-color .15s, color .15s; }
 @keyframes btn-sweep { 0% { opacity: 0; transform: skewX(-18deg) translateX(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: skewX(-18deg) translateX(420%); } }
+/* The owner wants the sweep even with "reduce motion" on (03.11): it is a short hover answer, not page motion. */
 @media (prefers-reduced-motion: reduce) {
-  .btn-primary:hover::after { animation: none; }
+  .btn-primary:hover::after { animation: btn-sweep .7s ease-out !important; }
+  .btn, .chip { transition: transform .12s, background .15s, border-color .15s, color .15s, box-shadow .15s !important; }
   .sv-strip-copy { animation: none; }
 }
