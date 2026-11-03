@@ -346,39 +346,37 @@ a.slip:hover { border-color: #3f7a5d; transform: translateY(-1px); }
 .won-dots button[aria-pressed='true'] { background: var(--color-emerald); width: 20px; }
 .won-dots button:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
 
-/* Scroll-driven preview at the site entrance (02.11): sticky while the clip is scrubbed by scroll. */
-.scroll-preview { position: relative; margin: 2.5rem 0 1rem; }
-.scroll-preview.sv-live { height: 300vh; }
-@media (max-width: 640px) { .scroll-preview.sv-live { height: 240vh; } }
-.scroll-preview .sv-pin { position: relative; overflow: hidden; border: 1px solid #26503f; border-radius: 22px; background: #07121c; aspect-ratio: 16 / 9; max-height: 82vh; width: 100%; }
-.scroll-preview { --sv-h: min(82vh, calc((100vw - 32px) * .5625), 648px); }
-.scroll-preview.sv-live .sv-pin { position: sticky; top: max(72px, calc((100vh - var(--sv-h)) / 2)); }
-@media (max-width: 640px) {
-  .scroll-preview { --sv-h: min(72vh, calc((100vw - 32px) * 1.2)); }
-  .scroll-preview:not(.sv-fallback) .sv-pin { aspect-ratio: 5 / 6; }
-}
+/* Entrance preview (03.11): a looping clip with a broadcast-style scoreboard strip. */
+.scroll-preview { margin: 2.5rem 0 1rem; }
+.scroll-preview .sv-pin { position: relative; overflow: hidden; border: 1px solid var(--color-line); border-radius: 22px; background: var(--color-ink); aspect-ratio: 16 / 9; max-height: 78vh; width: 100%; }
+@media (max-width: 640px) { .scroll-preview .sv-pin { aspect-ratio: 4 / 5; } }
 .sv-media { position: absolute; inset: 0; }
-.sv-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.sv-play { display: none; }
-.scroll-preview.sv-fallback .sv-media { position: relative; inset: auto; }
-.scroll-preview.sv-fallback .sv-play { display: inline-flex; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); align-items: center; gap: .4rem; padding: .7rem 1.1rem; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(4,12,20,.72); color: #fff; font-weight: 700; font-size: .95rem; backdrop-filter: blur(4px); }
-.scroll-preview.sv-fallback.sv-playing .sv-play { display: none; }
-.sv-scrim { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(4,12,20,.86) 0%, rgba(4,12,20,.55) 38%, rgba(4,12,20,0) 70%), linear-gradient(0deg, rgba(4,12,20,.7) 0%, rgba(4,12,20,0) 40%); }
-.sv-lines { position: absolute; inset: 0; display: grid; align-items: center; padding: clamp(16px, 5vw, 56px); }
-.sv-line { grid-area: 1 / 1; max-width: 26rem; opacity: 0; will-change: opacity, transform; }
-.sv-line h2 { font-family: var(--font-display, inherit); font-weight: 800; font-size: clamp(1.5rem, 4.2vw, 2.9rem); line-height: 1.05; color: #fff; }
-.sv-line p:last-child { margin-top: .6rem; font-size: clamp(.85rem, 1.6vw, 1.05rem); line-height: 1.45; color: #cfe3ea; }
-.sv-step { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: #5fd4e8; margin-bottom: .4rem; }
-.sv-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.08); }
-.sv-progress > div { height: 100%; background: linear-gradient(90deg, #22c3dd, #f2c14e); transform: scaleX(0); transform-origin: left; }
-.sv-hint { position: absolute; right: 16px; bottom: 12px; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.55); }
-.scroll-preview.sv-fallback .sv-lines { position: relative; inset: auto; display: flex; flex-wrap: wrap; gap: 1.25rem; padding: 1.25rem 0 0; }
-.scroll-preview.sv-fallback .sv-line { opacity: 1; max-width: 18rem; }
-.scroll-preview.sv-fallback .sv-line h2 { font-size: 1.35rem; }
-.scroll-preview.sv-fallback .sv-pin { aspect-ratio: auto; overflow: visible; border: 0; background: none; }
-.scroll-preview.sv-fallback .sv-video { position: relative; aspect-ratio: 16 / 9; height: auto; border-radius: 22px; border: 1px solid #26503f; }
-.scroll-preview.sv-fallback .sv-scrim, .scroll-preview.sv-fallback .sv-progress, .scroll-preview.sv-fallback .sv-hint { display: none; }
-@media (max-width: 640px) {
-  .scroll-preview .sv-scrim { background: linear-gradient(0deg, rgba(4,12,20,.92) 0%, rgba(4,12,20,.6) 45%, rgba(4,12,20,.1) 75%); }
-  .scroll-preview:not(.sv-fallback) .sv-lines { align-items: end; padding-bottom: 36px; }
+.sv-video { width: 100%; height: 100%; object-fit: cover; }
+.sv-scrim { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg, rgba(8,22,16,.88) 0%, rgba(8,22,16,.25) 38%, rgba(8,22,16,0) 60%); }
+.sv-toggle { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; border: 1px solid rgba(238,245,236,.28); background: rgba(8,22,16,.6); color: var(--color-text); backdrop-filter: blur(4px); transition: background .15s, transform .12s; }
+.sv-toggle:hover { background: rgba(8,22,16,.85); }
+.sv-toggle:active { transform: scale(.92); }
+/* The strip reads like a TV scorebug: club mark + step, then the caption, a thin running clock underneath. */
+.sv-strip { position: absolute; left: clamp(12px, 3vw, 28px); right: clamp(12px, 3vw, 28px); bottom: clamp(12px, 3vw, 28px); display: grid; grid-template-columns: auto 1fr; overflow: hidden; border-radius: 10px; background: rgba(11,29,21,.9); border: 1px solid var(--color-line); box-shadow: 0 18px 40px -20px #000; }
+.sv-strip-badge { display: flex; align-items: center; gap: .5rem; padding: 0 .9rem; background: var(--color-cyan); color: #142006; }
+.sv-strip-step { font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.sv-strip-copy { padding: .7rem 1rem .85rem; min-width: 0; animation: sv-in .45s cubic-bezier(.2,.8,.2,1); }
+.sv-strip-copy h2 { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.15rem, 2.6vw, 1.75rem); line-height: 1.05; color: var(--color-text); }
+.sv-strip-copy p { margin-top: .2rem; font-size: clamp(.8rem, 1.4vw, .95rem); color: var(--color-muted); }
+.sv-progress { grid-column: 1 / -1; height: 3px; background: rgba(238,245,236,.08); }
+.sv-progress > div { height: 100%; background: var(--color-cyan); transform: scaleX(0); transform-origin: left; }
+.sv-noscript { position: absolute; inset: auto 16px 16px; color: var(--color-text); }
+@keyframes sv-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+
+/* Buttons answer the hand (03.11): the main action catches a floodlight sweep on hover and presses in on click. */
+.btn-primary { position: relative; overflow: hidden; isolation: isolate; }
+.btn-primary::after { content: ''; position: absolute; inset: -40% auto -40% -60%; width: 45%; z-index: -1; background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent); transform: skewX(-18deg) translateX(0); opacity: 0; }
+.btn-primary:hover::after { animation: btn-sweep .7s ease-out; }
+.btn-primary:hover { box-shadow: 0 1px 0 rgba(255,255,255,.35) inset, 0 12px 28px -12px rgba(255,190,61,1); }
+.btn-primary:active, .btn-ghost:active, .btn-gold:active, .chip:active { transform: translateY(0) scale(.97); }
+.btn-ghost, .btn-gold, .chip { transition: transform .12s, background .15s, border-color .15s, color .15s; }
+@keyframes btn-sweep { 0% { opacity: 0; transform: skewX(-18deg) translateX(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: skewX(-18deg) translateX(420%); } }
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary:hover::after { animation: none; }
+  .sv-strip-copy { animation: none; }
 }
