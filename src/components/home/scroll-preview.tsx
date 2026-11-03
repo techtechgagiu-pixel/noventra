@@ -53,9 +53,9 @@ export function ScrollPreview() {
   return <section ref={section} className="scroll-preview" aria-label="Pe scurt: cum lucrează agenții">
     <div className="sv-pin">
       <div className="sv-media">
-        <video ref={video} className="sv-video" muted loop playsInline autoPlay preload="auto" poster="/video/primul11-preview.jpg" disablePictureInPicture {...{ 'webkit-playsinline': 'true' }} aria-hidden="true" tabIndex={-1}>
-          <source src="/video/primul11-preview.mp4" type="video/mp4" />
-          <source src="/video/primul11-preview.webm" type="video/webm" />
+        <video ref={video} className="sv-video" muted loop playsInline autoPlay preload="auto" poster="/video/primul11-preview-v2.jpg" disablePictureInPicture {...{ 'webkit-playsinline': 'true' }} aria-hidden="true" tabIndex={-1}>
+          <source src="/video/primul11-preview-v2.mp4" type="video/mp4" />
+          <source src="/video/primul11-preview-v2.webm" type="video/webm" />
         </video>
       </div>
       <div className="sv-scrim" aria-hidden="true" />
