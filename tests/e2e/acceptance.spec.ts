@@ -79,6 +79,7 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto('/auth/test-login?email=e2e@test.local');
   await page.goto('/?tab=custom');
+  await page.getByRole('button', { name: 'Totul pe o pagină' }).click();
   await expect(page.getByRole('heading', { name: 'Bilet custom' })).toBeVisible();
   await page.getByLabel('Cota dorită').fill('3');
   await page.getByRole('button', { name: 'Mai puține meciuri' }).click();

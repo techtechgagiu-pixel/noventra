@@ -7,6 +7,7 @@ test('a custom ticket made only of Counter-Strike: one switch sends the CS2 leag
     kickoff: new Date(Date.now() + 5 * 3600_000).toISOString(), status: 'pre', score: null, odds: { home: 1.5, draw: null, away: 2.5, markets: 6, bookmaker: 'Stake' }, analysis: null };
   await page.route('**/api/matches', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ rows: [cs], leagues: [{ id: 'CS2', name: 'Counter-Strike 2', country: 'Esports', top10: false, count: 1 }] }) }));
   await page.goto('/?tab=custom');
+  await page.getByRole('button', { name: 'Totul pe o pagină' }).click();
   await page.getByRole('radio', { name: /Counter-Strike 2/ }).click();
   await expect(page.getByRole('radio', { name: /Counter-Strike 2/ })).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#target')).toHaveValue('3');
