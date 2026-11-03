@@ -47,7 +47,14 @@ describe('The Odds API as main price source', () => {
     const { topMarkets } = await import('@/lib/jobs/analysis');
     const ms = Array.from({ length: 25 }, (_, i) => ({ key: `K${i}`, estimatedProbability: i / 25 }));
     const kept = topMarkets(ms);
-    expect(kept).toHaveLength(12); expect(kept[0].key).toBe('K13');
+    expect(kept).toHaveLength(16); expect(kept[0].key).toBe('K9');
+  });
+  it('spreads the markets over every market type instead of only the most likely ones', async () => {
+    const { topMarkets } = await import('@/lib/jobs/analysis');
+    const ms = [...Array.from({ length: 12 }, (_, i) => ({ key: `DC:K${i}`, estimatedProbability: 0.9 - i * 0.01 })), ...Array.from({ length: 6 }, (_, i) => ({ key: `BTTS:K${i}`, estimatedProbability: 0.7 - i * 0.01 })),
+      { key: 'TOTAL:OVER:2.5', estimatedProbability: 0.5 }, { key: 'AH:HOME:0.5', estimatedProbability: 0.45 }, { key: '1X2:HOME', estimatedProbability: 0.4 }];
+    const families = new Set(topMarkets(ms).map((m) => m.key.split(':')[0]));
+    expect([...families].sort()).toEqual(['1X2', 'AH', 'BTTS', 'DC', 'TOTAL']);
   });
 });
 
