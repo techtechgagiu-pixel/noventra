@@ -1,5 +1,6 @@
 import type { Fixture, FixtureStatus, HistoricalMatch, League, MarketQuote, OddsSnapshot, TeamContext } from './types';
 import { sportsGet } from './http';
+import { one, query, SQL_NOW } from '../db';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 type Obj = Record<string, unknown>;
@@ -216,10 +217,24 @@ export async function espnTeamPastEvents(leagueKey: string, teamId: string, befo
     .slice(0, limit)
     .map((e) => ({ eventId: str(e.id)!, date: str(e.date)!, leagueKey: source, competition: str(obj(e.league).name) ?? null }));
   try {
-    const all = pick(obj(await sportsGet(`${BASE}/all/teams/${teamId}/schedule`, { provider: 'espn', ttlMs: 6 * 3600_000 })), 'all');
+    const all = pick(await cachedSchedule(`all:${teamId}`, `${BASE}/all/teams/${teamId}/schedule`), 'all');
     if (all.length) return all;
   } catch { /* fall back to the league feed below */ }
-  return pick(obj(await sportsGet(`${BASE}/${leagueKey}/teams/${teamId}/schedule`, { provider: 'espn', ttlMs: 6 * 3600_000 })), leagueKey);
+  return pick(await cachedSchedule(`${leagueKey}:${teamId}`, `${BASE}/${leagueKey}/teams/${teamId}/schedule`), leagueKey);
+}
+
+/** A team's schedule is asked for by every job and every restart; it changes at most a few times a week, so the compact
+ *  result is kept in the database for 6 hours (in addition to the per-process cache) and one ESPN request serves all. */
+const SCHEDULE_TTL_MS = 6 * 3600_000;
+async function cachedSchedule(key: string, url: string): Promise<Obj> {
+  const id = `espn-schedule:${key}`;
+  const hit = await one<{ payload: { at?: string; events?: unknown[] } }>('SELECT payload FROM sports_catalog_cache WHERE provider=$1', [id]).catch(() => null);
+  if (hit?.payload?.at && Date.now() - Date.parse(hit.payload.at) < SCHEDULE_TTL_MS && Array.isArray(hit.payload.events)) return { events: hit.payload.events };
+  const data = obj(await sportsGet(url, { provider: 'espn', ttlMs: SCHEDULE_TTL_MS }));
+  const events = arr(data.events).map(obj).map((e) => ({ id: e.id, date: e.date, league: { name: str(obj(e.league).name) ?? null },
+    competitions: [{ status: { type: { state: str(obj(obj(obj(arr(e.competitions)[0]).status).type).state) ?? null } } }] }));
+  await query(`INSERT INTO sports_catalog_cache(provider,payload,next_attempt_at) VALUES($1,$2,${SQL_NOW()}) ON CONFLICT(provider) DO UPDATE SET payload=$2`, [id, JSON.stringify({ at: new Date().toISOString(), events })]).catch(() => {});
+  return { events };
 }
 
 // ── Extra markets (ESPN core odds API) ─────────────────────────────────────────
