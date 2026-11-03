@@ -762,20 +762,24 @@ async function tryOptimize(job: JobRow) {
  * (variety rule kept when possible, else waived). Null when there are not enough validated matches.
  */
 export function closestCustomTicket(job: Pick<JobRow, 'config' | 'target_odds'>, cands: Array<Parameters<typeof optimizeTicket>[0]['candidates'][number]>, maxLegOdds?: number) {
-  const legs = job.config.custom?.legs;
-  if (!legs || cands.length < legs) return null;
+  // Owner rule 03.11 („să nu lași bilete incomplete niciodată”): with fewer validated matches than asked, the ticket
+  // is made of as many of them as fit together; only zero validated selections (nothing to put on it) leaves no ticket.
+  const asked = job.config.custom?.legs;
+  if (!asked || !cands.length) return null;
   const target = Number(job.target_odds);
-  const base = { candidates: cands, target, tolerance: config.limits.targetTolerance, requiredLegs: legs, maxLegOdds };
-  const tryIt = (variety: boolean) => {
-    const r = optimizeTicket({ ...base, variety });
+  const tryIt = (legs: number, variety: boolean, cap?: number) => {
+    const r = optimizeTicket({ candidates: cands, target, tolerance: config.limits.targetTolerance, requiredLegs: legs, maxLegOdds: cap, variety });
     const pick = r.status === 'COMPLETED' ? { legs: r.legs, totalOdds: r.totalOdds } : r.closest && r.closest.legs.length === legs ? r.closest : null;
-    return pick ? { r, pick, variety } : null;
+    return pick ? { pick, variety, legs } : null;
   };
-  const found = tryIt(true) ?? tryIt(false);
+  let found: { pick: { legs: Candidate[]; totalOdds: number }; variety: boolean; legs: number } | null = null;
+  const most = Math.min(asked, new Set(cands.map((c) => c.fixtureId)).size);
+  for (let legs = most; legs >= 1 && !found; legs--) found = tryIt(legs, true, maxLegOdds) ?? tryIt(legs, false, maxLegOdds) ?? tryIt(legs, false);
   if (!found) return null;
-  const { pick } = found;
+  const { pick, legs } = found;
   const mixed = new Set(pick.legs.map((l) => l.bookmaker)).size > 1;
   const notes = [
+    legs < asked ? `Au fost validate doar ${legs} meciuri potrivite din ${asked} cerute; biletul are ${legs}.` : null,
     Math.abs(Math.log(pick.totalOdds / target)) > Math.log(1 + config.limits.targetTolerance) ? `Cota ${target} nu se putea atinge cu ${legs} selecții validate; biletul are cota cea mai apropiată posibilă, ${pick.totalOdds.toFixed(2)}.` : null,
     found.variety ? null : 'Excepție: selecțiile validate erau aproape toate de același tip, așa că regula „maximum jumătate pe același tip” nu s-a aplicat acestui bilet.',
   ].filter(Boolean);
@@ -813,7 +817,7 @@ async function build(job: JobRow): Promise<boolean> {
   // Last resort for a custom ticket (owner rule 02.11, „pe viitor la fel”): when the searches are over and the chosen
   // number of matches cannot hit the target, build it anyway with exactly those matches at the closest total odds
   // the validated picks allow, and, if only the variety rule blocks it, waive that rule for this ticket.
-  if (result.status !== 'COMPLETED' && job.config.custom && !job.config.review) {
+  if (result.status !== 'COMPLETED' && job.config.custom && !job.config.review && config.limits.customAlwaysFinish) {
     const fallback = closestCustomTicket(job, cands, jobPolicy(job).maxOdds);
     if (fallback) result = fallback;
   }
