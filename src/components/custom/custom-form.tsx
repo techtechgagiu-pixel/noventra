@@ -9,6 +9,23 @@ import { LeaguePicker, type LeagueOption } from '@/components/matches/league-pic
 import type { MatchRow } from '@/lib/catalog';
 
 export type AgentCard = { id: string; name: string; title: string; specialty: string; risk: number; maxOdds: number; minProbability: number; model: string | null; record: string | null };
+type Step = 'basics' | 'leagues' | 'interval' | 'agents' | 'finish';
+const STEP_NAME: Record<Step, string> = { basics: 'Cota', leagues: 'Ligi', interval: 'Perioada', agents: 'Agenții', finish: 'Gata' };
+function WizardNav({ steps, cur, step, wizard, setStep, setWizard }: { steps: Step[]; cur: Step; step: number; wizard: boolean; setStep: (n: number) => void; setWizard: (w: boolean) => void }) {
+  return <nav aria-label="Pașii biletului" className="flex flex-wrap items-center gap-2">
+    {wizard && <ol className="flex flex-1 flex-wrap items-center gap-1.5">{steps.map((x, i) => <li key={x}><button type="button" onClick={() => setStep(i)} aria-current={x === cur ? 'step' : undefined}
+      className={`chip ${x === cur ? 'border-cyan text-cyan' : i < step ? 'text-text' : 'text-muted'}`}><span className="tabular">{i + 1}</span> {STEP_NAME[x]}</button></li>)}</ol>}
+    <button type="button" onClick={() => { setWizard(!wizard); setStep(0); }} className="chip ml-auto text-muted hover:text-text">{wizard ? 'Totul pe o pagină' : 'Pas cu pas'}</button>
+  </nav>;
+}
+function WizardButtons({ steps, step, wizard, setStep }: { steps: Step[]; step: number; wizard: boolean; setStep: (n: number) => void }) {
+  if (!wizard) return null;
+  const last = step >= steps.length - 1;
+  return <div className="sticky bottom-[4.75rem] z-10 flex items-center justify-between gap-3 rounded-xl bg-ink/90 p-2 backdrop-blur md:bottom-3">
+    <button type="button" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0} className="btn btn-ghost disabled:opacity-40">Înapoi</button>
+    {!last && <button type="button" onClick={() => { setStep(step + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="btn btn-primary">Următorul</button>}
+  </div>;
+}
 const TARGETS = [2, 3, 5, 10, 20, 50, 100];
 const pick = (...ids: string[]) => (a: AgentCard[]) => a.filter((x) => ids.includes(x.id)).map((x) => x.id);
 /** Ready-made teams: by risk profile, by story (generations, roles) and by method. The user can still tick freely. */
@@ -57,8 +74,14 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
     if (s === 'cs') { setTarget(3); setLegs(3); setToI(STOPS.indexOf(48)); }
   };
   const sentLeagues = sport === 'cs' ? ['CS2'] : leagues;
+  // Owner request 03.11: „Creează bilet” goes step by step (next, next, next); the defaults are all leagues and the usual period.
+  const [wizard, setWizard] = useState(true);
+  const [step, setStep] = useState(0);
+  const steps = useMemo<Step[]>(() => ['basics', ...(sport === 'football' ? ['leagues' as const] : []), 'interval', 'agents', 'finish'], [sport]);
+  const cur = steps[Math.min(step, steps.length - 1)];
+  const [classicOpen, setClassicOpen] = useState(false);
+  const optionsOpen = wizard ? cur === 'leagues' || cur === 'interval' || cur === 'finish' : classicOpen;
   const [catalog, setCatalog] = useState<{ rows: MatchRow[]; leagues: LeagueOption[] } | null>(null);
-  const [optionsOpen, setOptionsOpen] = useState(false);
   const [catalogError, setCatalogError] = useState(false);
   const [catalogAttempt, setCatalogAttempt] = useState(0);
   // The full fixture catalogue is only needed when the user opens league/interval options.
@@ -110,8 +133,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
     } catch (e) { setError((e as Error).message); setBusy(false); inFlight.current = false; }
   }
 
-  return (
-    <div className="space-y-6">
+  const basicsBlock = (<>
       <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Sportul biletului">
         {([['football', '⚽ Fotbal'], ['cs', '🎮 Counter-Strike 2']] as const).map(([id, label]) => (
           <button key={id} type="button" role="radio" aria-checked={sport === id} onClick={() => chooseSport(id)}
@@ -146,9 +168,8 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
         </div>
       </div>
 
-      <details className="custom-options" onToggle={(e) => setOptionsOpen(e.currentTarget.open)}>
-        <summary><span>{sport === 'cs' ? 'Interval' : 'Interval și ligi'}</span><span>Peste {dur(fromHours)}–{dur(toHours)} · {sport === 'cs' ? 'Counter-Strike 2' : leagues.length ? `${leagues.length} ligi` : 'toate ligile'}</span></summary>
-        <div className="custom-options-body">
+  </>);
+  const fieldsetBlock = (<>
           <fieldset className="mt-3 space-y-2" aria-label="Intervalul meciurilor">
             <legend className="text-xs text-muted">Meciuri care încep între <strong className="text-text">peste {dur(fromHours)}</strong> și <strong className="text-text">peste {dur(toHours)}</strong></legend>
             <label className="block text-[11px] text-muted">De la
@@ -159,6 +180,8 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
             </label>
             <p className="text-[11px] text-muted tabular" suppressHydrationWarning>{span(fromHours, toHours)}</p>
           </fieldset>
+  </>);
+  const footballBlock = (<>
         {sport === 'football' && <>
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-display text-lg font-bold">Din ce ligi</h3>
@@ -170,16 +193,14 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
             : <p className="rounded-xl border border-line bg-ink px-3 py-2.5 text-sm text-muted">Încarc ligile disponibile…</p>}
         </div>
         </>}
+  </>);
+  const availBlock = (<>
         {catalog && <p className={`mt-2 text-xs ${available < legs * 2 ? 'text-gold' : 'text-muted'}`}>
           {available} {available === 1 ? 'meci cu cote' : 'meciuri cu cote'} în intervalul ales{sport === 'cs' ? ' (Counter-Strike 2)' : leagues.length ? ` din ${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : ''}.
           {available < legs * 2 && ' Puține pentru un bilet de ' + legs + ' meciuri: echipa poate refuza multe — adaugă ligi sau lărgește intervalul.'}
         </p>}
-        </div>
-      </details>
-
-      <details className="custom-options">
-        <summary><span>Echipa de agenți</span><span className="custom-team-peek" aria-hidden="true">{chosen.slice(0, 5).map((id) => <img key={id} src={AGENT_META[id]?.img} alt="" width={24} height={24} />)}</span><span>{chosen.length} {chosen.length === 1 ? 'agent ales' : 'agenți aleși'} · schimbă echipa</span></summary>
-        <div className="custom-options-body">
+  </>);
+  const agentsBlock = (<>
           <div className="mb-4 flex flex-wrap gap-3" aria-label="Echipa selectată">{chosen.flatMap((id) => agents.filter((a) => a.id === id)).map((a) => <div key={a.id} className="flex items-center gap-2 rounded-lg border border-line px-2 py-1.5"><img src={AGENT_META[a.id]?.img} alt="" className="h-8 w-8 rounded-full object-cover" /><div><p className="text-xs font-semibold">{a.name}</p><p className="text-[10px] text-muted">{a.model ?? 'Model AI'}</p></div></div>)}</div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h3 className="font-display text-lg font-bold">Alege agenții din teren</h3>
@@ -231,8 +252,8 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
             );
           })}
         </div>
-        </div>
-      </details>
+  </>);
+  const finishBlock = (<>
       <section className="card p-4" aria-labelledby="ticket-count-label">
         <label id="ticket-count-label" htmlFor="ticket-count" className="font-display text-lg font-bold">Câte bilete să creeze echipa?</label>
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -251,7 +272,46 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
         {error && <p className="text-sm text-rose" role="alert">{error}</p>}
         <button onClick={create} disabled={busy || remaining === 0 || count < 1 || count > remaining || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && (leagues.length > 0 || sport === 'cs') && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : count === 1 ? 'Pornește dezbaterea' : `Creează ${count} bilete`}</button>
       </div>
+  </>);
+  const noteBlock = (
       <p className="text-xs leading-relaxed text-muted">După pornire vezi agenții pe hartă și argumentele în chat. Cota este o țintă; echipa poate refuza meciuri și poate încheia fără un bilet complet.</p>
+  );
+  if (!wizard) return (
+    <div className="space-y-6">
+      <WizardNav steps={steps} cur={cur} step={step} wizard={wizard} setStep={setStep} setWizard={setWizard} />
+{basicsBlock}
+      <details className="custom-options" onToggle={(e) => setClassicOpen(e.currentTarget.open)}>
+        <summary><span>{sport === 'cs' ? 'Interval' : 'Interval și ligi'}</span><span>Peste {dur(fromHours)}–{dur(toHours)} · {sport === 'cs' ? 'Counter-Strike 2' : leagues.length ? `${leagues.length} ligi` : 'toate ligile'}</span></summary>
+        <div className="custom-options-body">
+          {fieldsetBlock}
+          {footballBlock}
+          {availBlock}
+        </div>
+      </details>
+
+      <details className="custom-options">
+        <summary><span>Echipa de agenți</span><span className="custom-team-peek" aria-hidden="true">{chosen.slice(0, 5).map((id) => <img key={id} src={AGENT_META[id]?.img} alt="" width={24} height={24} />)}</span><span>{chosen.length} {chosen.length === 1 ? 'agent ales' : 'agenți aleși'} · schimbă echipa</span></summary>
+        <div className="custom-options-body">
+          {agentsBlock}
+        </div>
+      </details>
+      {finishBlock}
+      {noteBlock}
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <WizardNav steps={steps} cur={cur} step={step} wizard={wizard} setStep={setStep} setWizard={setWizard} />
+      {cur === 'basics' && basicsBlock}
+      {cur === 'leagues' && <section className="card p-4">{footballBlock}{availBlock}</section>}
+      {cur === 'interval' && <section className="card p-4"><h3 className="font-display text-lg font-bold">Perioada</h3>{fieldsetBlock}{availBlock}</section>}
+      {cur === 'agents' && <section className="card p-4">
+        <p className="mb-3 rounded-lg border border-cyan/40 bg-cyan/5 px-3 py-2 text-sm">Aici alegi <strong>cine analizează biletul</strong>. Fiecare agent are alt stil. Poți lua o echipă gata făcută sau îi bifezi tu, câte unul.</p>
+        {agentsBlock}
+      </section>}
+      {cur === 'finish' && <>{finishBlock}{noteBlock}</>}
+      <WizardButtons steps={steps} step={step} wizard={wizard} setStep={setStep} />
     </div>
   );
 }

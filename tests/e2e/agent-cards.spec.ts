@@ -111,6 +111,7 @@ test('model identities replace actors across public home, Custom and statistics,
   await expect(page.locator('.home-team')).toContainText('MiniMax M3.1 Flash');
   await page.goto('/auth/test-login?email=model-identities@test.local');
   await page.goto('/?tab=custom');
+  await page.getByRole('button', { name: 'Totul pe o pagină' }).click();
   await page.locator('summary').filter({ hasText: 'Echipa de agenți' }).click();
   await page.getByRole('button', { name: /Noua echipă AI \(10\)/ }).click();
   await expect(page.locator('summary').filter({ hasText: 'Echipa de agenți' })).toContainText('10 agenți aleși');

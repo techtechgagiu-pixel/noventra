@@ -25,6 +25,7 @@ test('first visit explains AI debate and reaches a compact Custom form without s
   await page.getByLabel('Cod de acces').fill('P11-ADMIN-01234567-89ABCDEF-01234567-89ABCDEF');
   await page.getByRole('button', { name: 'INTRĂ CU CODUL' }).click();
   await expect(page).toHaveURL(/tab=custom$/);
+  await page.getByRole('button', { name: 'Totul pe o pagină' }).click();
   const before = await (await page.request.get('/api/test/stats')).json();
   await expect(page.getByLabel('Cota dorită')).toHaveValue('5');
   const action = page.getByRole('button', { name: 'Pornește dezbaterea', exact: true });
