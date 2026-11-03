@@ -126,7 +126,7 @@ export function parseCustom(input: unknown): CustomConfig {
   fromHours = Math.min(167, Math.max(MIN_FROM_HOURS, fromHours)); toHours = Math.min(168, Math.max(fromHours + 1, toHours));
   const window = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
   if (!Number.isFinite(target) || target < 1.2 || target > 1000) throw new SlotError('Cota țintă trebuie să fie între 1.20 și 1000.');
-  if (!Number.isInteger(legs) || legs < 1 || legs > 15) throw new SlotError('Numărul de meciuri trebuie să fie între 1 și 15.');
+  if (!Number.isInteger(legs) || legs < 1 || legs > 20) throw new SlotError('Numărul de meciuri trebuie să fie între 1 și 20.');
   if (!agents.length) throw new SlotError('Alege cel puțin un agent.');
   if (agents.length > MAX_CUSTOM_AGENTS) throw new SlotError(`Poți alege maximum ${MAX_CUSTOM_AGENTS} agenți pentru un bilet.`);
   const perLeg = Math.pow(target, 1 / legs);
@@ -221,7 +221,7 @@ export async function createReviewJob(userId: string, input: unknown, at = new D
   const raw = Array.isArray(o.legs) ? o.legs : [];
   const picks = raw.map((x) => ({ fixtureId: String((x as Record<string, unknown>)?.fixtureId ?? ''), marketKey: String((x as Record<string, unknown>)?.marketKey ?? '') })).filter((x) => x.fixtureId && x.marketKey);
   if (!picks.length) throw new SlotError('Adaugă cel puțin un meci pe bilet.');
-  if (picks.length > 15) throw new SlotError('Maximum 15 meciuri pe bilet.');
+  if (picks.length > 20) throw new SlotError('Maximum 20 meciuri pe bilet.');
   if (new Set(picks.map((p) => p.fixtureId)).size !== picks.length) throw new SlotError('Un meci poate apărea o singură dată pe bilet.');
   if (picks.some((p) => isBannedMarket(p.marketKey))) throw new SlotError('Pronosticurile „sub” și șansa dublă „12” nu sunt analizate în PRIMUL 11.');
   const advice = typeof o.advice === 'string' && o.advice.trim() ? o.advice.trim().slice(0, 800) : null;

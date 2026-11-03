@@ -156,7 +156,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <div className="mt-2 flex items-center gap-2">
             <button aria-label="Mai puține meciuri" onClick={() => setLegs((l) => Math.max(1, l - 1))} className="btn btn-ghost h-11 w-11"><Minus size={16} /></button>
             <output className="flex-1 text-center font-display text-[2.6rem] font-bold leading-none tabular" aria-live="polite">{legs}</output>
-            <button aria-label="Mai multe meciuri" onClick={() => setLegs((l) => Math.min(15, l + 1))} className="btn btn-ghost h-11 w-11"><Plus size={16} /></button>
+            <button aria-label="Mai multe meciuri" onClick={() => setLegs((l) => Math.min(20, l + 1))} className="btn btn-ghost h-11 w-11"><Plus size={16} /></button>
           </div>
           <p className="mt-2 text-xs text-muted">Biletul pornește de la {legs} {legs === 1 ? 'meci' : 'meciuri'}; dacă cotele sigure nu ajung la țintă, echipa adaugă meciuri deja validate.</p>
         </div>
