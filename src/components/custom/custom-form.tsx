@@ -21,9 +21,9 @@ function WizardNav({ steps, cur, step, wizard, setStep, setWizard }: { steps: St
 function WizardButtons({ steps, step, wizard, setStep }: { steps: Step[]; step: number; wizard: boolean; setStep: (n: number) => void }) {
   if (!wizard) return null;
   const last = step >= steps.length - 1;
-  return <div className="sticky bottom-[4.75rem] z-10 flex items-center justify-between gap-3 rounded-xl bg-ink/90 p-2 backdrop-blur md:bottom-3">
-    <button type="button" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0} className="btn btn-ghost disabled:opacity-40">Înapoi</button>
-    {!last && <button type="button" onClick={() => { setStep(step + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="btn btn-primary">Următorul</button>}
+  return <div className="sticky bottom-[4.75rem] z-10 flex items-center justify-between gap-3 rounded-xl bg-ink/90 px-16 py-2 backdrop-blur md:bottom-3 md:px-2">
+    <button type="button" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0} className="btn btn-ghost px-4 py-3 disabled:opacity-40">Înapoi</button>
+    {!last && <button type="button" onClick={() => { setStep(step + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="btn btn-primary px-6 py-3 text-base">Următorul</button>}
   </div>;
 }
 const TARGETS = [2, 3, 5, 10, 20, 50, 100];
@@ -301,8 +301,9 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-wizard="on">
       <WizardNav steps={steps} cur={cur} step={step} wizard={wizard} setStep={setStep} setWizard={setWizard} />
+      <div className="min-h-[55vh] space-y-6">
       {cur === 'basics' && basicsBlock}
       {cur === 'leagues' && <section className="card p-4">{footballBlock}{availBlock}</section>}
       {cur === 'interval' && <section className="card p-4"><h3 className="font-display text-lg font-bold">Perioada</h3>{fieldsetBlock}{availBlock}</section>}
@@ -311,6 +312,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
         {agentsBlock}
       </section>}
       {cur === 'finish' && <>{finishBlock}{noteBlock}</>}
+      </div>
       <WizardButtons steps={steps} step={step} wizard={wizard} setStep={setStep} />
     </div>
   );

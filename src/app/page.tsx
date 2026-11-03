@@ -218,14 +218,14 @@ async function CustomTab({ userId, job, limit }: { userId: string; job?: string;
   }
   const [cards, recent, ranking] = await Promise.all([agentCards(), customJobs(userId, Math.max(limit, 20)), agentRanking()]);
   return (
-    <div className="space-y-6">
+    <div className="custom-tab space-y-6">
       <div>
         <h1 className="page-title">Bilet custom</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {limit} bilete custom pe zi.</p>
+        <p className="custom-extra mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {limit} bilete custom pe zi.</p>
       </div>
       <CustomForm agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
       {recent.length > 0 && (
-        <section>
+        <section className="custom-extra">
           <h3 className="mb-2 font-display text-lg font-bold">Biletele tale custom</h3>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {recent.map((j) => {

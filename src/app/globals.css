@@ -411,3 +411,6 @@ a.slip:hover { border-color: #3f7a5d; transform: translateY(-1px); }
   .assistant-fab span { display: none; }
   .assistant-panel { left: .5rem; right: .5rem; width: auto; bottom: calc(8rem + env(safe-area-inset-bottom)); height: calc(100vh - 11rem); }
 }
+
+/* Bilet custom, pas cu pas (owner 03.11): while the steps are open only the step is on the page. */
+.custom-tab:has([data-wizard='on']) .custom-extra { display: none; }
