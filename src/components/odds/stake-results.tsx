@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 
-type Pending = { id: string; home: string; away: string; league: string; kickoff: string; legs: number };
+type Pending = { id: string; home: string; away: string; league: string; kickoff: string; legs: number; live: { home: number; away: number; clock: string | null } | null };
 const when = (iso: string) => new Date(iso).toLocaleString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
 
 /** Owner: final scores of Stake-only matches (no automatic source). Settlement picks them up within minutes. */
@@ -24,10 +24,10 @@ export function StakeResults({ initial }: { initial: Pending[] }) {
     {!list.length ? <p className="mt-3 text-sm text-muted">Nimic de introdus acum.</p> : <ul className="mt-3 space-y-2">
       {list.map((p) => <li key={p.id} className="rounded-xl border border-line p-3">
         <form onSubmit={(e) => { e.preventDefault(); void save(p, e.currentTarget); }} className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="min-w-0 flex-1"><strong>{p.home} – {p.away}</strong><span className="block text-xs text-muted">{p.league} · {when(p.kickoff)}{p.legs ? ` · pe ${p.legs} ${p.legs === 1 ? 'bilet' : 'bilete'}` : ''}</span></span>
-          <label className="sr-only" htmlFor={`h-${p.id}`}>Goluri {p.home}</label><input id={`h-${p.id}`} name="home" inputMode="numeric" required pattern="[0-9]{1,2}" className="w-12 rounded-lg border border-line bg-ink px-2 py-1.5 text-center" placeholder="0" />
+          <span className="min-w-0 flex-1"><strong>{p.home} – {p.away}</strong><span className="block text-xs text-muted">{p.league} · {when(p.kickoff)}{p.legs ? ` · pe ${p.legs} ${p.legs === 1 ? 'bilet' : 'bilete'}` : ''}</span>{p.live && <span className="block text-xs text-cyan">Ultimul scor live: {p.live.home}–{p.live.away}{p.live.clock ? ` (${p.live.clock})` : ''}. Verifică și apasă Salvează.</span>}</span>
+          <label className="sr-only" htmlFor={`h-${p.id}`}>Goluri {p.home}</label><input id={`h-${p.id}`} name="home" defaultValue={p.live?.home} inputMode="numeric" required pattern="[0-9]{1,2}" className="w-12 rounded-lg border border-line bg-ink px-2 py-1.5 text-center" placeholder="0" />
           <span>–</span>
-          <label className="sr-only" htmlFor={`a-${p.id}`}>Goluri {p.away}</label><input id={`a-${p.id}`} name="away" inputMode="numeric" required pattern="[0-9]{1,2}" className="w-12 rounded-lg border border-line bg-ink px-2 py-1.5 text-center" placeholder="0" />
+          <label className="sr-only" htmlFor={`a-${p.id}`}>Goluri {p.away}</label><input id={`a-${p.id}`} name="away" defaultValue={p.live?.away} inputMode="numeric" required pattern="[0-9]{1,2}" className="w-12 rounded-lg border border-line bg-ink px-2 py-1.5 text-center" placeholder="0" />
           <span className="text-xs text-muted">pauză</span>
           <input name="htHome" aria-label={`Pauză ${p.home}`} inputMode="numeric" pattern="[0-9]{1,2}" className="w-10 rounded-lg border border-line bg-ink px-1 py-1.5 text-center text-xs" />
           <input name="htAway" aria-label={`Pauză ${p.away}`} inputMode="numeric" pattern="[0-9]{1,2}" className="w-10 rounded-lg border border-line bg-ink px-1 py-1.5 text-center text-xs" />
