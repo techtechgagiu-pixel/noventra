@@ -8,6 +8,7 @@ import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
 import { ResultsRefresh } from '@/components/results-refresh';
 import { FeedbackButton } from '@/components/feedback-button';
+import { AssistantChat } from '@/components/assistant-chat';
 import { many, one, timeCompare, SQL_NOW } from '@/lib/db';
 import { jobEvents, jobMeta, listTickets, ticketDetail } from '@/lib/views';
 import { TicketView, type TicketData } from '@/components/ticket-view';
@@ -117,6 +118,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       </main>
       <footer className="app-footer mx-auto max-w-6xl space-y-1 px-4 pb-28 md:pb-10"><p>Rezultatele și scorurile live de pe bilete se actualizează automat la 10 minute.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
       <FeedbackButton />
+      <AssistantChat />
     </>
   );
 }
