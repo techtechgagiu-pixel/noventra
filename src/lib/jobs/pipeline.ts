@@ -258,7 +258,13 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
         await query('INSERT INTO scout_dossiers(job_id, fixture_id, mode, dossier) VALUES ($1,$2,$3,$4) ON CONFLICT (job_id, fixture_id) DO NOTHING', [job.id, f.id, 'statistics', JSON.stringify(snapshot.dossier)]);
         return;
       }
-      const [home, away] = await Promise.all([teamHistory(f, 'home'), teamHistory(f, 'away')]);
+      let [home, away] = await Promise.all([teamHistory(f, 'home'), teamHistory(f, 'away')]);
+      // ESPN answers 403 to bursts: a side that came back empty because the read failed (not because the team has no history) gets one more try after a pause.
+      const failed = (h: { matches: unknown[]; missing: string[] }) => h.matches.length === 0 && h.missing.some((m) => /nu a putut fi citit|a răspuns (403|429|5\d\d)/.test(m));
+      if (failed(home) || failed(away)) {
+        await new Promise((r) => setTimeout(r, 25_000));
+        [home, away] = await Promise.all([failed(home) ? teamHistory(f, 'home') : home, failed(away) ? teamHistory(f, 'away') : away]);
+      }
       let standings: FixtureSnapshot['standings'] = { home: null, away: null };
       let summary: Record<string, unknown> | null = null;
       if (f.provider === 'espn') {
