@@ -657,7 +657,13 @@ async function stepVote(job: JobRow, ids: string[]) {
       const backup = brain?.backup && brain.backup !== c.marketKey ? c.shortlist.find((x) => x.key === brain.backup) ?? null : null;
       // Then every other selection on the shortlist (each already has enough votes): one price that moved no longer
       // throws the whole match away (owner question 28.10: "de ce nu mai sunt studiate pentru alte pronosticuri").
-      const tries = [...new Set([c.marketKey, ...(backup ? [backup.key] : []), ...c.shortlist.map((x) => x.key)])].slice(0, 5);
+      // Owner rule 03.11 („alt pronostic din același eveniment pe alt bilet”): a selection this user already has on another
+      // open ticket for the same match goes last, so a new ticket gets a different (equally backed) pick when there is one.
+      const usedElsewhere = new Set((await many<{ market_key: string }>(
+        `SELECT DISTINCT s.market_key FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.user_id=$1 AND s.fixture_id=$2 AND s.outcome='PENDING' AND t.hidden_at IS NULL`, [job.user_id, s.fixture.id]).catch(() => [])).map((r) => r.market_key));
+      const ordered = preferUnused([...new Set([c.marketKey, ...(backup ? [backup.key] : []), ...c.shortlist.map((x) => x.key)])], usedElsewhere);
+      const tries = ordered.slice(0, 5);
+      const variedFrom = ordered[0] !== c.marketKey ? c.marketKey : null;
       const labels: Record<string, string> = { fixtureStillPreMatch: 'meciul nu mai este pre-meci', oddsAvailable: 'cota nu mai este disponibilă', oddsFresh: 'cota este prea veche', bookmakerIdentified: 'bookmaker neidentificat', selectionConsistent: 'selecție inconsistentă', probabilityPlausible: 'probabilitate estimată prea mică', evNotStronglyNegative: 'valoare așteptată clar negativă', dataSufficient: 'istoric insuficient' };
       const base = await fixtureFromDb(s.fixture.id);
       const fresh = base ? await freshFixture(base).catch(() => null) : null;
@@ -682,10 +688,10 @@ async function stepVote(job: JobRow, ids: string[]) {
         const failed = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
         await recordEvent(job.id, { type: 'ODDS_VALIDATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { marketKey: key, checks, originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt } });
         if (!failed.length) {
-          const alt = ti > 0 ? c.shortlist.find((x) => x.key === key) : null;
+          const alt = key !== c.marketKey ? c.shortlist.find((x) => x.key === key) : null;
           if (alt) Object.assign(c, { marketKey: alt.key, votesFor: alt.supporters.length, directVotes: alt.direct, supporters: alt.supporters });
           outcome = 'QUALIFIED';
-          reason = `Consens ${c.votesFor}/${N} pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.${ti > 0 ? ` (Alegerea de rezervă a creierului — prima, „${s.model.markets.find((m) => m.key === tries[0])?.label}”, a picat la validare: ${failures[0]}.)` : brainNote}`;
+          reason = `Consens ${c.votesFor}/${N} pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.${variedFrom && ti === 0 ? ` Alt pronostic decât „${s.model.markets.find((m) => m.key === variedFrom)?.label ?? variedFrom}”, care e deja pe alt bilet al tău pentru acest meci.` : ti > 0 ? ` (Alegerea de rezervă a creierului — prima, „${s.model.markets.find((m) => m.key === tries[0])?.label}”, a picat la validare: ${failures[0]}.)` : brainNote}`;
           break;
         }
         failures.push(failed.map((f) => labels[f]).join(', '));
@@ -743,6 +749,9 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
     return [{ fixtureId: r.fixture_id, teams: [s.fixture.home, s.fixture.away], odds, bookmaker, quality, risk, family: r.market_key.split(':')[0], marketKey: r.market_key, label: est.label, observedAt, probability: est.estimatedProbability, riskLabel: risk, votesFor, snapshot: s }];
   }))).flat();
 }
+
+/** Keeps the order, but moves selections already used on the user's other open tickets for this match to the end. */
+export function preferUnused(keys: string[], used: Set<string>) { return [...keys.filter((k) => !used.has(k)), ...keys.filter((k) => used.has(k))]; }
 
 /** Upper bound for a custom ticket that needs extra matches to reach its target. */
 const MAX_CUSTOM_LEGS = 20;
