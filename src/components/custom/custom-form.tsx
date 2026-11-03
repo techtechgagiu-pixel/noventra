@@ -10,7 +10,7 @@ import type { MatchRow } from '@/lib/catalog';
 
 export type AgentCard = { id: string; name: string; title: string; specialty: string; risk: number; maxOdds: number; minProbability: number; model: string | null; record: string | null };
 type Step = 'basics' | 'leagues' | 'interval' | 'agents' | 'finish';
-const STEP_NAME: Record<Step, string> = { basics: 'Cota', leagues: 'Ligi', interval: 'Perioada', agents: 'Agenții', finish: 'Gata' };
+const STEP_NAME: Record<Step, string> = { basics: 'Cota și meciuri', leagues: 'Ligi', interval: 'Perioada', agents: 'Agenții', finish: 'Gata' };
 function WizardNav({ steps, cur, step, wizard, setStep, setWizard }: { steps: Step[]; cur: Step; step: number; wizard: boolean; setStep: (n: number) => void; setWizard: (w: boolean) => void }) {
   return <nav aria-label="Pașii biletului" className="flex flex-wrap items-center gap-2">
     {wizard && <ol className="flex flex-1 flex-wrap items-center gap-1.5">{steps.map((x, i) => <li key={x}><button type="button" onClick={() => setStep(i)} aria-current={x === cur ? 'step' : undefined}
