@@ -720,6 +720,12 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
   // Completion never promotes old scores or expired quotes into a new finalized ticket.
   const stored = config.limits.stakeOnlyOffer && (await importStatus().catch(() => null))?.usable ? true : undefined;
   const current = recheck ? new Map((await loadFixtures(job.config.windowStart, job.config.windowDays, {top10Only:job.config.top10Only, leagueIds: job.config.custom?.leagues, stored})).fixtures.map((f) => [f.id, f])) : null;
+  // Owner request 03.11 („mai multă diversitate pe bilete”): matches and market types the user already has on many open tickets
+  // count a little less, so new tickets lean towards other matches and other bet types (a soft preference, never a block).
+  const open = await many<{ fixture_id: string; market_key: string }>(
+    `SELECT s.fixture_id, s.market_key FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.user_id=$1 AND s.outcome='PENDING' AND t.hidden_at IS NULL`, [job.user_id]).catch(() => []);
+  const fixtureUses = new Map<string, number>(), familyUses = new Map<string, number>();
+  for (const o of open) { fixtureUses.set(o.fixture_id, (fixtureUses.get(o.fixture_id) ?? 0) + 1); const f = o.market_key.split(':')[0]; familyUses.set(f, (familyUses.get(f) ?? 0) + 1); }
   return (await Promise.all(rows.map(async (r) => {
     const s = snaps.find((x) => x.fixture.id === r.fixture_id);
     if (!s) return [];
@@ -745,10 +751,14 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
       votesFor = valid.supporters.length;
     }
     const risk = riskClass(est.estimatedProbability, s.model.uncertainty);
-    const quality = (votesFor / jobAgents(job).length) * (s.model.uncertainty === 'scăzută' ? 1 : s.model.uncertainty === 'medie' ? 0.85 : 0.65) * (est.estimatedProbability ?? 0.3);
+    const variety = diversityFactor(fixtureUses.get(r.fixture_id) ?? 0, open.length ? (familyUses.get(r.market_key.split(':')[0]) ?? 0) / open.length : 0);
+    const quality = variety * (votesFor / jobAgents(job).length) * (s.model.uncertainty === 'scăzută' ? 1 : s.model.uncertainty === 'medie' ? 0.85 : 0.65) * (est.estimatedProbability ?? 0.3);
     return [{ fixtureId: r.fixture_id, teams: [s.fixture.home, s.fixture.away], odds, bookmaker, quality, risk, family: r.market_key.split(':')[0], marketKey: r.market_key, label: est.label, observedAt, probability: est.estimatedProbability, riskLabel: risk, votesFor, snapshot: s }];
   }))).flat();
 }
+
+/** Multiplier on a candidate's quality: 0.85 per open ticket already holding this match (up to 5), and less when its market type fills over 30% of the user's open selections. */
+export function diversityFactor(fixtureUses: number, familyShare: number) { return Math.pow(0.85, Math.min(fixtureUses, 5)) * (1 - 0.5 * Math.max(0, familyShare - 0.3)); }
 
 /** Keeps the order, but moves selections already used on the user's other open tickets for this match to the end. */
 export function preferUnused(keys: string[], used: Set<string>) { return [...keys.filter((k) => !used.has(k)), ...keys.filter((k) => used.has(k))]; }
