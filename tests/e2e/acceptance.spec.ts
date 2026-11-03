@@ -92,7 +92,7 @@ test('custom ticket: choose target, legs and agents → live map + chat → tick
   await page.getByRole('option', { name: /La Liga/ }).first().click();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/custom-leagues.png` });
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: /Ligi.*2 ligi/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ligi.*\d+ ligi/ })).toBeVisible();
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/custom-form.png`, fullPage: true });
   await page.getByRole('button', { name: /Pornește dezbaterea/ }).click();
   await expect(page).toHaveURL(/tab=custom&job=[0-9a-f-]{36}/);

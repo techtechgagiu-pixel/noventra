@@ -305,7 +305,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
       <WizardNav steps={steps} cur={cur} step={step} wizard={wizard} setStep={setStep} setWizard={setWizard} />
       <div className="min-h-[55vh] space-y-6">
       {cur === 'basics' && basicsBlock}
-      {cur === 'leagues' && <section className="card p-4">{footballBlock}{availBlock}</section>}
+      {cur === 'leagues' && <section className="card p-4"><p className="mb-3 flex items-center gap-2 rounded-lg border border-emerald/40 bg-emerald/5 px-3 py-2 text-sm"><Check size={16} className="text-emerald" aria-hidden />{leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă selectată' : 'ligi selectate'}. Apasă Următorul sau schimbă lista.` : 'Toate ligile sunt selectate. Apasă Următorul sau scoate ligile pe care nu le vrei.'}</p>{footballBlock}{availBlock}</section>}
       {cur === 'interval' && <section className="card p-4"><h3 className="font-display text-lg font-bold">Perioada</h3>{fieldsetBlock}{availBlock}</section>}
       {cur === 'agents' && <section className="card p-4">
         <p className="mb-3 rounded-lg border border-cyan/40 bg-cyan/5 px-3 py-2 text-sm">Aici alegi <strong>cine analizează biletul</strong>. Fiecare agent are alt stil. Poți lua o echipă gata făcută sau îi bifezi tu, câte unul.</p>

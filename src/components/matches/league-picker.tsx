@@ -5,7 +5,8 @@ import { Check, ChevronDown, Search } from 'lucide-react';
 export type LeagueOption = { id: string; name: string; country: string; top10?: boolean; count: number };
 
 /**
- * Drop-down with a checkbox per league, grouped by country. An empty selection means "all leagues".
+ * Drop-down with a checkbox per league, grouped by country. An empty selection means "all leagues" and shows every league ticked
+ * (owner request 03.11); un-ticking one then selects all the others.
  * Leagues without fixtures in the current window are listed last and dimmed.
  */
 export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabel = 'Toate ligile' }: { leagues: LeagueOption[]; value: string[]; onChange: (ids: string[]) => void; label?: string; allLabel?: string }) {
@@ -28,9 +29,12 @@ export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabe
     return [...by.entries()];
   }, [leagues, q]);
 
-  const set = new Set(value);
-  const toggle = (id: string) => onChange(set.has(id) ? value.filter((x) => x !== id) : [...value, id]);
-  const toggleCountry = (ids: string[]) => onChange(ids.every((id) => set.has(id)) ? value.filter((x) => !ids.includes(x)) : [...new Set([...value, ...ids])]);
+  const everything = !value.length;
+  const set = new Set(everything ? leagues.map((l) => l.id) : value);
+  const commit = (ids: string[]) => onChange(leagues.every((l) => ids.includes(l.id)) ? [] : ids);
+  const current = [...set];
+  const toggle = (id: string) => commit(set.has(id) ? current.filter((x) => x !== id) : [...current, id]);
+  const toggleCountry = (ids: string[]) => commit(ids.every((id) => set.has(id)) ? current.filter((x) => !ids.includes(x)) : [...new Set([...current, ...ids])]);
   const matches = value.length ? leagues.filter((l) => set.has(l.id)).reduce((s, l) => s + l.count, 0) : leagues.reduce((s, l) => s + l.count, 0);
   const summary = !value.length ? allLabel : value.length === 1 ? leagues.find((l) => l.id === value[0])?.name ?? '1 ligă' : `${value.length} ligi`;
 
