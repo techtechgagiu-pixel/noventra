@@ -10,7 +10,9 @@ import { toolSpecs, runTool, type ToolCtx } from './tools';
  */
 export const ASSISTANT_MODEL = 'anthropic/claude-haiku-5.5';
 const PRICE = { inPerToken: 0.1, outPerToken: 0.5 }; // micro-USD per token ($0.10 / $0.50 per million)
-const FREE = { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'openai/gpt-oss-120b' };
+// Free fallback: Gemini through its OpenAI-compatible endpoint (Groq's free tier allows only ~8k tokens a minute,
+// less than one answer with statistics, 03.11).
+const FREE = { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-3.1-flash-lite' };
 const dailyUsd = () => Number(process.env.ASSISTANT_DAILY_USD || '0.5');
 const MAX_ROUNDS = 6;
 
@@ -38,10 +40,9 @@ async function record(microusd: number, question: boolean) {
 
 async function complete(messages: Msg[], paid: boolean) {
   const url = paid ? 'https://openrouter.ai/api/v1/chat/completions' : FREE.url;
-  const key = paid ? config.openRouterApiKey : config.groqApiKey;
+  const key = paid ? config.openRouterApiKey : config.geminiApiKey;
   if (!key) throw new Error('Asistentul nu are cheie pentru modelul AI.');
   const body: Record<string, unknown> = { model: paid ? ASSISTANT_MODEL : FREE.model, messages, tools: toolSpecs(), tool_choice: 'auto', temperature: 0.2, max_tokens: 1400 };
-  if (!paid) { body.reasoning_effort = 'low'; body.include_reasoning = false; }
   const res = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'PRIMUL 11 asistent' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) });
   const json = await res.json().catch(() => ({})) as { choices?: Array<{ message?: Msg }>; usage?: { prompt_tokens?: number; completion_tokens?: number }; error?: { message?: string } };
   if (!res.ok) throw new Error(json.error?.message?.slice(0, 160) || `Modelul AI a răspuns ${res.status}.`);
@@ -66,7 +67,7 @@ async function answer(history: ChatMessage[], ctx: ToolCtx, paid: boolean) {
     const msg = await complete(messages, paid);
     if (!msg.tool_calls?.length) {
       await record(0, true);
-      return { answer: (msg.content ?? '').trim() || 'Nu am găsit un răspuns.', model: paid ? ASSISTANT_MODEL : `groq/${FREE.model}`, tools: used };
+      return { answer: (msg.content ?? '').trim() || 'Nu am găsit un răspuns.', model: paid ? ASSISTANT_MODEL : `gemini/${FREE.model}`, tools: used };
     }
     messages.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls });
     for (const call of msg.tool_calls.slice(0, 4)) {
@@ -76,5 +77,5 @@ async function answer(history: ChatMessage[], ctx: ToolCtx, paid: boolean) {
     }
   }
   await record(0, true);
-  return { answer: 'Întrebarea a cerut prea multe căutări deodată. Încearcă una mai precisă.', model: paid ? ASSISTANT_MODEL : `groq/${FREE.model}`, tools: used };
+  return { answer: 'Întrebarea a cerut prea multe căutări deodată. Încearcă una mai precisă.', model: paid ? ASSISTANT_MODEL : `gemini/${FREE.model}`, tools: used };
 }
