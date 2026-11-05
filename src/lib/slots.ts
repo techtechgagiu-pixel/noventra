@@ -58,7 +58,9 @@ export type CustomConfig = { target: number; legs: number; agents: string[]; win
   /** Owner request 05.11 / 06.11: every selection of the ticket must belong to one of these market families (absent = any market). */
   onlyMarkets?: MarketFamilyId[];
   /** Owner request 06.11: a selection reaches the ticket only if EVERY chosen agent backs it (default: the usual vote threshold). */
-  unanimous?: boolean };
+  unanimous?: boolean;
+  /** Owner request 06.11: exactly how many of the chosen agents must back a selection (2..N); absent = the automatic threshold. */
+  minAgree?: number };
 /** Market families the owner can restrict a ticket to. `prefix` is the key family used by the variety rule. */
 export const MARKET_FAMILIES = [
   { id: 'BTTS', label: 'Ambele echipe marchează – DA (GG)', short: 'GG', prefix: 'BTTS', test: (k: string) => k === 'BTTS:YES' },

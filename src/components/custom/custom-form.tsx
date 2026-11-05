@@ -83,7 +83,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const dayWin = useMemo(() => (day === null ? null : dayHours(day)), [day, minute]); // eslint-disable-line react-hooks/exhaustive-deps
   const fromHours = dayWin ? dayWin.from : STOPS[fromI], toHours = dayWin ? dayWin.to : STOPS[toI];
   const win = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
-  const [unanimous, setUnanimous] = useState(false); // owner request 06.11: default = the usual vote threshold
+  const [minAgree, setMinAgree] = useState<number | null>(null); // owner request 06.11: null = automatic threshold
   const [chosen, setChosen] = useState<string[]>(['victor', 'andrei', 'alex', 'robert', 'ioana']);
   const [leagues, setLeagues] = useState<string[]>([]);
   // Owner request 30.10: a ticket made only of Counter-Strike matches, one tap away.
@@ -145,7 +145,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true); setError(null);
-    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues: sentLeagues, count, ...(unanimous && chosen.length >= 2 ? { unanimous: true } : {}), ...(sport === 'football' && onlyMarkets.length ? { onlyMarkets } : {}) });
+    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues: sentLeagues, count, ...(minAgree && chosen.length >= 2 ? { minAgree: Math.min(minAgree, chosen.length) } : {}), ...(sport === 'football' && onlyMarkets.length ? { onlyMarkets } : {}) });
     if (attempt.current?.body !== body) attempt.current = { body, requestId: crypto.randomUUID() };
     try {
       const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ ...JSON.parse(body), requestId: attempt.current.requestId }) });
@@ -241,10 +241,21 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
         </p>}
   </>);
   const agentsBlock = (<>
-        <label className="mb-4 flex cursor-pointer items-start gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-          <input type="checkbox" checked={unanimous && chosen.length >= 2} disabled={chosen.length < 2} onChange={(e) => setUnanimous(e.target.checked)} className="mt-0.5 h-4 w-4 accent-cyan" />
-          <span><strong>Toți agenții de acord</strong> <span className="text-xs text-gold">(biletul poate ieși cu mai puține meciuri sau să nu iasă deloc)</span><span className="block text-xs text-muted">{unanimous && chosen.length >= 2 ? `O selecție intră pe bilet doar dacă o susțin toți cei ${chosen.length} agenți. Biletul poate avea mai puține meciuri sau poate să nu iasă deloc.` : `Nebifat: o selecție intră cu votul majorității echipei (acum ${customThreshold(chosen.length)} din ${chosen.length}).`}</span></span>
-        </label>
+        {(() => {
+          const n = chosen.length, auto = customThreshold(n), pick = minAgree && n >= 2 ? Math.min(minAgree, n) : null, need = pick ?? auto;
+          return (
+            <fieldset className="mb-4 rounded-lg border border-line px-3 py-2">
+              <legend className="px-1 text-sm font-semibold">Câți agenți trebuie să fie de acord pentru o selecție?</legend>
+              <div className="flex flex-wrap gap-1.5">
+                <button type="button" aria-pressed={pick === null} onClick={() => setMinAgree(null)} className={`chip ${pick === null ? 'border-cyan text-cyan' : 'text-muted'}`}>Automat ({auto})</button>
+                {Array.from({ length: Math.max(0, n - 1) }, (_, i) => i + 2).filter((v) => v !== auto || pick !== null || true).map((v) => (
+                  <button key={v} type="button" aria-pressed={pick === v} onClick={() => setMinAgree(v)} className={`chip ${pick === v ? 'border-cyan text-cyan' : 'text-muted'}`}>{v === n ? `Toți (${n})` : v}</button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted">{n < 2 ? 'Alege cel puțin 2 agenți ca să poți cere acordul mai multora.' : `O selecție intră pe bilet dacă o susțin cel puțin ${need} din ${n} agenți.`}{n >= 2 && need >= Math.ceil(n * 0.8) && need > auto ? <span className="text-gold"> Cerință strictă: biletul poate ieși cu mai puține meciuri sau să nu iasă deloc.</span> : null}</p>
+            </fieldset>
+          );
+        })()}
           <div className="mb-4 flex flex-wrap gap-3" aria-label="Echipa selectată">{chosen.flatMap((id) => agents.filter((a) => a.id === id)).map((a) => <div key={a.id} className="flex items-center gap-2 rounded-lg border border-line px-2 py-1.5"><img src={AGENT_META[a.id]?.img} alt="" className="h-8 w-8 rounded-full object-cover" /><div><p className="text-xs font-semibold">{a.name}</p><p className="text-[10px] text-muted">{a.model ?? 'Model AI'}</p></div></div>)}</div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h3 className="font-display text-lg font-bold">Alege agenții din teren</h3>

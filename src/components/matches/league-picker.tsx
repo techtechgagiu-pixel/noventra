@@ -15,6 +15,8 @@ export type LeagueOption = { id: string; name: string; country: string; top10?: 
 export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabel = 'Toate ligile' }: { leagues: LeagueOption[]; value: string[]; onChange: (ids: string[]) => void; label?: string; allLabel?: string }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [cleared, setCleared] = useState(false); // „Debifează tot”: nothing ticked yet (an empty value normally means every league)
+  useEffect(() => { if (value.length) setCleared(false); }, [value]);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -38,15 +40,15 @@ export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabe
     return [...by.entries()];
   }, [leagues, q, principalIds]);
 
-  const everything = !value.length;
-  const set = new Set(everything ? leagues.map((l) => l.id) : value);
+  const everything = !value.length && !cleared;
+  const set = new Set(everything ? leagues.map((l) => l.id) : cleared ? [] : value);
   const commit = (ids: string[]) => onChange(leagues.every((l) => ids.includes(l.id)) ? [] : ids);
   const current = [...set];
   // Untouched "all leagues": a click picks just that league (or country); afterwards clicks add and remove.
   const toggle = (id: string) => (everything ? onChange([id]) : commit(set.has(id) ? current.filter((x) => x !== id) : [...current, id]));
   const toggleCountry = (ids: string[]) => (everything ? onChange(ids) : commit(ids.every((id) => set.has(id)) ? current.filter((x) => !ids.includes(x)) : [...new Set([...current, ...ids])]));
-  const matches = value.length ? leagues.filter((l) => set.has(l.id)).reduce((s, l) => s + l.count, 0) : leagues.reduce((s, l) => s + l.count, 0);
-  const summary = !value.length ? allLabel : value.length === 1 ? leagues.find((l) => l.id === value[0])?.name ?? '1 ligă' : `${value.length} ligi`;
+  const matches = cleared ? 0 : value.length ? leagues.filter((l) => set.has(l.id)).reduce((s, l) => s + l.count, 0) : leagues.reduce((s, l) => s + l.count, 0);
+  const summary = cleared ? 'Nicio ligă bifată' : !value.length ? allLabel : value.length === 1 ? leagues.find((l) => l.id === value[0])?.name ?? '1 ligă' : `${value.length} ligi`;
 
   return (
     <div ref={box} className="relative">
@@ -64,7 +66,8 @@ export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabe
             <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Caută țară sau ligă" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
           </div>
           <div className="flex flex-wrap gap-1.5 border-b border-line p-2">
-            <button type="button" onClick={() => onChange([])} className={`chip ${!value.length ? 'text-cyan' : 'text-muted'}`}>{allLabel}</button>
+            <button type="button" onClick={() => { setCleared(false); onChange([]); }} className={`chip ${!value.length && !cleared ? 'text-cyan' : 'text-muted'}`}>{allLabel}</button>
+            <button type="button" onClick={() => { setCleared(true); onChange([]); }} className={`chip ${cleared ? 'text-cyan' : 'text-muted'}`}>Debifează tot</button>
             <button type="button" onClick={() => onChange(principal.map((l) => l.id))} className="chip text-muted">Principale</button>
             <button type="button" onClick={() => onChange(leagues.filter((l) => l.top10).map((l) => l.id))} className="chip text-muted">Top 10</button>
             <button type="button" onClick={() => onChange(leagues.filter((l) => l.count > 0).map((l) => l.id))} className="chip text-muted">Doar cu meciuri</button>
