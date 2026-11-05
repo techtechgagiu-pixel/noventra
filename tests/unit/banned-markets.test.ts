@@ -3,7 +3,7 @@ import { characterViolation, isBannedMarket } from '@/lib/jobs/analysis';
 
 describe('owner-banned markets', () => {
   it('bans every under line and the double chance 12, keeps the other picks', () => {
-    for (const k of ['TOTAL:UNDER:2.5', 'TT:HOME:UNDER:1.5', 'MT:UNDER:2.5', 'DC:12']) expect(isBannedMarket(k)).toBe(true);
+    for (const k of ['TOTAL:UNDER:2.5', 'TT:HOME:UNDER:1.5', 'MT:UNDER:2.5', 'DC:12', 'BTTS:NO']) expect(isBannedMarket(k)).toBe(true);
     for (const k of ['DC:1X', 'DC:X2', '1X2:HOME', '1X2:DRAW', 'TOTAL:OVER:2.5', 'BTTS:YES', 'ML:HOME']) expect(isBannedMarket(k)).toBe(false);
   });
   it('a vote for 12 is set aside with a clear reason', () => {

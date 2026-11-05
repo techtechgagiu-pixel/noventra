@@ -6,8 +6,8 @@ import type { FixtureSnapshot } from './types';
 
 /** Compact, identical factual snapshot for all six agents (token-efficient). */
 /** User rule (2026-10-21): no „Under” selections at all — match totals or team totals. */
-/** Owner bans: every "under" line, and (02.11) the double chance "12" (1 or 2 at full time, the most picked market). */
-export const isBannedMarket = (key: string | null) => !!key && (/:UNDER(:|$)/.test(key) || key === 'DC:12');
+/** Owner bans: every "under" line, (02.11) the double chance "12" (1 or 2 at full time, the most picked market) and (06.11) „Ambele echipe marchează – NU”. */
+export const isBannedMarket = (key: string | null) => !!key && (/:UNDER(:|$)/.test(key) || key === 'DC:12' || key === 'BTTS:NO');
 
 // Token economy (owner decision 28.10, widened 03.11): at most 16 selections per match, spread over every market type, probabilities rounded to 2 decimals.
 // Agents pick the safest selections anyway; the exact numbers stay in the snapshot and every threshold uses them.
