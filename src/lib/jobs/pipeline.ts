@@ -828,6 +828,13 @@ export function closestCustomTicket(job: Pick<JobRow, 'config' | 'target_odds'>,
 /** The Odds API prices are refreshed every 3 days and accepted for 4 (owner decision 28.10); ESPN prices for 3 hours. */
 const maxOddsAgeMinutes = (source: string | null | undefined) => source === ODDSPAPI_SOURCE ? config.limits.oddspapiMaxAgeMinutes : source === 'the-odds-api' ? config.limits.oddsApiMaxAgeMinutes : source === IMPORT_SOURCE ? config.limits.importedOddsMaxAgeMinutes : config.limits.oddsMaxAgeMinutes;
 
+/** Owner rule 06.11: the verdict comes in at most 30 minutes after the ticket starts (or after the user asks to complete it). */
+export const MAX_JOB_MINUTES = 30;
+export function jobTimeUp(job: Pick<JobRow, 'created_at' | 'config'>, now = Date.now()) {
+  const marks = [job.created_at ? new Date(job.created_at).getTime() : null, job.config.completion?.requestedAt ? Date.parse(job.config.completion.requestedAt) : null].filter((x): x is number => x !== null && !Number.isNaN(x));
+  return marks.length > 0 && now - Math.max(...marks) > MAX_JOB_MINUTES * 60_000;
+}
+
 /** How many times a custom ticket keeps searching new matches on its own before it may end incomplete. */
 export const MAX_INLINE_EXTENSIONS = 2;
 
@@ -842,7 +849,7 @@ async function build(job: JobRow): Promise<boolean> {
   const cands = optimized.cands;
   let result = optimized.result;
   const cp = job.checkpoint;
-  if (result.status !== 'COMPLETED' && job.config.custom && !job.config.review && (cp.extensions ?? 0) < MAX_INLINE_EXTENSIONS && (cp.lastDiscoverBatches ?? 1) > 0) {
+  if (result.status !== 'COMPLETED' && job.config.custom && !job.config.review && (cp.extensions ?? 0) < MAX_INLINE_EXTENSIONS && !jobTimeUp(job) && (cp.lastDiscoverBatches ?? 1) > 0) {
     cp.extensions = (cp.extensions ?? 0) + 1;
     // A new search start: the time window and the 'already analysed' list move on (not a user completion request).
     job.config = { ...job.config, extendedAt: new Date().toISOString() };
@@ -910,6 +917,10 @@ export async function runJobSlice(job: JobRow, budgetMs = 50_000) {
     await save(job);
   }
   while (Date.now() < deadline) {
+    if (!job.config.review && cp.phase !== 'BUILD' && cp.phase !== 'DONE' && cp.phase !== 'DISCOVER' && jobTimeUp(job)) {
+      await recordEvent(job.id, { type: 'JOB_RESUMED', stage: 'SELECTING', payload: { by: 'automat', note: `Au trecut ${MAX_JOB_MINUTES} de minute: oprim analiza și construim biletul din selecțiile deja validate.` } });
+      cp.phase = 'BUILD'; await save(job);
+    }
     if (cp.phase === 'DISCOVER') { await discover(job); continue; }
     if (cp.phase === 'BUILD') { if (job.config.review) await buildReview(job); else if (!(await build(job))) continue; return 'DONE'; }
     if (cp.phase === 'DONE') return 'DONE';

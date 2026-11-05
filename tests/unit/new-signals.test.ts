@@ -98,3 +98,15 @@ describe('unanimity (06.11)', () => {
     expect(contested([...four.slice(0, 3), vote('d', null), vote('e', null)], keys, 5, 5, 5)).toBe(false);
   });
 });
+
+import { jobTimeUp, MAX_JOB_MINUTES } from '../../src/lib/jobs/pipeline';
+describe('limita de 30 de minute (06.11)', () => {
+  const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+  it('nu expiră înainte de limită, expiră după', () => {
+    expect(jobTimeUp({ created_at: at(MAX_JOB_MINUTES - 2), config: {} as never })).toBe(false);
+    expect(jobTimeUp({ created_at: at(MAX_JOB_MINUTES + 2), config: {} as never })).toBe(true);
+  });
+  it('o cerere de completare repornește ceasul', () => {
+    expect(jobTimeUp({ created_at: at(120), config: { completion: { requestedAt: at(5) } } as never })).toBe(false);
+  });
+});
