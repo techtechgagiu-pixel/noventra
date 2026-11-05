@@ -33,7 +33,7 @@ test('home explains the product; saved tickets, old daily links and replay still
   // The optional overview remains available without the retired daily-slot tile.
   await page.goto('/?tab=acasa');
   await expect(page.getByRole('navigation', { name: 'Ce vrei să faci' }).getByRole('link')).toHaveCount(2);
-  await expect(page.getByRole('group', { name: 'Etapele dezbaterii' })).toBeVisible();
+  await expect(page.getByLabel('Agenții AI dezbat în jurul aceleiași mese')).toBeVisible();
   // Replay: no AI calls, no new jobs, no generate requests.
   const before = await (await page.request.get('/api/test/stats')).json();
   const generateCalls: string[] = [];
