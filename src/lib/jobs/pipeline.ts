@@ -1,4 +1,5 @@
 import { briefForChat, buildMatchBrief } from '../scout/match-brief';
+import { loadOddsMovement } from '../sports/odds-movement';
 import { reportNewsBatch } from '../news-reporter';
 import { createHash } from 'node:crypto';
 import { config } from '../config';
@@ -287,7 +288,8 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
         news = { home: nh.items, away: na.items, errors: [...nh.errors, ...na.errors] };
         await recordEvent(job.id, { type: 'NEWS_COLLECTED', stage: 'SCOUT', fixtureId: f.id, agentId: 'hantu', payload: { match: `${f.home} – ${f.away}`, home: nh.items.length, away: na.items.length, headlines: [...nh.items, ...na.items].slice(0, 6).map((x) => ({ title: x.title, source: x.source, publishedAt: x.publishedAt, link: x.link })), errors: news.errors.slice(0, 2) } });
       }
-      const brief = buildMatchBrief({ home: f.home, away: f.away, kickoff: f.kickoff, summary, homeMatches: home.matches, awayMatches: away.matches, standings, news });
+      const movement = await loadOddsMovement({ home: f.home, away: f.away, kickoff: f.kickoff });
+      const brief = buildMatchBrief({ home: f.home, away: f.away, kickoff: f.kickoff, summary, homeMatches: home.matches, awayMatches: away.matches, standings, news, homeTeamId: f.homeTeamId, awayTeamId: f.awayTeamId, movement });
       await recordEvent(job.id, { type: 'RESEARCH_BRIEF', stage: 'SCOUT', fixtureId: f.id, agentId: 'hantu', payload: { match: `${f.home} – ${f.away}`, kickoff: f.kickoff, brief, text: briefForChat(brief) } });
       const snapshot: FixtureSnapshot = {
         fixture: { id: f.id, home: f.home, away: f.away, league: `${f.country} · ${f.leagueName}`, leagueKey: f.leagueKey, kickoff: f.kickoff, provider: f.provider, providerId: f.providerId },

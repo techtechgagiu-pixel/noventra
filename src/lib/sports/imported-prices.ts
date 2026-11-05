@@ -4,6 +4,7 @@ import type { Statement } from '../d1/client';
 import type { Fixture, MarketQuote, MarketType } from './types';
 import { sameMatch } from './the-odds-prices';
 import { csLabel, isCsKey, swapSide } from '../cs/markets';
+import { historyStatements } from './odds-movement';
 import { sameCsMatch } from '../cs/teams';
 
 /**
@@ -389,6 +390,12 @@ export async function importStakeExport(raw: unknown) {
     params: [e.sourceId, e.home, e.away, e.league, e.kickoff, JSON.stringify(e.markets), e.capturedAt, new Date().toISOString(), e.category ?? null, e.tournamentSlug ?? null],
   }));
   for (let i = 0; i < statements.length; i += 50) await atomic(statements.slice(i, i + 50));
+  // Odds movement: the main prices of this capture; a missing table must never break an import.
+  try {
+    const hist = historyStatements(upcoming);
+    for (let i = 0; i < hist.length; i += 50) await atomic(hist.slice(i, i + 50));
+    await atomic([{ text: `DELETE FROM imported_odds_history WHERE kickoff_utc < $1`, params: [new Date(Date.now() - 7 * 24 * 3600_000).toISOString()] }]);
+  } catch { /* history is optional */ }
   await atomic([{ text: `DELETE FROM imported_odds WHERE kickoff_utc < $1`, params: [new Date(Date.now() - 6 * 3600_000).toISOString()] }]);
   const matched = await repriceCatalog();
   // Football Stake lists but the ESPN schedule does not: fixtures of their own, so the agents see the whole offer.

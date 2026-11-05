@@ -2,11 +2,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 
+/** Leagues pinned at the top, in this order; every `top10` league follows. */
+export const PINNED_LEAGUES = ['UCL', 'UEL', 'UECL', 'ROU1'];
 export type LeagueOption = { id: string; name: string; country: string; top10?: boolean; count: number };
 
 /**
- * Drop-down with a checkbox per league, grouped by country. An empty selection means "all leagues" and shows every league ticked
- * (owner request 03.11); un-ticking one then selects all the others.
+ * Drop-down with a checkbox per league. At the top a „Principale” block: Champions / Europa / Conference League, the Romanian SuperLiga and the other
+ * top-10 leagues (owner request 06.11); then every league grouped by country. An empty selection means "all leagues" and shows every league ticked;
+ * while it is untouched, ticking a league keeps ONLY that one (06.11, replaces the 03.11 "un-tick one = all the others"); after that every click toggles.
  * Leagues without fixtures in the current window are listed last and dimmed.
  */
 export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabel = 'Toate ligile' }: { leagues: LeagueOption[]; value: string[]; onChange: (ids: string[]) => void; label?: string; allLabel?: string }) {
@@ -22,19 +25,26 @@ export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabe
   }, [open]);
 
   const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const principal = useMemo(() => {
+    const rank = (l: LeagueOption) => { const i = PINNED_LEAGUES.indexOf(l.id); return i >= 0 ? i : PINNED_LEAGUES.length; };
+    return leagues.filter((l) => PINNED_LEAGUES.includes(l.id) || l.top10).sort((a, b) => rank(a) - rank(b) || a.country.localeCompare(b.country, 'ro'));
+  }, [leagues]);
+  const principalIds = useMemo(() => new Set(principal.map((l) => l.id)), [principal]);
   const groups = useMemo(() => {
-    const shown = leagues.filter((l) => !q || norm(`${l.country} ${l.name}`).includes(norm(q)));
+    // Without a search the pinned leagues live only in the „Principale” block; a search lists them again with their country.
+    const shown = leagues.filter((l) => (q ? norm(`${l.country} ${l.name}`).includes(norm(q)) : !principalIds.has(l.id)));
     const by = new Map<string, LeagueOption[]>();
     for (const l of [...shown].sort((a, b) => (b.count > 0 ? 1 : 0) - (a.count > 0 ? 1 : 0) || a.country.localeCompare(b.country, 'ro') || a.name.localeCompare(b.name, 'ro'))) by.set(l.country, [...(by.get(l.country) ?? []), l]);
     return [...by.entries()];
-  }, [leagues, q]);
+  }, [leagues, q, principalIds]);
 
   const everything = !value.length;
   const set = new Set(everything ? leagues.map((l) => l.id) : value);
   const commit = (ids: string[]) => onChange(leagues.every((l) => ids.includes(l.id)) ? [] : ids);
   const current = [...set];
-  const toggle = (id: string) => commit(set.has(id) ? current.filter((x) => x !== id) : [...current, id]);
-  const toggleCountry = (ids: string[]) => commit(ids.every((id) => set.has(id)) ? current.filter((x) => !ids.includes(x)) : [...new Set([...current, ...ids])]);
+  // Untouched "all leagues": a click picks just that league (or country); afterwards clicks add and remove.
+  const toggle = (id: string) => (everything ? onChange([id]) : commit(set.has(id) ? current.filter((x) => x !== id) : [...current, id]));
+  const toggleCountry = (ids: string[]) => (everything ? onChange(ids) : commit(ids.every((id) => set.has(id)) ? current.filter((x) => !ids.includes(x)) : [...new Set([...current, ...ids])]));
   const matches = value.length ? leagues.filter((l) => set.has(l.id)).reduce((s, l) => s + l.count, 0) : leagues.reduce((s, l) => s + l.count, 0);
   const summary = !value.length ? allLabel : value.length === 1 ? leagues.find((l) => l.id === value[0])?.name ?? '1 ligă' : `${value.length} ligi`;
 
@@ -55,10 +65,22 @@ export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabe
           </div>
           <div className="flex flex-wrap gap-1.5 border-b border-line p-2">
             <button type="button" onClick={() => onChange([])} className={`chip ${!value.length ? 'text-cyan' : 'text-muted'}`}>{allLabel}</button>
+            <button type="button" onClick={() => onChange(principal.map((l) => l.id))} className="chip text-muted">Principale</button>
             <button type="button" onClick={() => onChange(leagues.filter((l) => l.top10).map((l) => l.id))} className="chip text-muted">Top 10</button>
             <button type="button" onClick={() => onChange(leagues.filter((l) => l.count > 0).map((l) => l.id))} className="chip text-muted">Doar cu meciuri</button>
           </div>
           <div role="listbox" aria-multiselectable="true" className="max-h-[min(55vh,400px)] overflow-y-auto p-1">
+            {!q && principal.length > 0 && (() => {
+              const ids = principal.map((l) => l.id); const all = ids.every((id) => set.has(id));
+              return (
+                <div className="py-1">
+                  <button type="button" onClick={() => toggleCountry(ids)} className="flex w-full items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-cyan hover:text-text">
+                    Principale<span className={all ? 'text-cyan' : 'text-muted'}>{all ? 'debifează' : 'bifează tot'}</span>
+                  </button>
+                  {principal.map((l) => <LeagueRow key={l.id} l={l} on={set.has(l.id)} onToggle={() => toggle(l.id)} showCountry />)}
+                </div>
+              );
+            })()}
             {groups.map(([country, ls]) => {
               const ids = ls.map((l) => l.id); const all = ids.every((id) => set.has(id));
               return (
@@ -66,17 +88,7 @@ export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabe
                   <button type="button" onClick={() => toggleCountry(ids)} className="flex w-full items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-muted hover:text-text">
                     {country}<span className={all ? 'text-cyan' : ''}>{all ? 'debifează' : 'bifează tot'}</span>
                   </button>
-                  {ls.map((l) => {
-                    const on = set.has(l.id);
-                    return (
-                      <button key={l.id} type="button" role="option" aria-selected={on} onClick={() => toggle(l.id)}
-                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-ink ${l.count ? '' : 'opacity-45'}`}>
-                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? 'border-transparent bg-cyan text-ink' : 'border-line'}`}>{on && <Check size={11} strokeWidth={3} />}</span>
-                        <span className="min-w-0 flex-1 truncate">{l.name}</span>
-                        <span className="tabular text-xs text-muted">{l.count}</span>
-                      </button>
-                    );
-                  })}
+                  {ls.map((l) => <LeagueRow key={l.id} l={l} on={set.has(l.id)} onToggle={() => toggle(l.id)} />)}
                 </div>
               );
             })}
@@ -85,5 +97,16 @@ export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabe
         </div>
       )}
     </div>
+  );
+}
+
+function LeagueRow({ l, on, onToggle, showCountry }: { l: LeagueOption; on: boolean; onToggle: () => void; showCountry?: boolean }) {
+  return (
+    <button type="button" role="option" aria-selected={on} onClick={onToggle}
+      className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-ink ${l.count ? '' : 'opacity-45'}`}>
+      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? 'border-transparent bg-cyan text-ink' : 'border-line'}`}>{on && <Check size={11} strokeWidth={3} />}</span>
+      <span className="min-w-0 flex-1 truncate">{l.name}{showCountry && <span className="ml-1.5 text-xs text-muted">{l.country}</span>}</span>
+      <span className="tabular text-xs text-muted">{l.count}</span>
+    </button>
   );
 }

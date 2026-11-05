@@ -18,8 +18,15 @@ export type MatchBrief = {
   standings: { home: { rank: number | null; points: number | null; played: number | null } | null; away: { rank: number | null; points: number | null; played: number | null } | null };
   lineups: { home: string[] | null; away: string[] | null; formationHome?: string | null; formationAway?: string | null };
   flags: BriefFlag[];
+  /** Days since each team's last known match and matches in the last 14 days (06.11); null when the history has nothing before kickoff. */
+  rest?: { home: RestInfo | null; away: RestInfo | null };
+  /** What the table says is at stake for each side (06.11); only where the source gives the whole table. */
+  stakes?: { home: string | null; away: string | null };
+  /** How Stake's main prices moved across the stored captures (06.11); null when there is a single capture or none. */
+  movement?: string | null;
   missing: string[];
 };
+export type RestInfo = { days: number; last14: number };
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {});
@@ -52,6 +59,42 @@ export function lineupsFromSummary(summary: Obj): MatchBrief['lineups'] {
   return { home: h.names, away: a.names, formationHome: h.formation, formationAway: a.formation };
 }
 
+/** Pure: rest days before kickoff and congestion, from the team's completed matches already loaded (all competitions the source lists). */
+export function restInfo(matches: HistoricalMatch[], kickoff: string): RestInfo | null {
+  const ko = Date.parse(kickoff);
+  const before = matches.map((m) => Date.parse(m.date)).filter((t) => Number.isFinite(t) && t < ko).sort((a, b) => b - a);
+  if (!before.length) return null;
+  return { days: Math.max(0, Math.round(((ko - before[0]) / 86_400_000) * 10) / 10), last14: before.filter((t) => ko - t <= 14 * 86_400_000).length };
+}
+export const restText = (r: RestInfo | null) => (r ? `${r.days} zile de la ultimul meci, ${r.last14} meciuri în ultimele 14 zile${r.days < 3.5 ? ' — ODIHNĂ SCURTĂ' : ''}${r.last14 >= 4 ? ' — PROGRAM ÎNCĂRCAT' : ''}` : 'n/d');
+
+type TableRow = { id: string; rank: number; points: number; played: number };
+/** The league table from an ESPN summary (all teams), or [] when the source has none. */
+export function tableFromSummary(summary: Obj | null): TableRow[] {
+  const out: TableRow[] = [];
+  for (const g of arr(obj(summary?.standings).groups)) for (const e of arr(obj(obj(g).standings).entries).map(obj)) {
+    const stat = (n: string) => { const v = Number(arr(e.stats).map(obj).find((x) => x.name === n)?.value); return Number.isFinite(v) ? v : null; };
+    const rank = stat('rank'), points = stat('points'), played = stat('gamesPlayed');
+    if (str(e.id) && rank !== null && points !== null && played !== null) out.push({ id: str(e.id), rank, points, played });
+  }
+  return out;
+}
+/** Pure: what is at stake for a team given the table. Wording stays factual (points to the leader, to the bottom three); no guess about promotion or cups. */
+export function stakesText(table: TableRow[], teamId: string | undefined): string | null {
+  const me = teamId ? table.find((t) => t.id === teamId) : undefined;
+  if (!me || table.length < 8) return null;
+  const n = table.length, leader = Math.max(...table.map((t) => t.points));
+  const ranked = [...table].sort((a, b) => a.rank - b.rank);
+  const safe = ranked[n - 4]; // last team outside the bottom three
+  if (me.played < 6) return `început de sezon (${me.played} meciuri jucate), miza încă neclară`;
+  const behind = leader - me.points;
+  if (me.rank <= 3 && behind <= 4) return `în lupta pentru titlu (locul ${me.rank}, ${behind === 0 ? 'lider' : `${behind} pct sub lider`})`;
+  if (me.rank > n - 3) return `în zona retrogradării (locul ${me.rank} din ${n}, ${safe.points - me.points} pct sub primul loc sigur)`;
+  if (me.rank > n - 6) return `aproape de retrogradare (locul ${me.rank} din ${n}, doar ${me.points - safe.points} pct peste zona roșie)`;
+  if (me.rank <= 6) return `în partea de sus (locul ${me.rank}, ${behind} pct sub lider)`;
+  return `mijlocul clasamentului (locul ${me.rank} din ${n}), miză mică`;
+}
+
 const fmtMatch = (m: HistoricalMatch): BriefMatch => ({ date: m.date, result: m.result, text: `${m.result === 'W' ? 'V' : m.result === 'D' ? 'E' : 'Î'} ${m.goalsFor}-${m.goalsAgainst} vs ${m.opponent}` });
 
 const ABSENCE = /injur|injury|ruled out|sidelined|suspend|ban\b|doubt|absent|miss(es|ing)?\b|accident|indisponibil|absen|suspendat|lipsește|lipsesc|out for/i;
@@ -75,6 +118,7 @@ export function buildMatchBrief(input: {
   homeMatches: HistoricalMatch[]; awayMatches: HistoricalMatch[];
   standings: MatchBrief['standings'];
   news?: { home: NewsItem[]; away: NewsItem[] };
+  homeTeamId?: string; awayTeamId?: string; movement?: string | null;
 }): MatchBrief {
   const before = (m: HistoricalMatch) => Date.parse(m.date) < Date.parse(input.kickoff);
   const recent = (ms: HistoricalMatch[]) => [...ms].filter(before).sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
@@ -90,7 +134,10 @@ export function buildMatchBrief(input: {
   if (!input.standings.home || !input.standings.away) missing.push('Clasamentul nu este disponibil pentru ambele echipe.');
   if (!lineups.home || !lineups.away) missing.push('Echipele de start nu sunt anunțate încă (de obicei apar cu ~1h înainte).');
   if (!flags.some((f) => f.kind === 'absențe')) missing.push('Nicio știre recentă despre accidentări sau suspendări.');
-  return { home: input.home, away: input.away, h2h, homeAtHome, awayAway, standings: input.standings, lineups, flags, missing };
+  const table = tableFromSummary(input.summary);
+  const rest = { home: restInfo(input.homeMatches, input.kickoff), away: restInfo(input.awayMatches, input.kickoff) };
+  const stakes = { home: stakesText(table, input.homeTeamId), away: stakesText(table, input.awayTeamId) };
+  return { home: input.home, away: input.away, h2h, homeAtHome, awayAway, standings: input.standings, lineups, flags, rest, stakes, movement: input.movement ?? null, missing };
 }
 
 const pos = (s: MatchBrief['standings']['home']) => (s && s.rank ? `locul ${s.rank}${s.points !== null ? `, ${s.points} pct` : ''}${s.played ? ` din ${s.played} meciuri` : ''}` : 'n/d');
@@ -111,6 +158,9 @@ export function briefForPrompt(b: MatchBrief | undefined) {
     oaspetiiDeplasareUltimele5: form(b.awayAway),
     clasament: `${b.home}: ${pos(b.standings.home)} · ${b.away}: ${pos(b.standings.away)}`,
     titulari: b.lineups.home && b.lineups.away ? `${b.home}: ${b.lineups.home.join(', ')} | ${b.away}: ${b.lineups.away.join(', ')}` : 'neanunțați',
+    odihna: `${b.home}: ${restText(b.rest?.home ?? null)} · ${b.away}: ${restText(b.rest?.away ?? null)}`,
+    miza: b.stakes?.home || b.stakes?.away ? `${b.home}: ${b.stakes?.home ?? 'n/d'} · ${b.away}: ${b.stakes?.away ?? 'n/d'}` : 'n/d',
+    miscareaCotelor: b.movement ?? 'o singură captură, fără istoric încă',
     absenteSiProbleme: b.flags.length ? b.flags.map((f) => `${f.team} (${f.kind}): ${f.title}`) : ['nicio știre de absențe/probleme financiare'],
   };
 }
@@ -131,6 +181,9 @@ export function briefForChat(b: MatchBrief) {
     `✈ ${b.away} în deplasare (ultimele 5): ${form(b.awayAway)}`,
     `📊 Clasament: ${b.home} ${pos(b.standings.home)} · ${b.away} ${pos(b.standings.away)}`,
     `👕 Titulari: ${b.lineups.home && b.lineups.away ? `${b.home}${b.lineups.formationHome ? ` (${b.lineups.formationHome})` : ''}: ${b.lineups.home.join(', ')} · ${b.away}${b.lineups.formationAway ? ` (${b.lineups.formationAway})` : ''}: ${b.lineups.away.join(', ')}` : 'neanunțați încă'}`,
+    `😴 Odihnă: ${b.home}: ${restText(b.rest?.home ?? null)} · ${b.away}: ${restText(b.rest?.away ?? null)}`,
+    `🎯 Miza: ${b.stakes?.home || b.stakes?.away ? `${b.home}: ${b.stakes?.home ?? 'n/d'} · ${b.away}: ${b.stakes?.away ?? 'n/d'}` : 'n/d'}`,
+    `📉 Mișcarea cotelor: ${b.movement ?? 'încă o singură captură'}`,
     `🩹 Absențe / condiție: ${b.flags.filter((f) => f.kind !== 'financiar').map((f) => `${f.team}: ${f.title}`).join(' · ') || 'nicio știre recentă'}`,
     `💰 Probleme financiare: ${b.flags.filter((f) => f.kind === 'financiar').map((f) => `${f.team}: ${f.title}`).join(' · ') || 'nimic raportat în presă'}`,
   ];
