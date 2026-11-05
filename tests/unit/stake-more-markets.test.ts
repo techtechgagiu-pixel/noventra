@@ -90,3 +90,23 @@ describe('labels', () => {
     expect(labelFor('EG:3+', 'A', 'B')).toContain('3 sau mai multe');
   });
 });
+
+describe('„sub” only when ticked (06.11)', () => {
+  it('stays banned without the tick, lifts only the ticked line', () => {
+    expect(isBannedMarket('TOTAL:UNDER:1.5')).toBe(true);
+    expect(isBannedMarket('TOTAL:UNDER:1.5', [])).toBe(true);
+    expect(isBannedMarket('TOTAL:UNDER:1.5', ['OVER15'])).toBe(true);
+    expect(isBannedMarket('TOTAL:UNDER:1.5', ['UNDER15'])).toBe(false);
+    expect(isBannedMarket('TOTAL:UNDER:3.5', ['UNDER15'])).toBe(true);
+    expect(isBannedMarket('TOTAL:UNDER:3.5', ['UNDER35'])).toBe(false);
+    expect(isBannedMarket('TT:HOME:UNDER:1.5', ['UNDER15', 'UNDER25', 'UNDER35'])).toBe(true);
+    expect(isBannedMarket('X2T:HOME:UNDER:2.5', ['UNDER25'])).toBe(true);
+    expect(isBannedMarket('DC:12', ['UNDER15'])).toBe(true);
+    expect(isBannedMarket('BTTS:NO', ['UNDER15'])).toBe(true);
+  });
+  it('the checklist only lets the ticked under line through', () => {
+    expect(marketAllowedBy(['UNDER15'], 'TOTAL:UNDER:1.5')).toBe(true);
+    expect(marketAllowedBy(['UNDER15'], 'TOTAL:UNDER:2.5')).toBe(false);
+    expect(marketAllowedBy(['UNDER15', 'OVER15'], 'TOTAL:OVER:1.5')).toBe(true);
+  });
+});

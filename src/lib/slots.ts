@@ -63,6 +63,10 @@ export const MARKET_FAMILIES = [
   { id: 'OVER15', label: 'Peste 1,5 goluri', short: 'peste 1,5', prefix: 'TOTAL', test: (k: string) => k === 'TOTAL:OVER:1.5' },
   { id: 'OVER25', label: 'Peste 2,5 goluri', short: 'peste 2,5', prefix: 'TOTAL', test: (k: string) => k === 'TOTAL:OVER:2.5' },
   { id: 'OVER35', label: 'Peste 3,5 goluri', short: 'peste 3,5', prefix: 'TOTAL', test: (k: string) => k === 'TOTAL:OVER:3.5' },
+  // Owner decision 06.11: „Sub” stays banned everywhere, except the lines ticked here for one ticket.
+  { id: 'UNDER15', label: 'Sub 1,5 goluri', short: 'sub 1,5', prefix: 'TOTAL', test: (k: string) => k === 'TOTAL:UNDER:1.5' },
+  { id: 'UNDER25', label: 'Sub 2,5 goluri', short: 'sub 2,5', prefix: 'TOTAL', test: (k: string) => k === 'TOTAL:UNDER:2.5' },
+  { id: 'UNDER35', label: 'Sub 3,5 goluri', short: 'sub 3,5', prefix: 'TOTAL', test: (k: string) => k === 'TOTAL:UNDER:3.5' },
   { id: 'TOTALS', label: 'Alte totaluri de goluri (peste)', short: 'alte totaluri', prefix: 'TOTAL', test: (k: string) => /^TOTAL:OVER:/.test(k) && !/:(1\.5|2\.5|3\.5)$/.test(k) },
   { id: 'TEAMTOT', label: 'Goluri pe echipă (peste)', short: 'goluri pe echipă', prefix: 'TT', test: (k: string) => /^TT:[A-Z]+:OVER:/.test(k) },
   { id: 'RESULT', label: 'Rezultat final 1X2', short: '1X2', prefix: '1X2', test: (k: string) => k.startsWith('1X2:') },
@@ -80,6 +84,9 @@ export const marketAllowedBy = (only: CustomConfig['onlyMarkets'], key: string) 
   !only?.length || MARKET_FAMILIES.some((f) => only.includes(f.id) && f.test(key));
 /** The variety rule (at most half of the legs from one market family) can only hold with 3 or more families to choose from. */
 export const needsVarietyOverride = (only: CustomConfig['onlyMarkets']) => !!only?.length && new Set(MARKET_FAMILIES.filter((f) => only.includes(f.id)).map((f) => f.prefix)).size <= 2;
+/** The „sub” total the ticket's owner explicitly ticked (they lift the ban for that exact line only). */
+export const underAllowedBy = (only: CustomConfig['onlyMarkets'], key: string) =>
+  !!only?.length && /^TOTAL:UNDER:/.test(key) && MARKET_FAMILIES.some((f) => f.id.startsWith('UNDER') && only.includes(f.id) && f.test(key));
 export const CUSTOM_LIMIT_PER_DAY = 20;
 /** Owner decision 28.10: the owner (admin code or owner Google account) may create 30 custom tickets a day; everyone else 1. */
 export const OWNER_CUSTOM_LIMIT = 30;
