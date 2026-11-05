@@ -25,8 +25,8 @@ describe('paid answers are not thrown away for one malformed element', () => {
 });
 
 describe('compact facts', () => {
-  it('sends at most 12 markets with probabilities rounded to 2 decimals', () => {
-    const markets = Array.from({ length: 20 }, (_, i) => ({ key: `DC:${i}`, label: `L${i}`, odds: 1.2 + i / 100, bookmaker: 'B', fairMarketProbability: 0.71234, modelProbability: 0.6789, estimatedProbability: 0.5 + i / 100 + 0.00123, expectedValue: -0.04321 }));
+  it('sends at most MAX_FACT_MARKETS markets with probabilities rounded to 2 decimals', () => {
+    const markets = Array.from({ length: 80 }, (_, i) => ({ key: `DC:${i}`, label: `L${i}`, odds: 1.2 + i / 100, bookmaker: 'B', fairMarketProbability: 0.71234, modelProbability: 0.6789, estimatedProbability: 0.5 + i / 100 + 0.00123, expectedValue: -0.04321 }));
     const team = { team: 'A', sample: 8, record: { w: 4, d: 2, l: 2 }, goalsForPerMatch: 1.5, goalsAgainstPerMatch: 1, shotsOnTargetFor: 4, shotsOnTargetAgainst: 3, finishingDelta: 0.12345, resultsVsPerformance: 'ok', recent: [], anomalies: [] };
     const s = { fixture: { id: 'espn:1', home: 'A', away: 'B', league: 'L', kickoff: '2026-11-01T12:00:00Z' }, standings: { home: null, away: null }, dossier: { home: team, away: { ...team, team: 'B' }, missing: [] }, model: { lambdaHome: 1.23456, lambdaAway: 0.98765, uncertainty: 'medie', bookmakerMargin1x2: 0.05432, markets }, odds: { bookmaker: 'B' }, brief: null } as never;
     const f = agentFacts(s, { minOdds: 1.1, maxOdds: 3 });

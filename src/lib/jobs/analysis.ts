@@ -11,9 +11,9 @@ import { underAllowedBy, type CustomConfig } from '../slots';
 /** `only` = the ticket's ticked market families: a ticked „Sub 1,5 / 2,5 / 3,5” lifts the ban for exactly that line. */
 export const isBannedMarket = (key: string | null, only?: CustomConfig['onlyMarkets']) => !!key && !underAllowedBy(only, key) && (/:UNDER(:|$)/.test(key) || key === 'DC:12' || key === 'BTTS:NO' || /^TBTTS:[A-Z]+:[\d.]+:NO$/.test(key));
 
-// Token economy (owner decision 28.10, widened 03.11): at most 16 selections per match, spread over every market type, probabilities rounded to 2 decimals.
+// Token economy (owner decision 28.10, widened 03.11 and 06.11 — "toată plaja de pronosticuri"): at most 60 selections per match (Stake's average is ~27, so nearly every match is sent whole), spread over every market type, probabilities rounded to 2 decimals.
 // Agents pick the safest selections anyway; the exact numbers stay in the snapshot and every threshold uses them.
-export const MAX_FACT_MARKETS = 16;
+export const MAX_FACT_MARKETS = 60;
 const r2 = (x: number | null | undefined) => (x === null || x === undefined || !Number.isFinite(x) ? x ?? null : Math.round(x * 100) / 100);
 /** Keeps up to `max` selections with a wide spread (owner request 03.11, „dintr-o plajă mai largă”): the most likely selection of every market type
  *  first (1X2, double chance, goals, both teams, handicap, corners...), then the second most likely of each, and so on; original order kept. */
