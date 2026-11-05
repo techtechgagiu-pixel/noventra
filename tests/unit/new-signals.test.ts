@@ -80,21 +80,21 @@ describe('unanimity (06.11)', () => {
   it('4 of 5 passes the usual threshold but not unanimity', () => {
     const team = [...four, vote('e', null)];
     expect(consensus(team, 2, 5, keys).outcome).toBe('QUALIFIED');
-    const u = consensus(team, 5, 5, keys, 'safest', true);
+    const u = consensus(team, 5, 5, keys, 'safest', 5);
     expect(u.outcome).not.toBe('QUALIFIED');
     expect(u.requiredVotes).toBe(5);
   });
   it('all 5 backing it qualifies, also through a safer selection they all imply', () => {
-    expect(consensus([...four, vote('e', '1X2:HOME')], 5, 5, keys, 'safest', true).outcome).toBe('QUALIFIED');
+    expect(consensus([...four, vote('e', '1X2:HOME')], 5, 5, keys, 'safest', 5).outcome).toBe('QUALIFIED');
     const mixed = [vote('a', '1X2:HOME'), vote('b', '1X2:HOME'), vote('c', 'DC:1X'), vote('d', 'DC:1X'), vote('e', '1X2:HOME')];
-    const c = consensus(mixed, 5, 5, keys, 'safest', true);
+    const c = consensus(mixed, 5, 5, keys, 'safest', 5);
     expect(c.outcome).toBe('QUALIFIED'); expect(c.marketKey).toBe('DC:1X'); // every vote implies 1X
   });
   it('an agent that did not answer breaks unanimity', () => {
-    expect(consensus(four, 5, 5, keys, 'safest', true).outcome).not.toBe('QUALIFIED');
+    expect(consensus(four, 5, 5, keys, 'safest', 5).outcome).not.toBe('QUALIFIED');
   });
   it('sends the one-dissenter case to debate', () => {
-    expect(contested([...four, vote('e', null)], keys, 5, 5, true)).toBe(true);
-    expect(contested([...four.slice(0, 3), vote('d', null), vote('e', null)], keys, 5, 5, true)).toBe(false);
+    expect(contested([...four, vote('e', null)], keys, 5, 5, 5)).toBe(true);
+    expect(contested([...four.slice(0, 3), vote('d', null), vote('e', null)], keys, 5, 5, 5)).toBe(false);
   });
 });

@@ -480,10 +480,17 @@ export function jobAgents(job: Pick<JobRow, 'config'>): AgentDefinition[] {
   return list.length ? list : VOTING_AGENTS.filter((a) => (LEGACY_VOTER_IDS as readonly string[]).includes(a.id));
 }
 
+/** Votes the ticket's owner fixed (06.11), 2..N; the first version of the option was a plain „toți agenții de acord” flag. null = the automatic threshold. */
+export function fixedVotes(job: Pick<JobRow, 'config'>): number | null {
+  const c = job.config.custom; const n = jobAgents(job).length;
+  const v = c?.minAgree ?? (c?.unanimous ? n : null);
+  return v && n >= 2 ? Math.min(n, Math.max(2, Math.round(v))) : null;
+}
+
 /** Votes needed for a selection: the global threshold for the full team, ~30% of a smaller custom team (min 1). */
 export function jobThreshold(job: Pick<JobRow, 'config'>): number {
   const n = jobAgents(job).length;
-  return job.config.custom?.unanimous ? n : customThreshold(n);
+  return fixedVotes(job) ?? customThreshold(n);
 }
 
 /** Price per leg that reaches the target with a comfortable number of legs (daily: minLegs+1, weekly: exactly 12). */
@@ -572,7 +579,7 @@ async function chooseDebate(job: JobRow, ids: string[], round: number) {
     const snap = snaps.find((s) => s.fixture.id === id);
     if (!snap) continue;
     const { counted: pos, keys } = guardPositions(job, snap, await latestPositions(job.id, id));
-    if (round === 1 ? contested(pos, keys, jobThreshold(job), jobAgents(job).length, !!job.config.custom?.unanimous) : (() => { const c = consensus(pos, jobThreshold(job), jobAgents(job).length, keys, jobPolicy(job).pick, !!job.config.custom?.unanimous); return c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1; })()) out.push(id);
+    if (round === 1 ? contested(pos, keys, jobThreshold(job), jobAgents(job).length, fixedVotes(job)) : (() => { const c = consensus(pos, jobThreshold(job), jobAgents(job).length, keys, jobPolicy(job).pick, fixedVotes(job)); return c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1; })()) out.push(id);
   }
   return out;
 }
@@ -593,7 +600,7 @@ async function stepBrain(job: JobRow, ids: string[]) {
   for (const s of await batchSnapshots(job, pending)) {
     const raw = await latestPositions(job.id, s.fixture.id);
     const { counted, keys } = guardPositions(job, s, raw);
-    const c = consensus(counted, threshold, jobAgents(job).length, keys, jobPolicy(job).pick, !!job.config.custom?.unanimous);
+    const c = consensus(counted, threshold, jobAgents(job).length, keys, jobPolicy(job).pick, fixedVotes(job));
     if (!c.shortlist.length) continue;
     const reasons = (key: string) => counted.filter((p) => p.marketKey === key && p.rationale).slice(0, 3).map((p) => `${agentById(p.agentId)?.name}: ${p.rationale.slice(0, 220)}`);
     items.push({
@@ -645,7 +652,7 @@ async function stepVote(job: JobRow, ids: string[]) {
     for (const p of raw) await recordEvent(job.id, { type: 'VOTE_SUBMITTED', stage: 'VOTING', agentId: p.agentId, fixtureId: s.fixture.id, payload: { decision: p.decision, marketKey: p.marketKey, round: p.round, model: `${p.provider}/${p.model}` } });
     const { counted: positions, setAside, keys } = guardPositions(job, s, raw);
     for (const v of setAside) await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage: 'VOTING', agentId: v.agentId, fixtureId: s.fixture.id, payload: { marketKey: v.marketKey, marketLabel: s.model.markets.find((m) => m.key === v.marketKey)?.label ?? null, reason: v.reason, note: 'Vot în afara caracterului agentului sau a regulilor de prudență — nenumărat.' } });
-    const c = consensus(positions, threshold, jobAgents(job).length, keys, jobPolicy(job).pick, !!job.config.custom?.unanimous);
+    const c = consensus(positions, threshold, jobAgents(job).length, keys, jobPolicy(job).pick, fixedVotes(job));
     const brain = job.checkpoint.brain?.[s.fixture.id];
     let brainNote = '';
     if (brain && c.shortlist.length) {
@@ -752,7 +759,7 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
       if (!bookmaker) return [];
       const repriced = { ...s, model: { ...s.model, markets: s.model.markets.map((m) => m.key === r.market_key ? { ...m, odds } : m) } };
       const { counted, keys } = guardPositions(job, repriced, await latestPositions(job.id, r.fixture_id));
-      const valid = consensus(counted, jobThreshold(job), jobAgents(job).length, keys, policy.pick, !!job.config.custom?.unanimous).shortlist.find((m) => m.key === r.market_key);
+      const valid = consensus(counted, jobThreshold(job), jobAgents(job).length, keys, policy.pick, fixedVotes(job)).shortlist.find((m) => m.key === r.market_key);
       if (!valid) return [];
       votesFor = valid.supporters.length;
     }
@@ -822,7 +829,7 @@ export function closestCustomTicket(job: Pick<JobRow, 'config' | 'target_odds'>,
 const maxOddsAgeMinutes = (source: string | null | undefined) => source === ODDSPAPI_SOURCE ? config.limits.oddspapiMaxAgeMinutes : source === 'the-odds-api' ? config.limits.oddsApiMaxAgeMinutes : source === IMPORT_SOURCE ? config.limits.importedOddsMaxAgeMinutes : config.limits.oddsMaxAgeMinutes;
 
 /** How many times a custom ticket keeps searching new matches on its own before it may end incomplete. */
-export const MAX_INLINE_EXTENSIONS = 4;
+export const MAX_INLINE_EXTENSIONS = 2;
 
 /**
  * Returns false when the ticket is not finished yet: a custom ticket that is short of selections searches new matches

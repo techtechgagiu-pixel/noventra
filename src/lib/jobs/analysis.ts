@@ -122,7 +122,7 @@ export function setVoteWeights(w: Map<string, number> | null) { voteWeights = w;
 const weightOf = (agentId: string) => voteWeights?.get(agentId) ?? 1;
 const EPS = 1e-9;
 
-export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 10, availableKeys?: Array<{ key: string; odds: number }>, pick: 'safest' | 'highest' = 'safest', unanimous = false): ConsensusResult {
+export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 10, availableKeys?: Array<{ key: string; odds: number }>, pick: 'safest' | 'highest' = 'safest', fixedVotes: number | null = null): ConsensusResult {
   const bets = positions.filter((p) => picksOf(p).length > 0);
   const noBet = positions.length - bets.length;
   const abstentions = totalAgents - positions.length;
@@ -130,15 +130,15 @@ export function consensus(positions: FinalPosition[], threshold: number, totalAg
   for (const b of bets) for (const pk of picksOf(b)) tally[pk] = (tally[pk] ?? 0) + 1;
   const refusedBy = new Set(positions.filter((p) => p.decision === 'NO_BET').map((p) => p.agentId));
   const cautiousVeto = CAUTIOUS_AGENTS.every((a) => refusedBy.has(a));
-  const required = unanimous ? totalAgents : cautiousVeto ? Math.max(threshold + 2, CAUTIOUS_VETO_VOTES) : threshold;
+  const required = fixedVotes !== null ? fixedVotes : cautiousVeto ? Math.max(threshold + 2, CAUTIOUS_VETO_VOTES) : threshold;
   const keys = availableKeys ?? [...new Set(bets.flatMap(picksOf))].map((key) => ({ key, odds: 0 }));
   const support = keys.map((k) => {
     const supporters = bets.filter((b) => picksOf(b).some((pk) => selectionImplies(pk, k.key))).map((b) => b.agentId);
     return { key: k.key, odds: k.odds, supporters, direct: tally[k.key] ?? 0, weight: Math.round(supporters.reduce((t, a) => t + weightOf(a), 0) * 100) / 100 };
   }).filter((s) => s.supporters.length > 0)
     .sort((a, b) => b.weight - a.weight || b.supporters.length - a.supporters.length || a.odds - b.odds || b.direct - a.direct);
-  // Unanimity (owner request 06.11): every agent of the team must back the selection; vote weights do not count.
-  const enough = (s: { weight: number; supporters: string[] }) => (unanimous ? s.supporters.length >= totalAgents : s.weight >= required - EPS);
+  // Owner request 06.11: the ticket's owner fixes how many agents must back a selection (2..all); vote weights do not count then.
+  const enough = (s: { weight: number; supporters: string[] }) => (fixedVotes !== null ? s.supporters.length >= fixedVotes : s.weight >= required - EPS);
   const qualified = pick === 'highest'
     ? support.filter(enough).sort((a, b) => b.odds - a.odds || b.weight - a.weight)[0]
     : support.find(enough);
@@ -176,9 +176,9 @@ export function characterViolation(
 }
 
 /** Fixtures that deserve a debate: a plausible consensus that is not already unanimous. */
-export function contested(positions: FinalPosition[], availableKeys?: Array<{ key: string; odds: number }>, threshold = 3, total = 10, unanimous = false) {
+export function contested(positions: FinalPosition[], availableKeys?: Array<{ key: string; odds: number }>, threshold = 3, total = 10, fixedVotes: number | null = null) {
   // Debate where it can change the outcome: one vote short of the threshold, or a qualified pick that the majority still rejects.
-  const c = consensus(positions, threshold, total, availableKeys, 'safest', unanimous);
+  const c = consensus(positions, threshold, total, availableKeys, 'safest', fixedVotes);
   return (c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1) || (c.outcome === 'QUALIFIED' && c.noBetVotes > total / 2);
 }
 
