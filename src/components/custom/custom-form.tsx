@@ -52,6 +52,20 @@ const STOPS = [20 / 60, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 3
 const dur = (h: number) => (h < 1 ? `${Math.round(h * 60)} min` : h < 24 ? `${h} h` : h % 24 === 0 ? `${h / 24} ${h === 24 ? 'zi' : 'zile'}` : `${Math.floor(h / 24)} ${h < 48 ? 'zi' : 'zile'} și ${h % 24} h`);
 const at = (h: number) => new Date(Date.now() + h * 3600_000).toLocaleString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
 const span = (a: number, b: number) => `${at(a)} – ${at(b)}`;
+/** Whole calendar days (Bucharest time): today, tomorrow, the day after, and the one after that, with the date in brackets. */
+const DAY_NAMES = ['Azi', 'Mâine', 'Poimâine', 'Răspoimâine'];
+const bucharestOffsetMs = (d: Date) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(d).map((x) => [x.type, Number(x.value)]));
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(d.getTime() / 1000) * 1000;
+};
+/** Hours from now at which day `k` starts and ends; the start is never earlier than 20 minutes from now. */
+function dayHours(k: number, now = new Date()) {
+  const off = bucharestOffsetMs(now);
+  const local = new Date(now.getTime() + off);
+  const startUtc = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + k) - off;
+  const hrs = (ms: number) => Math.round(((ms - now.getTime()) / 3600_000) * 100) / 100;
+  return { from: Math.max(20 / 60, hrs(startUtc)), to: Math.max(hrs(startUtc + 86_400_000), 20 / 60 + 1), label: new Date(startUtc + 12 * 3600_000).toLocaleDateString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Bucharest' }) };
+}
 
 export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_PER_DAY, limit = CUSTOM_LIMIT_PER_DAY }: { agents: AgentCard[]; topAgentIds?: string[]; remaining?: number; limit?: number }) {
   const router = useRouter();
@@ -62,7 +76,11 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const [legs, setLegs] = useState(4);
   const [fromI, setFromI] = useState(0); // owner request 31.10: from 20 minutes on by default
   const [toI, setToI] = useState(STOPS.indexOf(48));
-  const fromHours = STOPS[fromI], toHours = STOPS[toI];
+  const [day, setDay] = useState<number | null>(null); // owner request 05.11: pick a whole day (today … in 3 days) instead of an interval
+  const [minute, setMinute] = useState(0);
+  useEffect(() => { const t = setInterval(() => setMinute((m) => m + 1), 60_000); return () => clearInterval(t); }, []);
+  const dayWin = useMemo(() => (day === null ? null : dayHours(day)), [day, minute]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fromHours = dayWin ? dayWin.from : STOPS[fromI], toHours = dayWin ? dayWin.to : STOPS[toI];
   const win = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
   const [chosen, setChosen] = useState<string[]>(['victor', 'andrei', 'alex', 'robert', 'ioana']);
   const [leagues, setLeagues] = useState<string[]>([]);
@@ -170,7 +188,15 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
 
   </>);
   const fieldsetBlock = (<>
-          <fieldset className="mt-3 space-y-2" aria-label="Intervalul meciurilor">
+          <div className="mt-3" role="group" aria-label="Ziua meciurilor">
+            <p className="text-xs text-muted">Alege ziua meciurilor sau un interval liber.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" onClick={() => setDay(null)} aria-pressed={day === null} className={`chip ${day === null ? 'border-cyan text-cyan' : 'text-muted'}`}>Interval liber</button>
+              {DAY_NAMES.map((n, k) => <button key={n} type="button" onClick={() => setDay(k)} aria-pressed={day === k} className={`chip ${day === k ? 'border-cyan text-cyan' : 'text-muted'}`}>{n} <span className="tabular" suppressHydrationWarning>({dayHours(k).label})</span></button>)}
+            </div>
+          </div>
+          {dayWin ? <p className="mt-3 text-[11px] text-muted tabular" suppressHydrationWarning>Meciuri de {DAY_NAMES[day as number].toLowerCase()}: {span(fromHours, toHours)}</p> : null}
+          <fieldset className={`mt-3 space-y-2 ${dayWin ? 'hidden' : ''}`} aria-label="Intervalul meciurilor">
             <legend className="text-xs text-muted">Meciuri care încep între <strong className="text-text">peste {dur(fromHours)}</strong> și <strong className="text-text">peste {dur(toHours)}</strong></legend>
             <label className="block text-[11px] text-muted">De la
               <input type="range" min={0} max={STOPS.length - 2} value={fromI} onChange={(e) => { const v = Number(e.target.value); setFromI(v); if (toI <= v) setToI(v + 1); }} className="mt-1 w-full accent-cyan" aria-valuetext={`peste ${dur(fromHours)}`} />
