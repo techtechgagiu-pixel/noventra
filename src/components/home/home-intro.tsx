@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { ArrowUpRight, MessagesSquare, SlidersHorizontal, Ticket, Vote } from 'lucide-react';
-import { DebatePreview } from './debate-preview';
-import { HOME_EXAMPLE, HOME_EXAMPLE_MODELS } from '@/lib/home-example';
+import { DebateVideo } from './debate-video';
 import type { Thread } from '@/lib/home-reel';
 
 export function HomeIntro({ signedIn = false, thread, models }: { signedIn?: boolean; thread?: Thread; models?: Record<string, string> }) {
@@ -13,7 +12,7 @@ export function HomeIntro({ signedIn = false, thread, models }: { signedIn?: boo
       <div className="home-intro-actions"><Link href={signedIn ? '/?tab=custom' : '/login?next=custom'} className="btn btn-primary px-5 py-3.5"><Ticket size={19} aria-hidden />Creează bilet custom<ArrowUpRight size={17} aria-hidden /></Link><Link href={signedIn ? '/?tab=istoric' : '#cum-functioneaza'} className="home-secondary-link">{signedIn ? 'Vezi biletele create' : 'Cum funcționează'}</Link></div>
       <p className="home-intro-note">Alegi cota și numărul de meciuri. Poți schimba echipa, ligile și intervalul.{!signedIn && ' Te conectezi înainte de a porni analiza.'}</p>
     </div>
-    <DebatePreview thread={thread ?? HOME_EXAMPLE} models={thread ? models : HOME_EXAMPLE_MODELS} />
+    <DebateVideo />
   </section>;
 }
 
