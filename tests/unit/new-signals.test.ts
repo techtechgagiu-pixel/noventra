@@ -70,3 +70,31 @@ describe('the brief carries the new signals to the agents', () => {
     expect(p.miza).toBe('n/d');
   });
 });
+
+import { consensus, contested, type FinalPosition } from '../../src/lib/jobs/analysis';
+const vote = (agentId: string, marketKey: string | null): FinalPosition => ({ agentId, decision: marketKey ? 'BET_CANDIDATE' : 'NO_BET', marketKey, estimatedProbability: 0.7, confidence: 70, risk: 'mediu', round: 1, rationale: 'r', provider: 'p', model: 'm', alternatives: [] } as unknown as FinalPosition);
+const keys = [{ key: '1X2:HOME', odds: 1.8 }, { key: 'DC:1X', odds: 1.3 }];
+
+describe('unanimity (06.11)', () => {
+  const four = [vote('a', '1X2:HOME'), vote('b', '1X2:HOME'), vote('c', '1X2:HOME'), vote('d', '1X2:HOME')];
+  it('4 of 5 passes the usual threshold but not unanimity', () => {
+    const team = [...four, vote('e', null)];
+    expect(consensus(team, 2, 5, keys).outcome).toBe('QUALIFIED');
+    const u = consensus(team, 5, 5, keys, 'safest', true);
+    expect(u.outcome).not.toBe('QUALIFIED');
+    expect(u.requiredVotes).toBe(5);
+  });
+  it('all 5 backing it qualifies, also through a safer selection they all imply', () => {
+    expect(consensus([...four, vote('e', '1X2:HOME')], 5, 5, keys, 'safest', true).outcome).toBe('QUALIFIED');
+    const mixed = [vote('a', '1X2:HOME'), vote('b', '1X2:HOME'), vote('c', 'DC:1X'), vote('d', 'DC:1X'), vote('e', '1X2:HOME')];
+    const c = consensus(mixed, 5, 5, keys, 'safest', true);
+    expect(c.outcome).toBe('QUALIFIED'); expect(c.marketKey).toBe('DC:1X'); // every vote implies 1X
+  });
+  it('an agent that did not answer breaks unanimity', () => {
+    expect(consensus(four, 5, 5, keys, 'safest', true).outcome).not.toBe('QUALIFIED');
+  });
+  it('sends the one-dissenter case to debate', () => {
+    expect(contested([...four, vote('e', null)], keys, 5, 5, true)).toBe(true);
+    expect(contested([...four.slice(0, 3), vote('d', null), vote('e', null)], keys, 5, 5, true)).toBe(false);
+  });
+});
