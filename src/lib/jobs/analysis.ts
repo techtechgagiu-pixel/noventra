@@ -3,11 +3,13 @@ import { briefForPrompt } from '../scout/match-brief';
 import { selectionImplies } from '../stats/engine';
 import type { Prediction, Revision } from '../ai/agents';
 import type { FixtureSnapshot } from './types';
+import { underAllowedBy, type CustomConfig } from '../slots';
 
 /** Compact, identical factual snapshot for all six agents (token-efficient). */
 /** User rule (2026-10-21): no „Under” selections at all — match totals or team totals. */
 /** Owner bans: every "under" line, (02.11) the double chance "12" (1 or 2 at full time, the most picked market) and (06.11) „Ambele echipe marchează – NU”. */
-export const isBannedMarket = (key: string | null) => !!key && (/:UNDER(:|$)/.test(key) || key === 'DC:12' || key === 'BTTS:NO' || /^TBTTS:[A-Z]+:[\d.]+:NO$/.test(key));
+/** `only` = the ticket's ticked market families: a ticked „Sub 1,5 / 2,5 / 3,5” lifts the ban for exactly that line. */
+export const isBannedMarket = (key: string | null, only?: CustomConfig['onlyMarkets']) => !!key && !underAllowedBy(only, key) && (/:UNDER(:|$)/.test(key) || key === 'DC:12' || key === 'BTTS:NO' || /^TBTTS:[A-Z]+:[\d.]+:NO$/.test(key));
 
 // Token economy (owner decision 28.10, widened 03.11): at most 16 selections per match, spread over every market type, probabilities rounded to 2 decimals.
 // Agents pick the safest selections anyway; the exact numbers stay in the snapshot and every threshold uses them.
@@ -26,7 +28,7 @@ export function topMarkets<T extends { key: string; estimatedProbability: number
   return ms.filter((m) => keep.has(m.key));
 }
 
-export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number } = { minOdds: 1.12, maxOdds: 6 }) {
+export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number } = { minOdds: 1.12, maxOdds: 6 }, only?: CustomConfig['onlyMarkets']) {
   const d = s.dossier;
   const team = (t: typeof d.home) => ({
     team: t.team, sample: t.sample, record: `${t.record.w}V-${t.record.d}E-${t.record.l}Î`,
@@ -45,7 +47,7 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
     scout: { home: team(d.home), away: team(d.away) },
     model: { lambdaHome: r2(s.model.lambdaHome), lambdaAway: r2(s.model.lambdaAway), uncertainty: s.model.uncertainty, margin1x2: r2(s.model.bookmakerMargin1x2) },
     // Token economy: at most MAX_FACT_MARKETS selections per match, spread over the market types (the most likely of each first).
-    markets: topMarkets(s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds)).map((m) => ({ key: m.key, label: m.label, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: r2(m.fairMarketProbability), model: r2(m.modelProbability), est: r2(m.estimatedProbability), ev: r2(m.expectedValue) })),
+    markets: topMarkets(s.model.markets.filter((m) => !isBannedMarket(m.key, only) && m.odds >= band.minOdds && m.odds <= band.maxOdds)).map((m) => ({ key: m.key, label: m.label, odds: m.odds, book: m.bookmaker === s.odds.bookmaker ? undefined : m.bookmaker, fair: r2(m.fairMarketProbability), model: r2(m.modelProbability), est: r2(m.estimatedProbability), ev: r2(m.expectedValue) })),
     missing: d.missing.filter((x) => !/xG|Accident/.test(x)).slice(0, 2),
     /** Hanțu's research brief: every agent must weigh h2h, home/away form, table, absences and finances. */
     researchBrief: briefForPrompt(s.brief),
@@ -53,7 +55,7 @@ export function agentFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds:
 }
 
 /** Nemotron 3.5 Super VL's facts: only real headlines (indexed), prices in his band and standings — no statistics. */
-export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
+export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }, only?: CustomConfig['onlyMarkets']) {
   const n = s.news ?? { home: [], away: [], errors: [] };
   let i = 0;
   const fmt = (x: { title: string; source: string | null; publishedAt: string }) => `[H${++i}] ${x.publishedAt.slice(0, 10)} · ${x.source ?? 'sursă necunoscută'}: ${x.title}`;
@@ -65,16 +67,16 @@ export function newsFacts(s: FixtureSnapshot, band: { minOdds: number; maxOdds: 
     standings: { home: s.standings.home, away: s.standings.away },
     researchBrief: briefForPrompt(s.brief),
     news: { [s.fixture.home]: n.home.map(fmt), [s.fixture.away]: n.away.map(fmt), note: n.home.length + n.away.length === 0 ? 'Nicio știre relevantă găsită în ultimele zile.' : undefined },
-    markets: s.model.markets.filter((m) => !isBannedMarket(m.key) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, label: m.label, odds: m.odds, fair: r2(m.fairMarketProbability) })),
+    markets: s.model.markets.filter((m) => !isBannedMarket(m.key, only) && m.odds >= band.minOdds && m.odds <= band.maxOdds).map((m) => ({ key: m.key, label: m.label, odds: m.odds, fair: r2(m.fairMarketProbability) })),
   };
 }
 
 /** Atlas cross-checks sourced news with statistics; Nemotron 3.5 Super VL keeps his news-only role. */
-export function factsForAgent(id: string, s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }) {
+export function factsForAgent(id: string, s: FixtureSnapshot, band: { minOdds: number; maxOdds: number }, only?: CustomConfig['onlyMarkets']) {
   if (s.fixture.provider === 'pandascore') return csFacts(s, band); // Counter-Strike: one set of facts for everyone
-  if (id === 'hantu') return newsFacts(s, band);
-  const facts = agentFacts(s, band);
-  return id === 'atlas' ? { ...facts, news: newsFacts(s, band).news } : facts;
+  if (id === 'hantu') return newsFacts(s, band, only);
+  const facts = agentFacts(s, band, only);
+  return id === 'atlas' ? { ...facts, news: newsFacts(s, band, only).news } : facts;
 }
 
 export type FinalPosition = { agentId: string; decision: 'BET_CANDIDATE' | 'NO_BET'; marketKey: string | null; estimatedProbability: number | null; confidence: number; risk: string; round: number; rationale: string; provider: string; model: string;
@@ -157,10 +159,11 @@ export function characterViolation(
   agent: { name: string; maxOdds: number; minProbability: number; blockedFamilies?: string[] },
   policy: { minOdds: number; maxOdds: number; minProbability: number; agentCapBonus?: number },
   market: { odds: number; estimatedProbability: number | null } | undefined,
+  only?: CustomConfig['onlyMarkets'],
 ): string | null {
   if (p.decision !== 'BET_CANDIDATE' || !p.marketKey) return null;
   if (!market) return 'piața nu există în cotele observate';
-  if (isBannedMarket(p.marketKey)) return p.marketKey === 'DC:12' ? 'șansa dublă „12” este interzisă' : 'pronosticurile „sub” sunt interzise';
+  if (isBannedMarket(p.marketKey, only)) return p.marketKey === 'DC:12' ? 'șansa dublă „12” este interzisă' : 'pronosticurile „sub” sunt interzise';
   const family = p.marketKey.split(':')[0];
   if (agent.blockedFamilies?.includes(family)) return `${agent.name} este în antrenament: tipul de pariu ${family} îi este închis (pierdea des pe el)`;
   const cap = Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds);

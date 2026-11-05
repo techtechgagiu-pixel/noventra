@@ -372,7 +372,7 @@ async function runAgent(job: JobRow, agent: AgentDefinition, ids: string[], roun
   const policy = jobPolicy(job);
   const band = { minOdds: policy.minOdds, maxOdds: Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds) };
   const facts: Array<{ fixtureId: string; match: string; markets: Array<{ key: string; odds: number; est?: number | null; ev?: number | null }> }> =
-    snaps.map((s) => factsForAgent(agent.id, s, band));
+    snaps.map((s) => factsForAgent(agent.id, s, band, job.config.custom?.onlyMarkets));
   const review = job.config.review;
   if (review) for (const f of facts as Array<Record<string, unknown> & { fixtureId: string; markets: Array<{ key: string; odds: number; est?: number | null; ev?: number | null }> }>) {
     const leg = review.legs.find((l) => l.fixtureId === f.fixtureId); const snap = snaps.find((x) => x.fixture.id === f.fixtureId);
@@ -493,7 +493,7 @@ function idealPerLeg(job: JobRow) {
 
 function ticketBrief(job: JobRow, p: LegPolicy) {
   if (job.config.review) return `biletul adus de utilizator: ${job.config.review.legs.length} meciuri, cotă totală ${Number(job.target_odds)}. Judeci fiecare meci separat; nu ești obligat să urmărești cota.`;
-  const base = `${job.config.custom ? `bilet CUSTOM cerut de utilizator: exact ${job.config.custom.legs} meciuri, ${job.config.custom.onlyMarkets?.length ? `TOATE selecțiile doar pe: ${job.config.custom.onlyMarkets.map((o) => ONLY_MARKET_LABEL[o]).join(' sau ')} (alegerea utilizatorului; regula varietății nu se aplică), ` : ''}` : ''}țintă cotă ${Number(job.target_odds)}, construit din ${job.config.custom ? 'exact' : 'minimum'} ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
+  const base = `${job.config.custom ? `bilet CUSTOM cerut de utilizator: exact ${job.config.custom.legs} meciuri, ${job.config.custom.onlyMarkets?.length ? `TOATE selecțiile doar pe: ${job.config.custom.onlyMarkets.map((o) => ONLY_MARKET_LABEL[o]).join(' sau ')} (alegerea utilizatorului${job.config.custom.onlyMarkets.some((o) => o.startsWith('UNDER')) ? '; pentru acest bilet „sub” pe liniile bifate este PERMIS, oricât de interzis ar fi în general' : ''}), ` : ''}` : ''}țintă cotă ${Number(job.target_odds)}, construit din ${job.config.custom ? 'exact' : 'minimum'} ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
   if (p.pick === 'highest') {
     const avg = Math.pow(Number(job.target_odds), 1 / p.minLegs);
     return `${base} Biletul are nevoie de o cotă medie de aproximativ ${avg.toFixed(2)} pe meci, deci aici NU alegi automat varianta cea mai mică: alege selecția solidă cu cotă între ${p.minOdds.toFixed(2)} și ${p.maxOdds.toFixed(2)}. La acest bilet limita ta de cotă este mărită cu +${(p.agentCapBonus ?? 0).toFixed(2)}.`;
@@ -515,8 +515,8 @@ function guardPositions(job: JobRow, s: FixtureSnapshot, positions: FinalPositio
     const c = calibrations.get(raw.agentId);
     const p = c ? { ...raw, estimatedProbability: calibrated(raw.estimatedProbability, c) } : raw;
     // Alternatives obey the same character and ticket rules as the main pick; invalid ones are simply dropped.
-    const alternatives = (p.alternatives ?? []).filter((k) => !characterViolation({ ...p, marketKey: k, estimatedProbability: null }, agent, policy, s.model.markets.find((m) => m.key === k)));
-    const violation = characterViolation(p, agent, policy, s.model.markets.find((m) => m.key === p.marketKey));
+    const alternatives = (p.alternatives ?? []).filter((k) => !characterViolation({ ...p, marketKey: k, estimatedProbability: null }, agent, policy, s.model.markets.find((m) => m.key === k), job.config.custom?.onlyMarkets));
+    const violation = characterViolation(p, agent, policy, s.model.markets.find((m) => m.key === p.marketKey), job.config.custom?.onlyMarkets);
     const reason = violation && c && violation.startsWith('probabilitatea proprie') ? `${violation} (după calibrare: ${c.bias > 0 ? '−' : '+'}${Math.round(Math.abs(c.bias) * 1000) / 10} pp, din ${c.n} rezultate)` : violation;
     if (!reason) return { ...p, alternatives };
     setAside.push({ agentId: p.agentId, marketKey: p.marketKey, reason });
@@ -524,7 +524,7 @@ function guardPositions(job: JobRow, s: FixtureSnapshot, positions: FinalPositio
     return alternatives.length ? { ...p, marketKey: alternatives[0], alternatives: alternatives.slice(1) } : { ...p, decision: 'NO_BET' as const, marketKey: null, alternatives: [] };
   });
   const keys = s.model.markets
-    .filter((m) => !isBannedMarket(m.key) && m.odds >= policy.minOdds && m.odds <= policy.maxOdds && (m.estimatedProbability ?? 0) >= policy.minProbability)
+    .filter((m) => !isBannedMarket(m.key, job.config.custom?.onlyMarkets) && m.odds >= policy.minOdds && m.odds <= policy.maxOdds && (m.estimatedProbability ?? 0) >= policy.minProbability)
     .map((m) => ({ key: m.key, odds: m.odds }));
   return { counted, setAside, keys };
 }
