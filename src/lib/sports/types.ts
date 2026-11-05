@@ -1,6 +1,6 @@
 export type FixtureStatus = 'pre' | 'in' | 'post' | 'postponed' | 'cancelled';
 
-export type MarketType = '1X2' | 'DOUBLE_CHANCE' | 'TOTAL' | 'HANDICAP' | 'TEAM_TOTAL' | 'BTTS' | 'CLEAN_SHEET' | 'TEAM_SPECIAL' | 'HALF' | 'CORNERS' | 'MONEYLINE';
+export type MarketType = '1X2' | 'DOUBLE_CHANCE' | 'TOTAL' | 'HANDICAP' | 'TEAM_TOTAL' | 'BTTS' | 'CLEAN_SHEET' | 'TEAM_SPECIAL' | 'HALF' | 'CORNERS' | 'MONEYLINE' | 'COMBO' | 'EXACT_GOALS' | 'GOAL_RANGE' | 'WIN_TO_NIL' | 'EURO_HANDICAP';
 
 /** A priced market selection, exactly as observed at the source. Never altered. */
 export type MarketQuote = {

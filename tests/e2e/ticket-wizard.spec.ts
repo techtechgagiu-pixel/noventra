@@ -6,8 +6,10 @@ test('Bilet custom goes step by step: cota, ligi, perioada, agenții, gata', asy
   await expect(page.getByLabel('Cota dorită')).toBeVisible();
   await expect(page.getByRole('button', { name: /Pornește dezbaterea/ })).toHaveCount(0);
   // Market restriction: both boxes exist and start unticked.
-  await expect(page.getByLabel('Doar GG (ambele echipe marchează)')).not.toBeChecked();
-  await expect(page.getByLabel('Doar peste 2,5 goluri')).not.toBeChecked();
+  await expect(page.getByLabel('Ambele echipe marchează – DA (GG)')).not.toBeChecked();
+  await expect(page.getByLabel('Peste 1,5 goluri')).not.toBeChecked();
+  await expect(page.getByLabel('Peste 2,5 goluri')).not.toBeChecked();
+  await expect(page.getByLabel('Peste 3,5 goluri')).not.toBeChecked();
   await page.getByRole('button', { name: 'Următorul' }).click();
   await expect(page.getByRole('heading', { name: 'Din ce ligi' })).toBeVisible();
   await expect(page.getByLabel('Cota dorită')).toHaveCount(0);

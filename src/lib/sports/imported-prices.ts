@@ -119,6 +119,14 @@ export function labelFor(key: string, home: string, away: string): string {
   if (family === 'BTTS') return `Ambele echipe marchează – ${a === 'YES' ? 'DA' : 'NU'}`;
   if (family === 'TOTAL') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} goluri`;
   if (family === 'AH') { const n = Number(b); return `${a === 'HOME' ? home : away} handicap ${n > 0 ? '+' : ''}${n}`; }
+  const team = (x: string) => (x === 'HOME' ? home : away);
+  if (family === 'TT') return `${team(a)} ${b === 'OVER' ? 'peste' : 'sub'} ${key.split(':')[3]} goluri`;
+  if (family === 'X2T') return `${a === 'DRAW' ? 'Egal' : `${team(a)} câștigă`} și ${b === 'OVER' ? 'peste' : 'sub'} ${key.split(':')[3]} goluri`;
+  if (family === 'TBTTS') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} goluri și ambele marchează – ${key.split(':')[3] === 'YES' ? 'DA' : 'NU'}`;
+  if (family === 'EG') return a.endsWith('+') ? `${a.slice(0, -1)} sau mai multe goluri în meci` : `Exact ${a} ${a === '1' ? 'gol' : 'goluri'} în meci`;
+  if (family === 'MG') return a.endsWith('+') ? `${a.slice(0, -1)} sau mai multe goluri în meci` : `Între ${a.replace('-', ' și ')} goluri în meci`;
+  if (family === 'WTN') return b === 'YES' ? `${team(a)} câștigă fără să primească gol` : `${team(a)} nu câștigă fără să primească gol`;
+  if (family === 'EH') return `${a === 'DRAW' ? 'Egal' : team(a)} la handicap european (${b}:${key.split(':')[3]})`;
   return key;
 }
 
@@ -169,6 +177,60 @@ function mapMarket(m: Obj, home: string, away: string): { family: string | null;
   const isHome = (n: string) => n === h || n === '1' || n === 'home' || n.includes('competitor1');
   const isAway = (n: string) => n === a || n === '2' || n === 'away' || n.includes('competitor2');
   const isDraw = (n: string) => n === 'draw' || n === 'x' || n === 'egal';
+  const tpl = norm(str(m.template));
+  const spec = (k: string) => new RegExp(`${k}=([^;,\\s]+)`).exec(str(m.specifiers))?.[1];
+  const sideOf = (n: string): 'HOME' | 'AWAY' | null => (isHome(n) ? 'HOME' : isAway(n) ? 'AWAY' : null);
+  const halfLine = (x: unknown) => { const l = Number(x); return Number.isFinite(l) && Math.abs(l % 1) === 0.5 ? l : null; };
+  // ── Further Stake families, all settled on the full-time score (owner decision 06.11) ──
+  if (tpl === '{$competitor1} total' || tpl === '{$competitor2} total') {
+    const side = tpl.includes('competitor1') ? 'HOME' : 'AWAY'; const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) {
+      const x = /^(over|under)\s*([\d.]+)?$/.exec(o.n); const line = halfLine(x?.[2] ?? spec('total'));
+      if (x && line !== null) quotes.push({ key: `TT:${side}:${x[1] === 'over' ? 'OVER' : 'UNDER'}:${line}`, marketType: 'TEAM_TOTAL', odds: r3(o.odds), line });
+    }
+    return { family: 'TT', quotes };
+  }
+  if (tpl === '1x2 & total') {
+    const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) {
+      const x = /^(.*) & (over|under) ([\d.]+)$/.exec(o.n); const line = halfLine(x?.[3]);
+      const side = x ? (isDraw(x[1].trim()) ? 'DRAW' : sideOf(x[1].trim())) : null;
+      if (x && side && line !== null) quotes.push({ key: `X2T:${side}:${x[2] === 'over' ? 'OVER' : 'UNDER'}:${line}`, marketType: 'COMBO', odds: r3(o.odds), line });
+    }
+    return { family: 'X2T', quotes: quotes.length === 6 ? quotes : [] };
+  }
+  if (tpl === 'total & both teams to score') {
+    const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) {
+      const x = /^(over|under) ([\d.]+) & (yes|no)$/.exec(o.n); const line = halfLine(x?.[2]);
+      if (x && line !== null) quotes.push({ key: `TBTTS:${x[1] === 'over' ? 'OVER' : 'UNDER'}:${line}:${x[3] === 'yes' ? 'YES' : 'NO'}`, marketType: 'COMBO', odds: r3(o.odds), line });
+    }
+    return { family: 'TBTTS', quotes: quotes.length === 4 ? quotes : [] };
+  }
+  if (tpl === 'exact goals' && !/1st|2nd|half/.test(norm(str(m.name)))) {
+    const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) if (/^\d+\+?$/.test(o.n)) quotes.push({ key: `EG:${o.n}`, marketType: 'EXACT_GOALS', odds: r3(o.odds) });
+    return { family: 'EG', quotes };
+  }
+  if (tpl === 'multigoals') {
+    const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) if (/^\d+-\d+$/.test(o.n) || /^\d+\+$/.test(o.n)) quotes.push({ key: `MG:${o.n}`, marketType: 'GOAL_RANGE', odds: r3(o.odds) });
+    return { family: 'MG', quotes };
+  }
+  if (tpl === '{$competitor1} win to nil' || tpl === '{$competitor2} win to nil') {
+    const side = tpl.includes('competitor1') ? 'HOME' : 'AWAY'; const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) if (o.n === 'yes' || o.n === 'no') quotes.push({ key: `WTN:${side}:${o.n === 'yes' ? 'YES' : 'NO'}`, marketType: 'WIN_TO_NIL', odds: r3(o.odds) });
+    return { family: 'WTN', quotes };
+  }
+  if (tpl === 'handicap' && /hcp=\d+:\d+/.test(str(m.specifiers))) { // three-way (European) handicap, "Everton (0:1)"
+    const hc = /hcp=(\d+):(\d+)/.exec(str(m.specifiers))!; const quotes: ImportedMarket[] = [];
+    for (const o of outcomes) {
+      const x = /^(.*?)\s*\((\d+):(\d+)\)$/.exec(o.n); if (!x || x[2] !== hc[1] || x[3] !== hc[2]) continue;
+      const side = isDraw(x[1].trim()) ? 'DRAW' : sideOf(x[1].trim());
+      if (side) quotes.push({ key: `EH:${side}:${hc[1]}:${hc[2]}`, marketType: 'EURO_HANDICAP', odds: r3(o.odds) });
+    }
+    return { family: 'EH', quotes: quotes.length === 3 && new Set(quotes.map((q) => q.key)).size === 3 ? quotes : [] };
+  }
   if (ONE_X_TWO.has(name)) {
     const pick = (f: (n: string) => boolean) => outcomes.filter((o) => f(o.n));
     const [H, D, A] = [pick(isHome), pick(isDraw), pick(isAway)];

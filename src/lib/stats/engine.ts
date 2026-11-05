@@ -40,6 +40,19 @@ export function selectionWins(key: string, hg: number, ag: number): boolean | nu
     case 'BTTS': return parts[1] === 'YES' ? hg > 0 && ag > 0 : !(hg > 0 && ag > 0);
     case 'CS': { const conceded = parts[1] === 'HOME' ? ag : hg; return parts[2] === 'YES' ? conceded === 0 : conceded > 0; }
     case 'WIN2': return parts[1] === 'HOME' ? hg - ag >= 2 : ag - hg >= 2;
+    // Stake families settled on the full-time score alone (owner decision 06.11: every market Stake lists that can be verified).
+    case 'X2T': { // 1X2 & total: X2T:HOME|DRAW|AWAY:OVER|UNDER:line
+      const res = parts[1] === 'HOME' ? hg > ag : parts[1] === 'AWAY' ? ag > hg : hg === ag;
+      const line = Number(parts[3]); return res && (parts[2] === 'OVER' ? hg + ag > line : hg + ag < line);
+    }
+    case 'TBTTS': { // total & both teams to score: TBTTS:OVER|UNDER:line:YES|NO
+      const line = Number(parts[2]); const tot = parts[1] === 'OVER' ? hg + ag > line : hg + ag < line;
+      return tot && (parts[3] === 'YES' ? hg > 0 && ag > 0 : !(hg > 0 && ag > 0));
+    }
+    case 'EG': { const n = parts[1]; return n.endsWith('+') ? hg + ag >= Number(n.slice(0, -1)) : hg + ag === Number(n); } // exact goals: EG:3 / EG:7+
+    case 'MG': { const r = parts[1]; if (r.endsWith('+')) return hg + ag >= Number(r.slice(0, -1)); const [lo, hi] = r.split('-').map(Number); return hg + ag >= lo && hg + ag <= hi; } // goal range: MG:1-3 / MG:6+
+    case 'WTN': { const w = parts[1] === 'HOME' ? hg > ag && ag === 0 : ag > hg && hg === 0; return parts[2] === 'YES' ? w : !w; } // win to nil
+    case 'EH': { const h = hg + Number(parts[2]), a = ag + Number(parts[3]); return parts[1] === 'HOME' ? h > a : parts[1] === 'AWAY' ? a > h : h === a; } // three-way handicap: EH:HOME|DRAW|AWAY:homeGoalsAdded:awayGoalsAdded
     case 'ML': case 'MH': case 'MT': return csSelectionWins(key, hg, ag); // Counter-Strike, scores in maps
     default: return null; // half-time, second-half and corner markets need data beyond the final score
   }
@@ -92,6 +105,14 @@ export function teamRates(history: HistoricalMatch[], venue: 'home' | 'away' | '
   };
 }
 
+/** Exact goals is a partition only with 0,1,2,… and a final open bucket "N+". */
+function egComplete(list: MarketQuote[]) {
+  const ns = list.map((m) => m.key.split(':')[1]); const open = ns.find((n) => n.endsWith('+'));
+  if (!open) return false;
+  const top = Number(open.slice(0, -1));
+  return ns.length === top + 1 && Array.from({ length: top }, (_, i) => String(i)).every((n) => ns.includes(n));
+}
+
 /** Removes the bookmaker margin proportionally inside a complete market group. */
 export function fairProbabilities(markets: MarketQuote[]) {
   const out = new Map<string, { implied: number; fair: number | null; groupMargin: number | null }>();
@@ -106,6 +127,11 @@ export function fairProbabilities(markets: MarketQuote[]) {
       : parts[0] === 'HT1X2' || parts[0] === 'H21X2' ? `${parts[0]}|${book}`
       : parts[0] === 'HTTOT' || parts[0] === 'CORN' ? `${parts[0]}:${m.line}|${book}`
       : parts[0] === 'TCORN' ? `TCORN:${parts[1]}:${m.line}|${book}`
+      : parts[0] === 'X2T' ? `X2T:${parts[3]}|${book}`
+      : parts[0] === 'TBTTS' ? `TBTTS:${parts[2]}|${book}`
+      : parts[0] === 'EG' ? `EG|${book}`
+      : parts[0] === 'WTN' ? `WTN:${parts[1]}|${book}`
+      : parts[0] === 'EH' ? `EH:${parts[2]}:${parts[3]}|${book}`
       : parts[0] === 'BTTS' ? `BTTS|${book}`
       : parts[0] === 'CS' ? `CS:${parts[1]}|${book}`
       : parts[0] === 'ML' ? `ML|${book}`
@@ -115,9 +141,12 @@ export function fairProbabilities(markets: MarketQuote[]) {
     groups.set(g, [...(groups.get(g) ?? []), m]);
   }
   for (const [g, list] of groups) {
-    const three = /^(1X2|HT1X2|H21X2)\|/.test(g);
-    const two = /^(TOTAL|AH|TT:|HTTOT|CORN|TCORN|BTTS|CS:|ML\||MH:|MT:)/.test(g);
-    const complete = three ? list.length === 3 : two ? list.length === 2 : false;
+    const three = /^(1X2|HT1X2|H21X2)\|/.test(g) || /^EH:/.test(g);
+    const two = /^(TOTAL|AH|TT:|HTTOT|CORN|TCORN|BTTS|CS:|ML\||MH:|MT:|WTN:)/.test(g);
+    // Partitions of the result: 1X2 & total (6 cells), total & BTTS (4 cells), exact goals (0..N and the open "N+" bucket, no gaps).
+    const complete = three ? list.length === 3 : two ? list.length === 2
+      : /^X2T:/.test(g) ? list.length === 6 : /^TBTTS:/.test(g) ? list.length === 4
+      : /^EG\|/.test(g) ? egComplete(list) : false;
     const sum = list.reduce((s, m) => s + 1 / m.odds, 0);
     for (const m of list) out.set(m.key, { implied: 1 / m.odds, fair: complete ? 1 / m.odds / sum : null, groupMargin: complete ? sum - 1 : null });
   }
