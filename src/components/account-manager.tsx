@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 
-export type Account = { id: string; name: string | null; email: string; picture: string | null; created_at: string; last_login_at: string | null; blocked_at: string | null; tickets: number };
+export type Account = { id: string; name: string | null; email: string; picture: string | null; created_at: string; last_login_at: string | null; blocked_at: string | null; tickets: number; custom_daily_limit?: number | null };
+const LIMITS = [1, 3, 5, 10, 15, 20, 30];
 const date = (v: string | null) => (v ? new Intl.DateTimeFormat('ro-RO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Bucharest' }).format(new Date(v)) : '—');
 
 /** Google accounts that signed in, with a block switch (blocked accounts are signed out on their next request). */
@@ -9,10 +10,10 @@ export function AccountManager({ initial, readOnly = false }: { initial: Account
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const set = async (id: string, blocked: boolean) => {
+  const set = async (id: string, change: { blocked: boolean } | { limit: number | null }) => {
     setBusy(id); setError('');
     try {
-      const r = await fetch('/api/admin/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, blocked }) });
+      const r = await fetch('/api/admin/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...change }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Nu am putut salva.');
       setRows(d.accounts);
@@ -30,7 +31,14 @@ export function AccountManager({ initial, readOnly = false }: { initial: Account
             <p className="truncate text-xs text-muted">{a.email} · {a.tickets} bilete · ultima intrare {date(a.last_login_at)}</p>
             {readOnly && <p className="text-xs text-muted">Prima intrare {date(a.created_at)}</p>}
           </div>
-          {!readOnly && <button disabled={busy === a.id} onClick={() => set(a.id, !a.blocked_at)} className={`btn px-3 py-1.5 text-xs ${a.blocked_at ? 'btn-ghost' : 'btn-ghost text-rose'}`}>{a.blocked_at ? 'Deblochează' : 'Blochează'}</button>}
+          {!readOnly
+            ? <label className="text-[11px] text-muted">Bilete/zi
+                <select disabled={busy === a.id} value={a.custom_daily_limit ?? 1} onChange={(e) => set(a.id, { limit: Number(e.target.value) })} className="ml-1 rounded-lg border border-line bg-ink px-1.5 py-1 text-xs text-text">
+                  {[...new Set([...LIMITS, a.custom_daily_limit ?? 1])].sort((x, y) => x - y).map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            : <span className="text-[11px] text-muted">{a.custom_daily_limit ?? 1} bilete/zi</span>}
+          {!readOnly && <button disabled={busy === a.id} onClick={() => set(a.id, { blocked: !a.blocked_at })} className={`btn px-3 py-1.5 text-xs ${a.blocked_at ? 'btn-ghost' : 'btn-ghost text-rose'}`}>{a.blocked_at ? 'Deblochează' : 'Blochează'}</button>}
         </div>
       ))}
     </div>

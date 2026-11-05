@@ -137,6 +137,8 @@ export class MapScene {
   private banner: { text: string; color: string } | null = null;
   private final: { totalOdds: number | null; generation: string; legs: number; target: number } | null = null;
   private acceptedCount = 0;
+  /** „Biletul” list scroll (owner request 05.11): tickets with many selections scroll inside the tray; it follows the newest row until the user scrolls. */
+  private trayScroll = 0; private trayFollow = true; private trayDrag: { y: number; from: number } | null = null;
   private reviewCounts: { solid: number; risky: number; weak: number } | null = null;
   private target = 0;
   private lastSeq = 0;
@@ -155,17 +157,27 @@ export class MapScene {
     if (typeof document !== 'undefined') this.font = getComputedStyle(document.body).fontFamily || this.font;
     canvas.addEventListener('pointermove', this.onMove);
     canvas.addEventListener('pointerleave', this.onLeave);
+    canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    canvas.addEventListener('touchstart', this.onTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', this.onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', this.onTouchEnd);
+    canvas.addEventListener('touchcancel', this.onTouchEnd);
   }
 
   destroy() {
     this.stop();
     this.canvas.removeEventListener('pointermove', this.onMove);
     this.canvas.removeEventListener('pointerleave', this.onLeave);
+    this.canvas.removeEventListener('wheel', this.onWheel);
+    this.canvas.removeEventListener('touchstart', this.onTouchStart);
+    this.canvas.removeEventListener('touchmove', this.onTouchMove);
+    this.canvas.removeEventListener('touchend', this.onTouchEnd);
+    this.canvas.removeEventListener('touchcancel', this.onTouchEnd);
   }
 
   /** Resets everything (used by replay). */
   reset() {
-    this.fx.clear(); this.packets = []; this.bursts = []; this.particles = []; this.callout = null; this.ball = newBall(); this.shake = null; this.flashFx = null; this.netHit = null; this.postHit = null; this.celebrate = 0; this.goalsTotal = 0; this.goalsShown = 0; this.setSquad(null, 0); this.queue = []; this.final = null; this.banner = null; this.acceptedCount = 0; this.stage = 'QUEUED'; this.lastSeq = 0;
+    this.fx.clear(); this.packets = []; this.bursts = []; this.particles = []; this.callout = null; this.ball = newBall(); this.shake = null; this.flashFx = null; this.netHit = null; this.postHit = null; this.celebrate = 0; this.goalsTotal = 0; this.goalsShown = 0; this.setSquad(null, 0); this.queue = []; this.final = null; this.banner = null; this.acceptedCount = 0; this.trayScroll = 0; this.trayFollow = true; this.trayDrag = null; this.stage = 'QUEUED'; this.lastSeq = 0;
     for (const a of this.agents.values()) Object.assign(a, { status: 'IDLE', pulse: 0, bubble: null, picks: {}, activity: 0, off: { x: 0, y: 0 }, vel: { x: 0, y: 0 } });
   }
 
@@ -219,6 +231,41 @@ export class MapScene {
     for (const id of Object.keys(this.L.agents)) { const p = this.agentPos(id); if (Math.hypot(p.x - x, p.y - y) < this.L.r * 1.25) hit = id; }
     if (hit !== this.hover) { this.hover = hit; this.canvas.style.cursor = hit ? 'pointer' : 'default'; this.hooks.onAgentHover?.(hit); }
   };
+  /** Geometry of the „Biletul” list: where rows start, how tall they are and the visible band. */
+  private trayGeom() {
+    const L = this.L; const wide = L.mode === 'wide';
+    const cols = wide ? 1 : 2, rowH = wide ? 26 : 24, firstY = L.tray.y + (wide ? 40 : 34), clipTop = L.tray.y + (wide ? 28 : 24), clipBottom = L.tray.y + L.tray.h - 4;
+    const rows = Math.ceil(this.acceptedCount / cols);
+    const maxScroll = Math.max(0, Math.ceil(firstY + Math.max(0, rows - 1) * rowH + 12 - clipBottom));
+    return { cols, rowH, firstY, clipTop, clipBottom, maxScroll };
+  }
+  private inTray(x: number, y: number) { const t = this.L?.tray; return !!t && x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h; }
+  private scrollTray(to: number) {
+    const { maxScroll } = this.trayGeom();
+    this.trayScroll = Math.min(maxScroll, Math.max(0, to));
+    this.trayFollow = this.trayScroll >= maxScroll - 1;
+  }
+  private onWheel = (ev: WheelEvent) => {
+    if (!this.L) return;
+    const rect = this.canvas.getBoundingClientRect();
+    if (!this.inTray(ev.clientX - rect.left, ev.clientY - rect.top)) return;
+    const { maxScroll } = this.trayGeom();
+    if (maxScroll <= 0) return;
+    const next = this.trayScroll + ev.deltaY * (ev.deltaMode === 1 ? 24 : 1);
+    // Let the page scroll once the list is at its end in the direction of the wheel.
+    if ((ev.deltaY > 0 && this.trayScroll >= maxScroll) || (ev.deltaY < 0 && this.trayScroll <= 0)) return;
+    ev.preventDefault(); this.scrollTray(next);
+  };
+  private onTouchStart = (ev: TouchEvent) => {
+    if (!this.L || ev.touches.length !== 1) return;
+    const rect = this.canvas.getBoundingClientRect(); const t = ev.touches[0];
+    this.trayDrag = this.inTray(t.clientX - rect.left, t.clientY - rect.top) && this.trayGeom().maxScroll > 0 ? { y: t.clientY, from: this.trayScroll } : null;
+  };
+  private onTouchMove = (ev: TouchEvent) => {
+    if (!this.trayDrag || ev.touches.length !== 1) return;
+    ev.preventDefault(); this.scrollTray(this.trayDrag.from - (ev.touches[0].clientY - this.trayDrag.y));
+  };
+  private onTouchEnd = () => { this.trayDrag = null; };
   private onLeave = () => { if (this.hover) { this.hover = null; this.hooks.onAgentHover?.(null); } };
 
   // ── Event → scene ───────────────────────────────────────────────────────
@@ -590,6 +637,7 @@ export class MapScene {
     }
     // Motion
     const k = 1 - Math.exp(-dt * 6);
+    if (this.L) { const { maxScroll } = this.trayGeom(); this.trayScroll = this.trayFollow ? maxScroll : Math.min(maxScroll, this.trayScroll); }
     const queued = [...this.fx.values()].filter((f) => f.state === 'QUEUED').sort((a, b) => a.order - b.order);
     const active = [...this.fx.values()].filter((f) => ['RESEARCH', 'ANALYSIS', 'DEBATE', 'VOTING'].includes(f.state)).sort((a, b) => a.order - b.order);
     for (const f of this.fx.values()) {
@@ -627,8 +675,10 @@ export class MapScene {
     }
     if (f.state === 'ACCEPTED') {
       const i = Math.max(0, f.acceptedIndex);
-      if (L.mode === 'wide') { const row = 26; return { p: { x: L.tray.x + 10, y: L.tray.y + 40 + i * row }, a: L.tray.y + 40 + i * row < L.tray.y + L.tray.h - 10 ? 1 : 0 }; }
-      const cw = (L.tray.w - 24) / 2; return { p: { x: L.tray.x + 8 + (i % 2) * (cw + 8), y: L.tray.y + 34 + Math.floor(i / 2) * 24 }, a: L.tray.y + 34 + Math.floor(i / 2) * 24 < L.tray.y + L.tray.h - 8 ? 1 : 0 };
+      const g = this.trayGeom(); const y = g.firstY + Math.floor(i / g.cols) * g.rowH - this.trayScroll;
+      const a = y >= g.clipTop - g.rowH * 0.6 && y <= g.clipBottom + g.rowH * 0.6 ? 1 : 0; // rows scrolled out of the list fade away
+      if (L.mode === 'wide') return { p: { x: L.tray.x + 10, y }, a };
+      const cw = (L.tray.w - 24) / 2; return { p: { x: L.tray.x + 8 + (i % 2) * (cw + 8), y }, a };
     }
     if (f.state === 'REJECTED') return { p: L.discard, a: 0 };
     const i = Math.max(0, active.indexOf(f)); const n = Math.max(1, active.length);
@@ -1078,6 +1128,9 @@ export class MapScene {
       if (f.state === 'ACCEPTED' || f.state === 'REJECTED') {
         if (f.state === 'REJECTED' && f.alpha < 0.3) continue;
         const tw = L.mode === 'wide' ? L.tray.w - 20 : (L.tray.w - 24) / 2; const h = 20;
+        // Inside the tray the row is clipped to the list area (below the header), so partly scrolled rows are cut cleanly.
+        const g = this.trayGeom(); const clipped = f.state === 'ACCEPTED' && y > L.tray.y;
+        if (clipped) { ctx.save(); ctx.beginPath(); ctx.rect(L.tray.x + 2, g.clipTop, L.tray.w - 4, g.clipBottom - g.clipTop); ctx.clip(); }
         const dim = this.final?.generation === 'COMPLETED' && f.state === 'ACCEPTED' && !f.chosen; if (dim) ctx.globalAlpha = f.alpha * 0.35;
         const vc = f.verdict === 'SOLID' ? C.emerald : f.verdict === 'RISCANT' ? C.gold : f.verdict ? C.rose : f.state === 'ACCEPTED' ? C.emerald : C.rose;
         roundRect(ctx, x, y - h / 2, tw, h, 8); ctx.fillStyle = hexA(vc, 0.12); ctx.fill();
@@ -1086,6 +1139,7 @@ export class MapScene {
         const oddsTxt = f.odds ? Number(f.odds).toFixed(2) : '';
         ctx.fillText(fit(ctx, L.mode === 'wide' ? `${teamShort(f.home)} – ${teamShort(f.away)} · ${f.market ?? ''}` : `${code(f.home)}–${code(f.away)} · ${f.market ?? ''}`, tw - 44), x + 7, y + 0.5);
         ctx.textAlign = 'right'; ctx.fillStyle = vc; ctx.font = `700 10.5px ${this.font}`; ctx.fillText(oddsTxt, x + tw - 7, y + 0.5);
+        if (clipped) ctx.restore();
         continue;
       }
       // Active card
@@ -1113,6 +1167,14 @@ export class MapScene {
     ctx.fillStyle = this.final ? (this.final.generation === 'COMPLETED' ? C.emerald : C.gold) : C.text;
     const head = this.reviewCounts ? `✓${this.reviewCounts.solid} ⚠${this.reviewCounts.risky} ✗${this.reviewCounts.weak} · ${total.toFixed(2)}` : this.final ? (this.final.generation === 'COMPLETED' ? `COTĂ ${Number(this.final.totalOdds).toFixed(2)} ✓` : this.final.generation === 'NO_BET' ? 'NO BET' : 'INCOMPLET') : accepted.length ? `${accepted.length} sel. · ${total.toFixed(2)}${this.target ? ` / ${this.target}` : ''}` : this.target ? `țintă ${this.target}` : '';
     ctx.fillText(head, L.tray.x + L.tray.w - 10, L.tray.y + 13);
+    { // Thin scroll thumb on the right edge when the list is longer than the tray.
+      const g = this.trayGeom();
+      if (g.maxScroll > 0) {
+        const track = g.clipBottom - g.clipTop, thumb = Math.max(18, track * track / (track + g.maxScroll));
+        const ty = g.clipTop + (track - thumb) * (this.trayScroll / g.maxScroll);
+        roundRect(ctx, L.tray.x + L.tray.w - 5, ty, 3, thumb, 1.5); ctx.fillStyle = 'rgba(163,188,173,0.45)'; ctx.fill();
+      }
+    }
     ctx.restore();
   }
 
