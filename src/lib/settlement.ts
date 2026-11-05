@@ -4,6 +4,7 @@ import { getLeagues, persistFixtures } from './sports/fixtures';
 import { localDate, yyyymmdd } from './time';
 import { runAutomation } from './automation';
 import { csSelectionWins } from './cs/markets';
+import { selectionWins } from './stats/engine';
 
 export type MatchFacts = { ht?: [number, number] | null; corners?: [number, number] | null };
 
@@ -35,6 +36,7 @@ export function settleMarket(key: string, home: number, away: number, facts: Mat
     case 'WBH': { if (!ht) return null; const h2 = [home - ht[0], away - ht[1]]; return r(side === 'HOME' ? ht[0] > ht[1] && h2[0] > h2[1] : ht[1] > ht[0] && h2[1] > h2[0]); }
     case 'CORN': return corners ? r(side === 'OVER' ? corners[0] + corners[1] > line : corners[0] + corners[1] < line) : null;
     case 'TCORN': { if (!corners) return null; const c = side === 'HOME' ? corners[0] : corners[1]; const l = Number(key.split(':')[3]); return r(key.split(':')[2] === 'OVER' ? c > l : c < l); }
+    case 'X2T': case 'TBTTS': case 'EG': case 'MG': case 'WTN': case 'EH': { const w = selectionWins(key, home, away); return w === null ? null : r(w); }
     default: return null;
   }
 }

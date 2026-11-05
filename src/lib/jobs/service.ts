@@ -6,7 +6,7 @@ import { createD1Job, resumeD1Job, transitionD1Job } from '../d1/job-mutations';
 import { SQL_NOW } from '../db';
 import { providerConfigured, resetModelExhaustion } from '../ai/router';
 import { aiUsageToday } from '../usage';
-import { CUSTOM_LIMIT_PER_DAY, MAX_CUSTOM_AGENTS, REVIEW_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, isReviewSlot, slotInfo, type ReviewLeg, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
+import { CUSTOM_LIMIT_PER_DAY, MARKET_FAMILY_IDS, needsVarietyOverride, type MarketFamilyId, MAX_CUSTOM_AGENTS, REVIEW_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, isReviewSlot, slotInfo, type ReviewLeg, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
 import { VOTING_AGENTS } from '../ai/agents';
 import { localDate } from '../time';
 import { recordEvent } from './events';
@@ -134,7 +134,7 @@ export function parseCustom(input: unknown): CustomConfig {
   if (perLeg > 3.2) throw new SlotError(`Cota ${target} din ${legs} meciuri înseamnă ~${perLeg.toFixed(2)} pe meci — prea riscant. Pune mai multe meciuri sau o cotă mai mică.`);
   // Leagues the user ticked (ids are validated against the league table when the job is created). Empty = all.
   const leagues = [...new Set(Array.isArray(o.leagues) ? o.leagues.map(String).filter((x) => /^[A-Z0-9]{2,12}$/.test(x)) : [])].slice(0, 120);
-  const onlyMarkets = [...new Set(Array.isArray(o.onlyMarkets) ? o.onlyMarkets.filter((x): x is 'BTTS' | 'OVER25' => x === 'BTTS' || x === 'OVER25') : [])];
+  const onlyMarkets = [...new Set(Array.isArray(o.onlyMarkets) ? o.onlyMarkets.filter((x): x is MarketFamilyId => MARKET_FAMILY_IDS.includes(x as MarketFamilyId)) : [])];
   return { target, legs, agents, window, fromHours, toHours, ...(leagues.length ? { leagues } : {}), ...(onlyMarkets.length ? { onlyMarkets } : {}) };
 }
 
@@ -157,7 +157,7 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
   const weekly = (custom.toHours ?? 48) > 48;
   const days = Math.min(8, Math.ceil((custom.toHours ?? 48) / 24) + 1);
   const maxFixtures = Math.min(weekly ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, Math.max(12, custom.legs * 4));
-  const cfg = { windowStart: key, windowDays: days, top10Only: false, maxFixtures, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], custom, ...(custom.onlyMarkets?.length ? { varietyOverride: true } : {}) };
+  const cfg = { windowStart: key, windowDays: days, top10Only: false, maxFixtures, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], custom, ...(needsVarietyOverride(custom.onlyMarkets) ? { varietyOverride: true } : {}) };
   const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
   const result = isD1() ? await createD1CustomJobs({userId,day:key,requestId,count,custom,cfg,checkpoint,policy,callLimit:config.limits.aiDailyCalls,dailyLimit:limit}) : await tx(async (c) => {
     // One user lock protects the daily allowance and retry IDs, including retries after midnight.

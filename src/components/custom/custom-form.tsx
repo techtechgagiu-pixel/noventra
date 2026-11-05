@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Minus, Plus, Sparkles, Trophy } from 'lucide-react';
 import { AGENT_META, api } from '@/lib/format';
-import { CUSTOM_LIMIT_PER_DAY, MAX_CUSTOM_AGENTS, customPolicy, customThreshold } from '@/lib/slots';
+import { CUSTOM_LIMIT_PER_DAY, MARKET_FAMILIES, type MarketFamilyId, MAX_CUSTOM_AGENTS, customPolicy, customThreshold } from '@/lib/slots';
 import { LeaguePicker, type LeagueOption } from '@/components/matches/league-picker';
 import type { MatchRow } from '@/lib/catalog';
 
@@ -76,7 +76,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const [legs, setLegs] = useState(4);
   const [fromI, setFromI] = useState(0); // owner request 31.10: from 20 minutes on by default
   const [toI, setToI] = useState(STOPS.indexOf(48));
-  const [onlyMarkets, setOnlyMarkets] = useState<Array<'BTTS' | 'OVER25'>>([]); // owner request 05.11: none ticked = any market
+  const [onlyMarkets, setOnlyMarkets] = useState<MarketFamilyId[]>([]); // owner request 05.11: none ticked = any market
   const [day, setDay] = useState<number | null>(null); // owner request 05.11: pick a whole day (today … in 3 days) instead of an interval
   const [minute, setMinute] = useState(0);
   useEffect(() => { const t = setInterval(() => setMinute((m) => m + 1), 60_000); return () => clearInterval(t); }, []);
@@ -171,13 +171,15 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <div className="mt-2 flex flex-wrap gap-1.5">{TARGETS.map((t) => <button key={t} onClick={() => setTarget(t)} className={`chip ${target === t ? 'text-cyan' : 'text-muted'}`}>{t}</button>)}</div>
           {sport === 'football' && <fieldset className="mt-3 border-t border-line pt-3">
             <legend className="sr-only">Tipul pronosticurilor de pe bilet</legend>
-            <p className="text-xs font-semibold text-muted">Pronosticuri doar de tipul</p>
-            {([['BTTS', 'Doar GG (ambele echipe marchează)'], ['OVER25', 'Doar peste 2,5 goluri']] as const).map(([id, label]) => (
-              <label key={id} className="mt-2 flex cursor-pointer items-center gap-2 text-sm">
-                <input type="checkbox" checked={onlyMarkets.includes(id)} onChange={(e) => setOnlyMarkets((c) => (e.target.checked ? [...c, id] : c.filter((x) => x !== id)))} className="h-4 w-4 accent-cyan" />{label}
-              </label>
-            ))}
-            <p className="mt-2 text-[11px] text-muted">{onlyMarkets.length ? 'Toate selecțiile de pe bilet vor fi doar de acest tip' + (onlyMarkets.length > 1 ? ' (oricare dintre cele două)' : '') + '; meciurile fără această piață sunt sărite.' : 'Nimic bifat: echipa alege liber cele mai bune pronosticuri.'}</p>
+            <p className="text-xs font-semibold text-muted">Piețe permise pentru agenți</p>
+            <div className="mt-1 grid gap-x-4 sm:grid-cols-2">
+              {MARKET_FAMILIES.map((f) => (
+                <label key={f.id} className="mt-2 flex cursor-pointer items-center gap-2 text-sm">
+                  <input type="checkbox" checked={onlyMarkets.includes(f.id)} onChange={(e) => setOnlyMarkets((c) => (e.target.checked ? [...c, f.id] : c.filter((x) => x !== f.id)))} className="h-4 w-4 accent-cyan" />{f.label}
+                </label>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-muted">{onlyMarkets.length ? 'Toate selecțiile de pe bilet vor fi doar din piețele bifate' + (onlyMarkets.length > 1 ? ' (oricare dintre ele)' : '') + '; meciurile fără aceste piețe sunt sărite.' : 'Nimic bifat: echipa alege liber din toate piețele găsite.'}</p>
           </fieldset>}
         </div>
         <div className="card p-4">
