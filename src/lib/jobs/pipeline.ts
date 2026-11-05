@@ -12,7 +12,7 @@ import { assertSportsQuota } from '../sports/http';
 import { optimizeTicket, type Candidate } from '../optimizer';
 import { buildDossier } from '../scout/dossier';
 import { teamHistory } from '../scout/history';
-import { customPolicy, customThreshold, policyFor, reviewPolicy, slotById, type CustomConfig, type LegPolicy, type ReviewConfig } from '../slots';
+import { ONLY_MARKET_LABEL, customPolicy, customThreshold, marketAllowedBy, policyFor, reviewPolicy, slotById, type CustomConfig, type LegPolicy, type ReviewConfig } from '../slots';
 import { z } from 'zod';
 import { espnExtraMarkets, espnLeagueDay, espnSummary, mergeMarkets, standingFor } from '../sports/espn';
 import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sports/fixtures';
@@ -94,6 +94,7 @@ async function discover(job: JobRow) {
     if (f.status !== 'pre') reason = 'Meciul a început sau s-a încheiat';
     else if (ko < Math.max(now + MIN_LEAD_MS, createdAt + leadMs)) reason = pol.minLeadHours ? `Începe în mai puțin de ${pol.minLeadHours} ore` : 'Începe în mai puțin de 20 de minute';
     else if (ko > createdAt + aheadMs) reason = `Începe peste mai mult de ${pol.maxAheadHours} de ore`;
+    else if (f.odds && job.config.custom?.onlyMarkets?.length && !f.odds.markets.some((m) => marketAllowedBy(job.config.custom!.onlyMarkets, m.key))) reason = 'Fără piața aleasă (' + job.config.custom.onlyMarkets.map((o) => ONLY_MARKET_LABEL[o]).join(' / ') + ')';
     else if (!f.odds) reason = f.provider === 'lpf' ? 'Sursa oficială LPF nu publică cote verificabile' : 'Fără cote verificabile la sursă';
     else if (stakeOffer && f.provider !== 'pandascore' && f.odds.source !== IMPORT_SOURCE) reason = 'Fără cote Stake (oferta vine doar din exportul Stake)';
     else if (f.provider === 'pandascore' ? !f.odds.markets.some((m) => m.key === 'ML:HOME') : !f.odds.markets.some((m) => m.marketType === '1X2')) reason = f.provider === 'pandascore' ? 'Cota pe câștigătorul meciului lipsește' : 'Piața 1X2 lipsește';
@@ -276,7 +277,10 @@ async function stepFetchScoutStats(job: JobRow, ids: string[]) {
       }
       const dossier = buildDossier({ home: f.home, away: f.away, kickoff: f.kickoff, league: f.leagueName, homeMatches: home.matches, awayMatches: away.matches, missing: [...home.missing, ...away.missing] });
       const ppg = (s: { points: number | null; played: number | null } | null) => (s && s.points !== null && s.played ? Math.round((s.points / s.played) * 100) / 100 : null);
-      const model = modelFixture({ homeHistory: home.matches, awayHistory: away.matches, markets: f.odds.markets, homePpg: ppg(standings.home), awayPpg: ppg(standings.away) });
+      const fullModel = modelFixture({ homeHistory: home.matches, awayHistory: away.matches, markets: f.odds.markets, homePpg: ppg(standings.home), awayPpg: ppg(standings.away) });
+      // „Doar GG / doar peste 2,5” (owner request 05.11): agents, validation and the optimizer only ever see the chosen markets.
+      const only = job.config.custom?.onlyMarkets;
+      const model = only?.length ? { ...fullModel, markets: fullModel.markets.filter((m) => marketAllowedBy(only, m.key)) } : fullModel;
       let news: FixtureSnapshot['news'];
       if (f.provider !== 'demo') {
         const [nh, na] = await Promise.all([teamNews(f.home, f.kickoff, 8, f.away), teamNews(f.away, f.kickoff, 8, f.home)]);
@@ -489,7 +493,7 @@ function idealPerLeg(job: JobRow) {
 
 function ticketBrief(job: JobRow, p: LegPolicy) {
   if (job.config.review) return `biletul adus de utilizator: ${job.config.review.legs.length} meciuri, cotă totală ${Number(job.target_odds)}. Judeci fiecare meci separat; nu ești obligat să urmărești cota.`;
-  const base = `${job.config.custom ? `bilet CUSTOM cerut de utilizator: exact ${job.config.custom.legs} meciuri, ` : ''}țintă cotă ${Number(job.target_odds)}, construit din ${job.config.custom ? 'exact' : 'minimum'} ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
+  const base = `${job.config.custom ? `bilet CUSTOM cerut de utilizator: exact ${job.config.custom.legs} meciuri, ${job.config.custom.onlyMarkets?.length ? `TOATE selecțiile doar pe: ${job.config.custom.onlyMarkets.map((o) => ONLY_MARKET_LABEL[o]).join(' sau ')} (alegerea utilizatorului; regula varietății nu se aplică), ` : ''}` : ''}țintă cotă ${Number(job.target_odds)}, construit din ${job.config.custom ? 'exact' : 'minimum'} ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
   if (p.pick === 'highest') {
     const avg = Math.pow(Number(job.target_odds), 1 / p.minLegs);
     return `${base} Biletul are nevoie de o cotă medie de aproximativ ${avg.toFixed(2)} pe meci, deci aici NU alegi automat varianta cea mai mică: alege selecția solidă cu cotă între ${p.minOdds.toFixed(2)} și ${p.maxOdds.toFixed(2)}. La acest bilet limita ta de cotă este mărită cu +${(p.agentCapBonus ?? 0).toFixed(2)}.`;

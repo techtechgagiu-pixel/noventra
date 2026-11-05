@@ -54,7 +54,13 @@ export type CustomConfig = { target: number; legs: number; agents: string[]; win
   /** Exact interval chosen by the user: matches starting between fromHours and toHours from the moment of creation. */
   fromHours?: number; toHours?: number;
   /** League ids the user ticked; absent = every league. */
-  leagues?: string[] };
+  leagues?: string[];
+  /** Owner request 05.11: every selection of the ticket must be one of these markets (absent = any market). */
+  onlyMarkets?: Array<'BTTS' | 'OVER25'> };
+export const ONLY_MARKET_LABEL = { BTTS: 'ambele echipe marchează (GG)', OVER25: 'peste 2,5 goluri' } as const;
+/** True when a market key is allowed by the ticket's „doar GG / doar peste 2,5” choice (no choice = everything is allowed). */
+export const marketAllowedBy = (only: CustomConfig['onlyMarkets'], key: string) =>
+  !only?.length || only.some((o) => (o === 'BTTS' ? key === 'BTTS:YES' : key === 'TOTAL:OVER:2.5'));
 export const CUSTOM_LIMIT_PER_DAY = 20;
 /** Owner decision 28.10: the owner (admin code or owner Google account) may create 30 custom tickets a day; everyone else 1. */
 export const OWNER_CUSTOM_LIMIT = 30;

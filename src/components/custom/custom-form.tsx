@@ -76,6 +76,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const [legs, setLegs] = useState(4);
   const [fromI, setFromI] = useState(0); // owner request 31.10: from 20 minutes on by default
   const [toI, setToI] = useState(STOPS.indexOf(48));
+  const [onlyMarkets, setOnlyMarkets] = useState<Array<'BTTS' | 'OVER25'>>([]); // owner request 05.11: none ticked = any market
   const [day, setDay] = useState<number | null>(null); // owner request 05.11: pick a whole day (today … in 3 days) instead of an interval
   const [minute, setMinute] = useState(0);
   useEffect(() => { const t = setInterval(() => setMinute((m) => m + 1), 60_000); return () => clearInterval(t); }, []);
@@ -87,7 +88,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   // Owner request 30.10: a ticket made only of Counter-Strike matches, one tap away.
   const [sport, setSport] = useState<'football' | 'cs'>('football');
   const chooseSport = (s: 'football' | 'cs') => {
-    setSport(s); setLeagues([]);
+    setSport(s); setLeagues([]); setOnlyMarkets([]);
     // CS prices exist for the next ~72 h and favourites are short: a smaller, closer ticket by default.
     if (s === 'cs') { setTarget(3); setLegs(3); setToI(STOPS.indexOf(48)); }
   };
@@ -143,7 +144,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true); setError(null);
-    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues: sentLeagues, count });
+    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues: sentLeagues, count, ...(sport === 'football' && onlyMarkets.length ? { onlyMarkets } : {}) });
     if (attempt.current?.body !== body) attempt.current = { body, requestId: crypto.randomUUID() };
     try {
       const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ ...JSON.parse(body), requestId: attempt.current.requestId }) });
@@ -168,6 +169,16 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <input id="target" type="number" inputMode="decimal" min={1.2} max={1000} step={0.1} value={target} onChange={(e) => setTarget(Number(e.target.value) || 0)}
             className="board-num mt-2 w-full rounded-lg border border-line bg-ink px-3 py-1.5 text-[2.6rem] outline-none focus:border-cyan" />
           <div className="mt-2 flex flex-wrap gap-1.5">{TARGETS.map((t) => <button key={t} onClick={() => setTarget(t)} className={`chip ${target === t ? 'text-cyan' : 'text-muted'}`}>{t}</button>)}</div>
+          {sport === 'football' && <fieldset className="mt-3 border-t border-line pt-3">
+            <legend className="sr-only">Tipul pronosticurilor de pe bilet</legend>
+            <p className="text-xs font-semibold text-muted">Pronosticuri doar de tipul</p>
+            {([['BTTS', 'Doar GG (ambele echipe marchează)'], ['OVER25', 'Doar peste 2,5 goluri']] as const).map(([id, label]) => (
+              <label key={id} className="mt-2 flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" checked={onlyMarkets.includes(id)} onChange={(e) => setOnlyMarkets((c) => (e.target.checked ? [...c, id] : c.filter((x) => x !== id)))} className="h-4 w-4 accent-cyan" />{label}
+              </label>
+            ))}
+            <p className="mt-2 text-[11px] text-muted">{onlyMarkets.length ? 'Toate selecțiile de pe bilet vor fi doar de acest tip' + (onlyMarkets.length > 1 ? ' (oricare dintre cele două)' : '') + '; meciurile fără această piață sunt sărite.' : 'Nimic bifat: echipa alege liber cele mai bune pronosticuri.'}</p>
+          </fieldset>}
         </div>
         <div className="card p-4">
           <p className="text-xs font-semibold text-muted">Din câte meciuri</p>
