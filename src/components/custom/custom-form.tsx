@@ -280,7 +280,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
             );
           })}
         </div>
-        <p className={`mb-2 text-xs ${limitHit ? 'text-gold' : 'text-muted'}`} role={limitHit ? 'status' : undefined}>Maximum {MAX_CUSTOM_AGENTS} agenți pe bilet ({chosen.length}/{MAX_CUSTOM_AGENTS} aleși){limitHit ? ' — scoate un agent ca să alegi altul; din echipele mari se iau primii 11.' : '.'} Creierul echipei se adaugă automat.</p>
+        <p className={`mb-2 text-xs ${limitHit ? 'text-gold' : 'text-muted'}`} role={limitHit ? 'status' : undefined}>Maximum {MAX_CUSTOM_AGENTS} agenți pe bilet ({chosen.length}/{MAX_CUSTOM_AGENTS} aleși){limitHit ? ` — scoate un agent ca să alegi altul; din echipele mari se iau primii ${MAX_CUSTOM_AGENTS}.` : '.'} Creierul echipei se adaugă automat.</p>
         <p className="mb-3 text-xs text-muted">{topSixReady ? 'Top 6 selectează primii șase agenți din Statistici: luna curentă, toată comunitatea. Se actualizează odată cu rezultatele; poți modifica echipa după selectare.' : 'Top 6 devine disponibil când cel puțin șase agenți au rezultate decise în luna curentă.'}</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {agents.map((a) => {
