@@ -224,7 +224,7 @@ export async function createReviewJob(userId: string, input: unknown, at = new D
   if (!picks.length) throw new SlotError('Adaugă cel puțin un meci pe bilet.');
   if (picks.length > 20) throw new SlotError('Maximum 20 meciuri pe bilet.');
   if (new Set(picks.map((p) => p.fixtureId)).size !== picks.length) throw new SlotError('Un meci poate apărea o singură dată pe bilet.');
-  if (picks.some((p) => isBannedMarket(p.marketKey))) throw new SlotError('Pronosticurile „sub” și șansa dublă „12” nu sunt analizate în PRIMUL 11.');
+  if (picks.some((p) => isBannedMarket(p.marketKey))) throw new SlotError('Pronosticurile „sub”, șansa dublă „12” și „Ambele echipe marchează – NU” nu sunt analizate în PRIMUL 11.');
   const advice = typeof o.advice === 'string' && o.advice.trim() ? o.advice.trim().slice(0, 800) : null;
   if (!providerConfigured('groq') && !providerConfigured('gemini') && !providerConfigured('openrouter') && !config.allowDemoProviders) throw new SlotError('Niciun furnizor AI nu este configurat pe server.', 503);
   const usage = await aiUsageToday();
