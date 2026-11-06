@@ -128,6 +128,8 @@ export function labelFor(key: string, home: string, away: string): string {
   if (family === 'MG') return a.endsWith('+') ? `${a.slice(0, -1)} sau mai multe goluri în meci` : `Între ${a.replace('-', ' și ')} goluri în meci`;
   if (family === 'WTN') return b === 'YES' ? `${team(a)} câștigă fără să primească gol` : `${team(a)} nu câștigă fără să primească gol`;
   if (family === 'EH') return `${a === 'DRAW' ? 'Egal' : team(a)} la handicap european (${b}:${key.split(':')[3]})`;
+  if (family === 'CORN') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} cornere`;
+  if (family === 'TCORN') return `${team(a)} ${b === 'OVER' ? 'peste' : 'sub'} ${key.split(':')[3]} cornere`;
   return key;
 }
 
@@ -182,6 +184,26 @@ function mapMarket(m: Obj, home: string, away: string): { family: string | null;
   const spec = (k: string) => new RegExp(`${k}=([^;,\\s]+)`).exec(str(m.specifiers))?.[1];
   const sideOf = (n: string): 'HOME' | 'AWAY' | null => (isHome(n) ? 'HOME' : isAway(n) ? 'AWAY' : null);
   const halfLine = (x: unknown) => { const l = Number(x); return Number.isFinite(l) && Math.abs(l % 1) === 0.5 ? l : null; };
+  // ── Corners (owner decision 06.11): full-time total and each team's total, x.5 lines, settled from ESPN's corner counts.
+  // Half, range, odd/even, first/last corner, handicap and race markets are left out. Cards stay out until Stake's
+  // booking-points rule is checked against what ESPN counts. ──
+  {
+    const label = `${tpl} ${norm(str(m.name))}`;
+    if (/corner/.test(label) && !/1st|2nd|half|range|odd|even|first|last|handicap|exact|race|minute|1x2|and|&/.test(label.replace(/\{\$competitor[12]\}/g, ''))) {
+      const quotes: ImportedMarket[] = [];
+      const side: 'HOME' | 'AWAY' | null = tpl.includes('competitor1') ? 'HOME' : tpl.includes('competitor2') ? 'AWAY'
+        : norm(str(m.name)).startsWith(h + ' ') ? 'HOME' : norm(str(m.name)).startsWith(a + ' ') ? 'AWAY' : null;
+      const teamMarket = /competitor[12]/.test(tpl) || side !== null;
+      for (const o of outcomes) {
+        const x = /^(over|under)\s*([\d.]+)?$/.exec(o.n); const line = halfLine(x?.[2] ?? spec('total') ?? spec('line'));
+        if (!x || line === null) continue;
+        const dir = x[1] === 'over' ? 'OVER' : 'UNDER';
+        if (teamMarket) { if (side) quotes.push({ key: `TCORN:${side}:${dir}:${line}`, marketType: 'CORNERS', odds: r3(o.odds), line }); }
+        else quotes.push({ key: `CORN:${dir}:${line}`, marketType: 'CORNERS', odds: r3(o.odds), line });
+      }
+      if (quotes.length) return { family: teamMarket ? 'TCORN' : 'CORN', quotes };
+    }
+  }
   // ── Further Stake families, all settled on the full-time score (owner decision 06.11) ──
   if (tpl === '{$competitor1} total' || tpl === '{$competitor2} total') {
     const side = tpl.includes('competitor1') ? 'HOME' : 'AWAY'; const quotes: ImportedMarket[] = [];
