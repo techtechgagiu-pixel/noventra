@@ -74,7 +74,7 @@ export function AdminPanel() {
             {[10, 60].map((n) => <button key={n} className="btn btn-ghost px-2 py-1 text-xs" onClick={() => act(`c+${a.id}${n}`, () => post('/api/admin/panel/credits', { userId: a.id, delta: n }))}>+{n}</button>)}
             <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => act(`c-${a.id}`, () => post('/api/admin/panel/credits', { userId: a.id, delta: -10 }), true)}>{confirm === `c-${a.id}` ? 'Sigur? −10' : '−10'}</button>
             <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => act(`f${a.id}`, () => post('/api/admin/panel/credits', { userId: a.id, founder: a.founder !== 1 }))}>{a.founder === 1 ? 'Taxează' : 'Fă gratuit'}</button>
-            {a.role !== 'admin' && <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => act(`b${a.id}`, () => post('/api/admin/accounts', { id: a.id, blocked: !blocked }), !blocked)}>{blocked ? 'Deblochează' : confirm === `b${a.id}` ? 'Sigur? Blochează' : 'Blochează'}</button>}
+            {a.role !== 'admin' && <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => act(`b${a.id}`, () => post('/api/admin/panel/block', { userId: a.id, blocked: !blocked }), !blocked)}>{blocked ? 'Deblochează' : confirm === `b${a.id}` ? 'Sigur? Blochează' : 'Blochează'}</button>}
           </div></td></tr>; })}</tbody></table></div>
     </section>}
 
