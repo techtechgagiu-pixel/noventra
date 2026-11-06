@@ -105,6 +105,9 @@ describe('limita de 30 de minute (06.11)', () => {
   it('nu expiră înainte de limită, expiră după', () => {
     expect(jobTimeUp({ created_at: at(MAX_JOB_MINUTES - 2), config: {} as never })).toBe(false);
     expect(jobTimeUp({ created_at: at(MAX_JOB_MINUTES + 2), config: {} as never })).toBe(true);
+    // Time spent waiting in the queue does not count: the clock starts when analysis starts.
+    expect(jobTimeUp({ created_at: at(600), started_at: at(5), config: {} as never })).toBe(false);
+    expect(jobTimeUp({ created_at: at(600), started_at: at(MAX_JOB_MINUTES + 2), config: {} as never })).toBe(true);
   });
   it('o cerere de completare repornește ceasul', () => {
     expect(jobTimeUp({ created_at: at(120), config: { completion: { requestedAt: at(5) } } as never })).toBe(false);
