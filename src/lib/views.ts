@@ -93,3 +93,11 @@ export async function ticketDetail(userId: string, ticketId: string) {
     fixtures: snapshots.map((s) => ({ fixtureId: s.fixture_id, fixture: s.payload.fixture, model: s.payload.model, odds: s.payload.odds, dataQuality: s.payload.dataQuality })),
   };
 }
+
+/** The owner's own accounts may watch any user's analysis: the job is then read as its real owner; everyone else only ever sees their own. */
+export async function viewerFor(user: { id: string; email: string; role?: string }, jobId: string): Promise<string> {
+  const { canSeeAccounts } = await import('./ticket-removal');
+  if (!canSeeAccounts(user)) return user.id;
+  const row = await one<{ user_id: string }>('SELECT user_id FROM ticket_generation_jobs WHERE id=$1', [jobId]);
+  return row?.user_id ?? user.id;
+}

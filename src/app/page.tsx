@@ -10,7 +10,7 @@ import { ResultsRefresh } from '@/components/results-refresh';
 import { FeedbackButton } from '@/components/feedback-button';
 import { AssistantChat } from '@/components/assistant-chat';
 import { many, one, timeCompare, SQL_NOW } from '@/lib/db';
-import { jobEvents, jobMeta, listTickets, ticketDetail } from '@/lib/views';
+import { jobEvents, jobMeta, listTickets, ticketDetail, viewerFor } from '@/lib/views';
 import { TicketView, type TicketData } from '@/components/ticket-view';
 import { TicketArchive } from '@/components/ticket-archive';
 import { NexusLive } from '@/components/nexus-live';
@@ -117,7 +117,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.sport,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
         {tab === 'custom' && <CustomTab limit={await customLimitForUser(user)} userId={user.id} job={sp.job} />}
-        {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
+        {tab === 'analiza' && <AnalizaTab userId={user.id} viewer={user} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} sport={sp.sport} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} admin={user.role === 'admin'} canRemove={canRemoveTickets(user)} />}
@@ -158,7 +158,7 @@ async function TicketPanel({ userId, id, fresh, back }: { userId: string; id: st
   );
 }
 
-async function AnalizaTab({ userId, job, replay, running }: { userId: string; job?: string; replay?: string; running: Array<{ id: string; slot: string; status: string; created_at: Date }> }) {
+async function AnalizaTab({ userId, viewer, job, replay, running }: { userId: string; viewer: { id: string; email: string; role?: string }; job?: string; replay?: string; running: Array<{ id: string; slot: string; status: string; created_at: Date }> }) {
   if (replay && UUID.test(replay)) {
     const t = await ticketDetail(userId, replay);
     if (t) {
@@ -170,7 +170,8 @@ async function AnalizaTab({ userId, job, replay, running }: { userId: string; jo
   // Explicit job, else the newest running one, else the newest job of today.
   let jobId = job && UUID.test(job) ? job : running[0]?.id;
   if (!jobId) jobId = (await many<{ id: string }>('SELECT id FROM ticket_generation_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [userId]))[0]?.id;
-  const meta = jobId ? await jobMeta(userId, jobId) : null;
+  const viewAs = jobId && job ? await viewerFor(viewer, jobId) : userId;
+  const meta = jobId ? await jobMeta(viewAs, jobId) : null;
   if (!jobId || !meta) {
     return (
       <div className="card p-8 text-center">
@@ -180,7 +181,7 @@ async function AnalizaTab({ userId, job, replay, running }: { userId: string; jo
       </div>
     );
   }
-  const events = (await jobEvents(userId, jobId, 0)) ?? [];
+  const events = (await jobEvents(viewAs, jobId, 0)) ?? [];
   return (
     <div className="space-y-4">
       {running.length > 1 && (

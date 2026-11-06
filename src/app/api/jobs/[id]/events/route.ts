@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { fail, isUuid, json, requireUser } from '@/lib/http';
-import { jobEvents, jobMeta } from '@/lib/views';
+import { jobEvents, jobMeta, viewerFor } from '@/lib/views';
 import { TERMINAL } from '@/lib/jobs/types';
 
 export const dynamic = 'force-dynamic';
@@ -10,13 +10,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (user instanceof NextResponse) return user;
   const { id } = await ctx.params;
   if (!isUuid(id)) return fail('Identificator invalid.', 400);
+  const viewer = await viewerFor(user, id);
   const after = Math.max(0, Number(req.nextUrl.searchParams.get('after') || req.headers.get('last-event-id') || 0));
   if (req.nextUrl.searchParams.get('format') === 'json') {
-    const events = await jobEvents(user.id, id, after);
+    const events = await jobEvents(viewer, id, after);
     if (!events) return fail('Analiza nu există.', 404);
-    return json({ events, meta: await jobMeta(user.id, id) });
+    return json({ events, meta: await jobMeta(viewer, id) });
   }
-  const meta = await jobMeta(user.id, id);
+  const meta = await jobMeta(viewer, id);
   if (!meta) return fail('Analiza nu există.', 404);
   const enc = new TextEncoder();
   let cursor = after;
@@ -28,9 +29,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       req.signal.addEventListener('abort', () => { closed = true; });
       while (!closed && Date.now() - started < 4 * 60_000) {
         if (await requireUser(req) instanceof NextResponse) break;
-        const events = (await jobEvents(user.id, id, cursor)) ?? [];
+        const events = (await jobEvents(viewer, id, cursor)) ?? [];
         for (const e of events) { send(`id: ${e.seq}\nevent: job\ndata: ${JSON.stringify(e)}\n\n`); cursor = e.seq; }
-        const m = await jobMeta(user.id, id);
+        const m = await jobMeta(viewer, id);
         send(`event: meta\ndata: ${JSON.stringify(m)}\n\n`);
         if (m && (TERMINAL as string[]).includes(m.status) && !events.length) break;
         await new Promise((r) => setTimeout(r, process.env.BETMIND_RUNTIME?.startsWith('cloudflare')?5000:1500));
