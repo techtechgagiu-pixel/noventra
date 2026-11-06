@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { creditsForLegs, extraCents, parseExtra, EXTRA_MAX, PLANS } from '../../src/lib/credits';
+import { boostedAgree, missedTarget } from '../../src/lib/ticket-completion';
 import { verifySignature } from '../../src/lib/stripe-signature';
 import { createHmac } from 'node:crypto';
 
@@ -30,5 +31,16 @@ describe('semnătura Stripe', () => {
     expect(await verifySignature(body + ' ', `t=${t},v1=${sig}`, secret, now)).toBe(false);
     expect(await verifySignature(body, `t=${t},v1=${sig}`, secret, now + 600_000)).toBe(false);
     expect(await verifySignature(body, null, secret, now)).toBe(false);
+  });
+});
+
+describe('completează biletul', () => {
+  it('recunoaște un bilet care a ratat ținta', () => {
+    expect(missedTarget(1.82, 10)).toBe(true);
+    expect(missedTarget(9.0, 10)).toBe(false);
+    expect(missedTarget(null, 10)).toBe(false);
+  });
+  it('cere 4 agenți de acord, mereu sub efectivul echipei', () => {
+    expect([boostedAgree(5, 5), boostedAgree(6, 6), boostedAgree(4, 4), boostedAgree(3, 3), boostedAgree(5, 3), boostedAgree(2, 2)]).toEqual([4, 4, 3, 2, 3, 2]);
   });
 });

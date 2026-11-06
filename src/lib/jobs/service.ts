@@ -7,6 +7,7 @@ import { SQL_NOW } from '../db';
 import { providerConfigured, resetModelExhaustion } from '../ai/router';
 import { aiUsageToday } from '../usage';
 import { chargeCredits, creditsForLegs, refundBatch } from '../credits';
+import { missedTarget, boostedAgree } from '../ticket-completion';
 import { CUSTOM_LIMIT_PER_DAY, MARKET_FAMILY_IDS, needsVarietyOverride, type MarketFamilyId, MAX_CUSTOM_AGENTS, REVIEW_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, isReviewSlot, slotInfo, type ReviewLeg, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
 import { VOTING_AGENTS } from '../ai/agents';
 import { localDate } from '../time';
@@ -281,6 +282,16 @@ export async function reviewJobs(userId: string, limit = 12) {
      WHERE j.user_id=$1 AND substr(j.slot,1,7)='REVIEW_' ORDER BY j.created_at DESC LIMIT $2`, [userId, limit]);
 }
 
+/** A finished custom ticket that stayed far below its target can be completed once more, with fewer agreeing agents. */
+function isBoostable(generation: string, actual: unknown, row: { target_odds: unknown; config: { custom?: unknown; review?: unknown } }) {
+  return generation === 'COMPLETED' && !!row.config.custom && !row.config.review && missedTarget(actual == null ? null : Number(actual), Number(row.target_odds), config.limits.targetTolerance);
+}
+/** Boost: ask for 4 agreeing agents (never the full team) for this re-analysis. */
+function boostConfig<T extends { custom?: { agents: string[]; minAgree?: number } }>(cfg: T, boost: boolean): T {
+  if (!boost || !cfg.custom) return cfg;
+  return { ...cfg, custom: { ...cfg.custom, minAgree: boostedAgree(cfg.custom.agents.length, cfg.custom.minAgree) } };
+}
+
 /** Continues the same incomplete ticket, preserving its analysis and looking for additional fixtures. */
 export async function completeIncompleteTicket(userId: string, ticketId: string, at = new Date()) {
   if(isD1())return completeD1IncompleteTicket(userId,ticketId,at);
@@ -289,19 +300,21 @@ export async function completeIncompleteTicket(userId: string, ticketId: string,
     const row = (await c.query(`SELECT j.* FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id
       WHERE t.id=$1 AND t.user_id=$2 AND j.user_id=$2 FOR UPDATE OF j`, [ticketId, userId])).rows[0];
     if (!row) throw new SlotError('Biletul nu există sau nu îți aparține.', 404);
-    const ticket = (await c.query('SELECT generation_status FROM tickets WHERE id=$1', [ticketId])).rows[0];
-    if (ticket.generation_status !== 'INCOMPLETE' || row.config.review) throw new SlotError('Doar un bilet incomplet poate fi finalizat.', 409);
+    const ticket = (await c.query('SELECT generation_status, actual_odds FROM tickets WHERE id=$1', [ticketId])).rows[0];
+    const boost = isBoostable(ticket.generation_status, ticket.actual_odds, row as never);
+    if ((ticket.generation_status !== 'INCOMPLETE' && !boost) || row.config.review) throw new SlotError('Doar un bilet incomplet sau care nu a atins cota țintă poate fi completat.', 409);
+    if (boost && row.config.completion?.boost) throw new SlotError('Biletul a fost deja reanalizat cu mai puțini agenți de acord.', 409);
     if (['QUEUED', 'RUNNING', 'WAITING'].includes(row.status)) return { jobId: row.id as string, ticketId, resumed: false };
     const usage = await aiUsageToday(c);
     if (usage.requests + 20 > config.limits.aiDailyCalls) throw new SlotError('Limita AI zilnică este aproape epuizată. Reîncearcă după resetare.', 503);
     const continuing = !!row.config.completion && ['PAUSED', 'FAILED'].includes(row.status);
-    const completion = continuing ? row.config.completion : { requestedAt: at.toISOString(), attempt: (row.config.completion?.attempt ?? 0) + 1 };
-    const cfg = { ...row.config, windowStart: localDate(at), completion };
-    const checkpoint = continuing ? row.checkpoint : { ...row.checkpoint, phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [] };
+    const completion = continuing ? row.config.completion : { requestedAt: at.toISOString(), attempt: (row.config.completion?.attempt ?? 0) + 1, ...(boost ? { boost: true } : {}) };
+    const cfg = boostConfig({ ...row.config, windowStart: localDate(at), completion }, boost);
+    const checkpoint = continuing ? row.checkpoint : { ...row.checkpoint, phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], ...(boost ? { extensions: 0 } : {}) };
     await c.query(`UPDATE ticket_generation_jobs SET status='QUEUED',stage='QUEUED',config=$2,checkpoint=$3,next_run_at=now(),
       finished_at=NULL,started_at=CASE WHEN $4::boolean THEN started_at ELSE NULL END,last_error=NULL,attempt_count=0,lease_owner=NULL,lease_expires_at=NULL WHERE id=$1`, [row.id, JSON.stringify(cfg), JSON.stringify(checkpoint), continuing]);
     await recordEvent(row.id, { type: 'JOB_RESUMED', stage: 'QUEUED', payload: { by: 'user', completion: true, attempt: completion.attempt,
-      note: 'Finalizarea biletului incomplet: păstrăm analiza salvată, reverificăm selecțiile și căutăm meciuri noi cu aceeași țintă și echipă.' } }, c);
+      note: boost ? 'Completarea biletului: păstrăm analiza salvată, cerem acordul a doar 4 agenți și căutăm meciurile care lipsesc, cu aceeași țintă și echipă.' : 'Finalizarea biletului incomplet: păstrăm analiza salvată, reverificăm selecțiile și căutăm meciuri noi cu aceeași țintă și echipă.' } }, c);
     await c.query("INSERT INTO audit_logs(user_id,action,detail) VALUES($1,'ticket_completion_requested',$2)", [userId, JSON.stringify({ticketId, jobId:row.id, attempt:completion.attempt})]);
     return { jobId: row.id as string, ticketId, resumed: true };
   });
@@ -311,20 +324,22 @@ export async function completeIncompleteTicket(userId: string, ticketId: string,
 }
 
 async function completeD1IncompleteTicket(userId:string,ticketId:string,at:Date){
-  const row=await one<JobRow & {last_event_seq:number;ticket_generation_status:string}>(`SELECT j.*,t.generation_status AS ticket_generation_status FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id WHERE t.id=$1 AND t.user_id=$2 AND j.user_id=$2`,[ticketId,userId]);
+  const row=await one<JobRow & {last_event_seq:number;ticket_generation_status:string;ticket_actual_odds:number|null}>(`SELECT j.*,t.generation_status AS ticket_generation_status,t.actual_odds AS ticket_actual_odds FROM tickets t JOIN ticket_generation_jobs j ON j.id=t.job_id WHERE t.id=$1 AND t.user_id=$2 AND j.user_id=$2`,[ticketId,userId]);
   if(!row)throw new SlotError('Biletul nu există sau nu îți aparține.',404);
-  if(row.ticket_generation_status!=='INCOMPLETE'||row.config.review)throw new SlotError('Doar un bilet incomplet poate fi finalizat.',409);
+  const boost=isBoostable(row.ticket_generation_status,row.ticket_actual_odds,row);
+  if((row.ticket_generation_status!=='INCOMPLETE'&&!boost)||row.config.review)throw new SlotError('Doar un bilet incomplet sau care nu a atins cota țintă poate fi completat.',409);
+  if(boost&&row.config.completion?.boost)throw new SlotError('Biletul a fost deja reanalizat cu mai puțini agenți de acord.',409);
   if(['QUEUED','RUNNING','WAITING'].includes(row.status))return {jobId:row.id,ticketId,resumed:false};
   const usage=await aiUsageToday();
   if(usage.requests+20>config.limits.aiDailyCalls)throw new SlotError('Limita AI zilnică este aproape epuizată. Reîncearcă după resetare.',503);
   const continuing=!!row.config.completion&&['PAUSED','FAILED'].includes(row.status);
-  const completion=continuing?row.config.completion!:{requestedAt:at.toISOString(),attempt:(row.config.completion?.attempt??0)+1};
-  const cfg={...row.config,windowStart:localDate(at),completion};
-  const cp=continuing?row.checkpoint:{...row.checkpoint,phase:'DISCOVER',batchIndex:0,batchStep:'FETCH',batches:[],agentsDone:[]};
+  const completion=continuing?row.config.completion!:{requestedAt:at.toISOString(),attempt:(row.config.completion?.attempt??0)+1,...(boost?{boost:true}:{})};
+  const cfg=boostConfig({...row.config,windowStart:localDate(at),completion},boost);
+  const cp=continuing?row.checkpoint:{...row.checkpoint,phase:'DISCOVER',batchIndex:0,batchStep:'FETCH',batches:[],agentsDone:[],...(boost?{extensions:0}:{})};
   const resumed=await transitionD1Job({
     text:`UPDATE ticket_generation_jobs SET status='QUEUED',stage='QUEUED',config=$2,checkpoint=$3,next_run_at=${SQL_NOW()},finished_at=NULL,started_at=CASE WHEN $4 THEN started_at ELSE NULL END,last_error=NULL,attempt_count=0,lease_owner=NULL,lease_expires_at=NULL,last_event_seq=last_event_seq+1 WHERE id=$1 AND last_event_seq=$5 AND status=$6 RETURNING id`,
     params:[row.id,JSON.stringify(cfg),JSON.stringify(cp),continuing,row.last_event_seq,row.status],
-  },row.id,{type:'JOB_RESUMED',stage:'QUEUED',payload:{by:'user',completion:true,attempt:completion.attempt,note:'Finalizarea biletului incomplet: păstrăm analiza salvată, reverificăm selecțiile și căutăm meciuri noi cu aceeași țintă și echipă.'}},
+  },row.id,{type:'JOB_RESUMED',stage:'QUEUED',payload:{by:'user',completion:true,attempt:completion.attempt,note:boost?'Completarea biletului: păstrăm analiza salvată, cerem acordul a doar 4 agenți și căutăm meciurile care lipsesc, cu aceeași țintă și echipă.':'Finalizarea biletului incomplet: păstrăm analiza salvată, reverificăm selecțiile și căutăm meciuri noi cu aceeași țintă și echipă.'}},
   {userId,action:'ticket_completion_requested',detail:{ticketId,jobId:row.id,attempt:completion.attempt}});
   if(!resumed){
     const latest=await one<{status:string}>('SELECT status FROM ticket_generation_jobs WHERE id=$1',[row.id]);
