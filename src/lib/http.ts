@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE, userFromToken, type User } from './auth';
 import { config } from './config';
+import { canSeeAccounts } from './ticket-removal';
 
 export const json = (data: unknown, status = 200) => NextResponse.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 export const fail = (message: string, status = 400) => json({ error: message }, status);
@@ -13,6 +14,13 @@ export async function requireAdmin(req: NextRequest): Promise<User | NextRespons
   const u = await requireUser(req);
   if (u instanceof NextResponse) return u;
   return u.role === 'admin' ? u : fail('Acces permis doar administratorilor.', 403);
+}
+
+/** Owner-level access for the admin panel: admin role or one of the owner's own accounts (a Google sign-in has role 'user', so the email list decides). */
+export async function requireOwner(req: NextRequest): Promise<User | NextResponse> {
+  const u = await requireUser(req);
+  if (u instanceof NextResponse) return u;
+  return canSeeAccounts(u) ? u : fail('Acces permis doar administratorilor.', 403);
 }
 
 /** CSRF defence for cookie-authenticated mutations: same-origin check on Origin/Referer. */

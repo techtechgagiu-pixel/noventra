@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { fail, json, requireAdmin, sameOrigin } from '@/lib/http';
+import { fail, json, requireOwner, sameOrigin } from '@/lib/http';
 import { adjustCredits, setFounder } from '@/lib/credits';
 import { SlotError } from '@/lib/jobs/errors';
 
@@ -11,7 +11,7 @@ const Body = z.union([
 ]);
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return fail('Origine respinsă.', 403);
-  const admin = await requireAdmin(req);
+  const admin = await requireOwner(req);
   if (admin instanceof NextResponse) return admin;
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return fail('Cerere invalidă.');
