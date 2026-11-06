@@ -3,25 +3,25 @@ import { config } from './config';
 import { SlotError } from './jobs/errors';
 import { canSeeAccounts, customLimitFor } from './ticket-removal';
 
-/** 1 credit = up to 6 matches on a ticket (owner plan 06.11). A 7–12 match ticket costs 2, 13–18 costs 3, 20 costs 4. */
-export const CREDIT_SIZE = 6;
-export const FREE_SIGNUP_CREDITS = 2;
+/** 1 credit = 1 match on a ticket (owner decision 06.11; before it 1 credit covered 6 matches, so plan credits are ×6 at the same price). */
+export const CREDIT_SIZE = 1;
+export const FREE_SIGNUP_CREDITS = 12;
 export const creditsForLegs = (legs: number) => Math.max(1, Math.ceil(legs / CREDIT_SIZE));
 
 export type Plan = { id: 'debut' | 'titular' | 'capitan'; name: string; slogan: string; credits: number; priceCents: number; perDay: number; maxLegs: number; featured?: boolean };
-/** Prices in euro cents; one credit alone is €0.60. */
+/** Prices in euro cents; one credit alone is €0.10. */
 export const PLANS: Plan[] = [
-  { id: 'debut', name: 'Debut', slogan: 'Încearcă echipa', credits: 10, priceCents: 549, perDay: 3, maxLegs: 12 },
-  { id: 'titular', name: 'Titular', slogan: 'Joci în fiecare etapă', credits: 40, priceCents: 1790, perDay: 6, maxLegs: 20, featured: true },
-  { id: 'capitan', name: 'Căpitan', slogan: 'Banca ta de analiști AI', credits: 120, priceCents: 4390, perDay: 12, maxLegs: 20 },
+  { id: 'debut', name: 'Debut', slogan: 'Încearcă echipa', credits: 60, priceCents: 549, perDay: 3, maxLegs: 12 },
+  { id: 'titular', name: 'Titular', slogan: 'Joci în fiecare etapă', credits: 240, priceCents: 1790, perDay: 6, maxLegs: 20, featured: true },
+  { id: 'capitan', name: 'Căpitan', slogan: 'Banca ta de analiști AI', credits: 720, priceCents: 4390, perDay: 12, maxLegs: 20 },
 ];
-export const SINGLE_CREDIT_CENTS = 60;
+export const SINGLE_CREDIT_CENTS = 10;
 export const planById = (id: unknown) => PLANS.find((p) => p.id === id);
 
 /** Extra credits bought on top of (or without) a plan, at the single-credit price. */
-export const EXTRA_MIN = 1;
-export const EXTRA_MAX = 50;
-export const EXTRA_PACKS = [3, 5, 10, 20];
+export const EXTRA_MIN = 10; // €1: card and crypto processors refuse very small amounts
+export const EXTRA_MAX = 600;
+export const EXTRA_PACKS = [30, 60, 120, 300];
 export const parseExtra = (n: unknown) => { const v = Number(n); return Number.isInteger(v) && v >= EXTRA_MIN && v <= EXTRA_MAX ? v : null; };
 export const extraCents = (credits: number) => credits * SINGLE_CREDIT_CENTS;
 
