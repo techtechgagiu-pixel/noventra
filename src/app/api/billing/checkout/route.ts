@@ -32,6 +32,11 @@ export async function POST(req: NextRequest) {
   });
   const res = await fetch('https://api.stripe.com/v1/checkout/sessions', { method: 'POST', headers: { Authorization: `Bearer ${config.stripeSecretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: form });
   const data = await res.json().catch(() => ({})) as { url?: string; error?: { message?: string } };
-  if (!res.ok || !data.url) return fail('Nu am putut porni plata. Încearcă din nou.', 502);
+  if (!res.ok || !data.url) {
+    // Stripe's own error text is safe to show (it never contains the key); it tells the owner what to fix.
+    console.log(JSON.stringify({ event: 'stripe_checkout_failed', status: res.status, type: (data as { error?: { type?: string } }).error?.type, message: data.error?.message }));
+    const hint = res.status === 401 ? ' (cheia Stripe este invalidă; verifică STRIPE_SECRET_KEY)' : data.error?.message ? ` (${data.error.message.slice(0, 160)})` : '';
+    return fail(`Nu am putut porni plata${hint}.`, 502);
+  }
   return json({ url: data.url });
 }
