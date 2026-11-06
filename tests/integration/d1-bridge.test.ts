@@ -72,9 +72,9 @@ describe('authenticated Render → Cloudflare D1 bridge',()=>{
     try{
       const user=(await one<{id:string}>("INSERT INTO users(google_sub,email) VALUES('bridge-runner','runner@test') RETURNING id"))!;
       const created=await createCustomJob(user.id,{target:2,legs:2,agents:['victor','andrei','robert'],count:3});
+      // Fair queue: one ticket in progress per user, so the same user's three tickets start one at a time.
       const claims=await Promise.all([_claimForTests(),_claimForTests(),_claimForTests()]);
-      expect(claims.filter(Boolean)).toHaveLength(2);
-      expect(new Set(claims.filter(Boolean).map(c=>c!.id)).size).toBe(2);
+      expect(claims.filter(Boolean)).toHaveLength(1);
       await query("UPDATE ticket_generation_jobs SET status='PAUSED',lease_owner=NULL,lease_expires_at=NULL WHERE user_id=$1",[user.id]);
       await query("UPDATE ticket_generation_jobs SET status='RUNNING',stage='QUEUED',lease_expires_at='2000-01-01' WHERE id=$1",[created.jobId]);
       for(let i=0;i<40;i++){

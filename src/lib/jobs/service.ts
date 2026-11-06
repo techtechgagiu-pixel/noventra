@@ -369,6 +369,7 @@ export async function resumeJob(userId: string, jobId: string) {
   return { resumed: true, status: 'QUEUED' };
 }
 
+export const AVG_JOB_MINUTES = 21;
 /** The work queue: analyses waiting or running now, plus the ones finished in the last 2 hours. */
 export async function jobQueue(userId: string) {
   const rows = await many<{ id: string; slot: string; status: string; stage: string; target_odds: string; required_legs: number | null; config: { custom?: CustomConfig; votingAgentIds?: string[] }; checkpoint: { batches?: string[][]; batchIndex?: number; analyzed?: number; qualified?: number }; created_at: Date; started_at: Date | null; finished_at: Date | null; next_run_at: Date; last_error: string | null; ticket_id: string | null; actual_odds: string | null; generation_status: string | null }>(
@@ -377,7 +378,10 @@ export async function jobQueue(userId: string) {
      FROM ticket_generation_jobs j LEFT JOIN tickets t ON t.job_id=j.id
      WHERE j.user_id=$1 AND (j.status IN ('QUEUED','RUNNING','WAITING','PAUSED') OR ${timeCompare('j.finished_at','>',SQL_AGO(2,'hours'))})
      ORDER BY CASE WHEN j.status IN ('QUEUED','RUNNING','WAITING','PAUSED') THEN 0 ELSE 1 END, j.created_at DESC LIMIT 20`, [userId]);
-  const waiting = rows.filter((r) => r.status === 'QUEUED').sort((a, b) => +a.created_at - +b.created_at).map((r) => r.id);
+  // Global line: tickets that have not started yet, oldest first. Each wave of maxConcurrentJobs tickets takes about AVG_JOB_MINUTES.
+  const line = await many<{ id: string }>(`SELECT id FROM ticket_generation_jobs WHERE status IN ('QUEUED','WAITING') AND started_at IS NULL ORDER BY created_at, id LIMIT 500`);
+  const waiting = line.map((r) => r.id);
+  const etaFor = (pos: number) => Math.ceil(pos / Math.max(1, config.limits.maxConcurrentJobs)) * AVG_JOB_MINUTES;
   return rows.map((r) => {
     const info = slotInfo(r.slot, Number(r.target_odds), r.required_legs);
     const batches = r.checkpoint.batches?.length ?? 0;
@@ -385,7 +389,7 @@ export async function jobQueue(userId: string) {
       id: r.id, slot: r.slot, title: info.title, status: r.status, stage: r.stage, createdAt: r.created_at.toISOString(),
       startedAt: r.started_at?.toISOString() ?? null, finishedAt: r.finished_at?.toISOString() ?? null, nextRunAt: r.next_run_at.toISOString(), lastError: r.last_error,
       batch: Math.min(batches, (r.checkpoint.batchIndex ?? 0) + (r.status === 'COMPLETED' ? 0 : 1)), batches, analyzed: r.checkpoint.analyzed ?? 0, qualified: r.checkpoint.qualified ?? 0,
-      agents: r.config.custom?.agents ?? r.config.votingAgentIds ?? null, custom: isCustomSlot(r.slot), review: isReviewSlot(r.slot), position: r.status === 'QUEUED' ? waiting.indexOf(r.id) + 1 : null,
+      agents: r.config.custom?.agents ?? r.config.votingAgentIds ?? null, custom: isCustomSlot(r.slot), review: isReviewSlot(r.slot), position: r.status === 'QUEUED' && !r.started_at && waiting.includes(r.id) ? waiting.indexOf(r.id) + 1 : null, etaMin: r.status === 'QUEUED' && !r.started_at && waiting.includes(r.id) ? etaFor(waiting.indexOf(r.id) + 1) : null,
       ticketId: r.ticket_id, actualOdds: r.actual_odds ? Number(r.actual_odds) : null, generation: r.generation_status,
     };
   });
