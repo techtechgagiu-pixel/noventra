@@ -96,8 +96,11 @@ const daysLeftInMonth = () => { const d = new Date(); return new Date(Date.UTC(d
 // which costs credits per market. These calls share the daily allowance with the prices above, are cached 3 days
 // per match, and soonest/biggest matches go first. Only half lines (x.5) are kept: no push/void settlement needed.
 const EXTRAS = 'the-odds-api-extras';
-const EXTRA_MARKETS = 'btts,double_chance,alternate_totals,team_totals,spreads';
-const EXTRA_COST = 5;
+const BASE_EXTRA_MARKETS = 'btts,double_chance,alternate_totals,team_totals,spreads';
+// Corners and cards (06.11) cost 2 more credits per match, so they are off until ODDS_API_CORNERS_CARDS=1.
+const withCornersCards = () => process.env.ODDS_API_CORNERS_CARDS === '1';
+const extraMarkets = () => withCornersCards() ? `${BASE_EXTRA_MARKETS},alternate_totals_corners,alternate_totals_cards` : BASE_EXTRA_MARKETS;
+const extraCost = () => withCornersCards() ? 7 : 5;
 const MAX_EXTRAS_PER_RUN = 40;
 /** Matches starting within this window get all their markets even beyond the daily allowance (user decision 27.10:
  * tomorrow's matches complete everywhere), as long as at least SOON_FLOOR credits stay for the regular price refreshes. */
@@ -133,6 +136,16 @@ export function parseTheOddsExtras(raw: unknown, home: string, away: string): Ma
             if (!half(point)) break;
             if (/^over$/i.test(name)) add({ key: `TOTAL:OVER:${point}`, label: `Peste ${point} goluri`, marketType: 'TOTAL', line: point }, price);
             else if (/^under$/i.test(name)) add({ key: `TOTAL:UNDER:${point}`, label: `Sub ${point} goluri`, marketType: 'TOTAL', line: point }, price);
+            break;
+          case 'alternate_totals_corners': case 'totals_corners':
+            if (!half(point)) break;
+            if (/^over$/i.test(name)) add({ key: `CORN:OVER:${point}`, label: `Peste ${point} cornere`, marketType: 'CORNERS', line: point }, price);
+            else if (/^under$/i.test(name)) add({ key: `CORN:UNDER:${point}`, label: `Sub ${point} cornere`, marketType: 'CORNERS', line: point }, price);
+            break;
+          case 'alternate_totals_cards': case 'totals_cards':
+            if (!half(point)) break;
+            if (/^over$/i.test(name)) add({ key: `CARD:OVER:${point}`, label: `Peste ${point} cartonașe`, marketType: 'CARDS', line: point }, price);
+            else if (/^under$/i.test(name)) add({ key: `CARD:UNDER:${point}`, label: `Sub ${point} cartonașe`, marketType: 'CARDS', line: point }, price);
             break;
           case 'team_totals': {
             const side = sideOf(String(o.description ?? '')); if (!side || !half(point)) break;
@@ -170,16 +183,16 @@ async function withTheOddsExtras(fixtures: Fixture[], events: Map<string, { spor
     for (const { sport, e } of due) {
       if (calls >= MAX_EXTRAS_PER_RUN) break;
       const soon = Date.parse(e.kickoff) - Date.now() <= SOON_MS;
-      const withinDaily = (prices.usedToday ?? 0) + (payload.usedToday ?? 0) + EXTRA_COST <= allowance;
-      if (!(withinDaily || (soon && (prices.creditsRemaining ?? 0) - EXTRA_COST >= SOON_FLOOR))) { if (soon) continue; break; }
+      const withinDaily = (prices.usedToday ?? 0) + (payload.usedToday ?? 0) + extraCost() <= allowance;
+      if (!(withinDaily || (soon && (prices.creditsRemaining ?? 0) - extraCost() >= SOON_FLOOR))) { if (soon) continue; break; }
       try {
         const url = new URL(`https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/events/${encodeURIComponent(e.id)}/odds`);
-        url.search = new URLSearchParams({ apiKey: key, regions: 'eu', markets: EXTRA_MARKETS, oddsFormat: 'decimal', dateFormat: 'iso' }).toString();
+        url.search = new URLSearchParams({ apiKey: key, regions: 'eu', markets: extraMarkets(), oddsFormat: 'decimal', dateFormat: 'iso' }).toString();
         const res = await fetch(url, { signal: AbortSignal.timeout(10_000), cache: 'no-store' });
         calls++; changed = true;
         const left = res.headers.get('x-requests-remaining'), last = res.headers.get('x-requests-last');
         if (left !== null && /^\d+(\.\d+)?$/.test(left)) { prices.creditsRemaining = Number(left); payload.creditsRemaining = Number(left); }
-        payload.usedToday = (payload.usedToday ?? 0) + (last !== null && Number.isFinite(Number(last)) ? Number(last) : EXTRA_COST);
+        payload.usedToday = (payload.usedToday ?? 0) + (last !== null && Number.isFinite(Number(last)) ? Number(last) : extraCost());
         if (!res.ok) { console.warn(JSON.stringify({ event: 'the_odds_extras_failed', status: res.status })); if (res.status === 401 || res.status === 429) break; payload.byEvent![e.id] = { at: new Date().toISOString(), kickoff: e.kickoff, markets: [] }; continue; }
         payload.byEvent![e.id] = { at: new Date().toISOString(), kickoff: e.kickoff, markets: parseTheOddsExtras(await res.json(), e.home, e.away) };
       } catch { console.warn(JSON.stringify({ event: 'the_odds_extras_failed', status: 'network' })); break; }

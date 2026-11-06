@@ -125,7 +125,7 @@ export function fairProbabilities(markets: MarketQuote[]) {
       : m.marketType === 'HANDICAP' ? `AH:${Math.abs(m.line ?? 0)}|${book}`
       : m.marketType === 'TEAM_TOTAL' ? `TT:${parts[1]}:${m.line}|${book}`
       : parts[0] === 'HT1X2' || parts[0] === 'H21X2' ? `${parts[0]}|${book}`
-      : parts[0] === 'HTTOT' || parts[0] === 'CORN' ? `${parts[0]}:${m.line}|${book}`
+      : parts[0] === 'HTTOT' || parts[0] === 'CORN' || parts[0] === 'CARD' ? `${parts[0]}:${m.line}|${book}`
       : parts[0] === 'TCORN' ? `TCORN:${parts[1]}:${m.line}|${book}`
       : parts[0] === 'X2T' ? `X2T:${parts[3]}|${book}`
       : parts[0] === 'TBTTS' ? `TBTTS:${parts[2]}|${book}`
@@ -142,7 +142,7 @@ export function fairProbabilities(markets: MarketQuote[]) {
   }
   for (const [g, list] of groups) {
     const three = /^(1X2|HT1X2|H21X2)\|/.test(g) || /^EH:/.test(g);
-    const two = /^(TOTAL|AH|TT:|HTTOT|CORN|TCORN|BTTS|CS:|ML\||MH:|MT:|WTN:)/.test(g);
+    const two = /^(TOTAL|AH|TT:|HTTOT|CORN|TCORN|CARD|BTTS|CS:|ML\||MH:|MT:|WTN:)/.test(g);
     // Partitions of the result: 1X2 & total (6 cells), total & BTTS (4 cells), exact goals (0..N and the open "N+" bucket, no gaps).
     const complete = three ? list.length === 3 : two ? list.length === 2
       : /^X2T:/.test(g) ? list.length === 6 : /^TBTTS:/.test(g) ? list.length === 4

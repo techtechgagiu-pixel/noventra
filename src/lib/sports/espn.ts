@@ -386,6 +386,10 @@ export async function espnExtraMarkets(f: { leagueKey: string; providerId: strin
         add({ key: `HTTOT:OVER:${r.line}`, label: `Peste ${r.line} goluri în prima repriză`, marketType: 'HALF', odds: r.over, line: r.line, bookmaker: bk });
         add({ key: `HTTOT:UNDER:${r.line}`, label: `Sub ${r.line} goluri în prima repriză`, marketType: 'HALF', odds: r.under, line: r.line, bookmaker: bk });
       }
+      for (const r of ladder(of('Total Cards'), 8.5)) {
+        add({ key: `CARD:OVER:${r.line}`, label: `Peste ${r.line} cartonașe`, marketType: 'CARDS', odds: r.over, line: r.line, bookmaker: bk });
+        add({ key: `CARD:UNDER:${r.line}`, label: `Sub ${r.line} cartonașe`, marketType: 'CARDS', odds: r.under, line: r.line, bookmaker: bk });
+      }
       for (const r of ladder(of('Total Corners'), 13.5)) {
         add({ key: `CORN:OVER:${r.line}`, label: `Peste ${r.line} cornere`, marketType: 'CORNERS', odds: r.over, line: r.line, bookmaker: bk });
         add({ key: `CORN:UNDER:${r.line}`, label: `Sub ${r.line} cornere`, marketType: 'CORNERS', odds: r.under, line: r.line, bookmaker: bk });

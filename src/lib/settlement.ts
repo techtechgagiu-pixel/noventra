@@ -6,12 +6,12 @@ import { runAutomation } from './automation';
 import { csSelectionWins } from './cs/markets';
 import { selectionWins } from './stats/engine';
 
-export type MatchFacts = { ht?: [number, number] | null; corners?: [number, number] | null };
+export type MatchFacts = { ht?: [number, number] | null; corners?: [number, number] | null; cards?: [number, number] | null };
 
 /** Which extra match facts a market needs to be settled (beyond the final score). */
-export function needsFacts(key: string): Array<'ht' | 'corners'> {
+export function needsFacts(key: string): Array<'ht' | 'corners' | 'cards'> {
   const t = key.split(':')[0];
-  return t === 'HT1X2' || t === 'H21X2' || t === 'HTTOT' || t === 'WBH' ? ['ht'] : t === 'CORN' || t === 'TCORN' ? ['corners'] : [];
+  return t === 'HT1X2' || t === 'H21X2' || t === 'HTTOT' || t === 'WBH' ? ['ht'] : t === 'CORN' || t === 'TCORN' ? ['corners'] : t === 'CARD' ? ['cards'] : [];
 }
 
 /** Canonical settlement for the market keys this app produces. Returns null when not decidable (yet). */
@@ -19,7 +19,7 @@ export function settleMarket(key: string, home: number, away: number, facts: Mat
   const [type, side, lineRaw] = key.split(':');
   const line = Number(lineRaw);
   const r = (b: boolean) => (b ? 'WON' : 'LOST');
-  const ht = facts.ht ?? null, corners = facts.corners ?? null;
+  const ht = facts.ht ?? null, corners = facts.corners ?? null, cards = facts.cards ?? null;
   switch (type) {
     case '1X2': return r(side === 'HOME' ? home > away : side === 'AWAY' ? away > home : home === away);
     case 'DC': return r(side === '1X' ? home >= away : side === 'X2' ? away >= home : home !== away);
@@ -36,6 +36,7 @@ export function settleMarket(key: string, home: number, away: number, facts: Mat
     case 'WBH': { if (!ht) return null; const h2 = [home - ht[0], away - ht[1]]; return r(side === 'HOME' ? ht[0] > ht[1] && h2[0] > h2[1] : ht[1] > ht[0] && h2[1] > h2[0]); }
     case 'CORN': return corners ? r(side === 'OVER' ? corners[0] + corners[1] > line : corners[0] + corners[1] < line) : null;
     case 'TCORN': { if (!corners) return null; const c = side === 'HOME' ? corners[0] : corners[1]; const l = Number(key.split(':')[3]); return r(key.split(':')[2] === 'OVER' ? c > l : c < l); }
+    case 'CARD': return cards ? r(side === 'OVER' ? cards[0] + cards[1] > line : cards[0] + cards[1] < line) : null;
     case 'X2T': case 'TBTTS': case 'EG': case 'MG': case 'WTN': case 'EH': { const w = selectionWins(key, home, away); return w === null ? null : r(w); }
     default: return null;
   }
@@ -48,20 +49,21 @@ export function ticketOutcome(outcomes: string[]): 'PENDING' | 'WON' | 'LOST' | 
   return outcomes.includes('VOID') ? 'PARTIAL_VOID' : 'WON';
 }
 
-type FactRow = { status: string; home_score: number | null; away_score: number | null; kickoff_utc: Date; ht_home: number | null; ht_away: number | null; corners_home: number | null; corners_away: number | null };
+type FactRow = { status: string; home_score: number | null; away_score: number | null; kickoff_utc: Date; ht_home: number | null; ht_away: number | null; corners_home: number | null; corners_away: number | null; cards_home?: number | null; cards_away?: number | null };
 const factsOf = (r: FactRow): MatchFacts => ({
   ht: r.ht_home !== null && r.ht_away !== null ? [r.ht_home, r.ht_away] : null,
   corners: r.corners_home !== null && r.corners_away !== null ? [r.corners_home, r.corners_away] : null,
+  cards: r.cards_home != null && r.cards_away != null ? [r.cards_home, r.cards_away] : null,
 });
 
 /** Reads half-time score and corners from the finished match's summary, once, for fixtures whose markets need them. */
-const factMarket = (column: string) => dialect(`${column} ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN):'`, `substr(${column},1,instr(${column},':')-1) IN ('HT1X2','H21X2','HTTOT','WBH','CORN','TCORN')`);
+const factMarket = (column: string) => dialect(`${column} ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN|CARD):'`, `substr(${column},1,instr(${column},':')-1) IN ('HT1X2','H21X2','HTTOT','WBH','CORN','TCORN','CARD')`);
 
 async function loadMatchFacts() {
   let failures = 0;
   const rows = await many<{ id: string; provider_id: string; provider_key: string }>(
     `SELECT DISTINCT f.id, f.provider_id, l.provider_key, f.facts_checked_at FROM fixtures f JOIN leagues l ON l.id=f.league_id
-     WHERE f.status='post' AND f.provider='espn' AND (f.ht_home IS NULL OR f.corners_home IS NULL)
+     WHERE f.status='post' AND f.provider='espn' AND (f.ht_home IS NULL OR f.corners_home IS NULL OR f.cards_home IS NULL)
        -- A match whose summary still lacks these facts after a week never gets them: stop re-scanning it every 15 min.
        AND ${timeCompare('f.kickoff_utc','>',SQL_AGO(7*24,'hours'))}
        AND (f.facts_checked_at IS NULL OR ${timeCompare('f.facts_checked_at','<',SQL_AGO(15,'minutes'))})
@@ -77,8 +79,10 @@ async function loadMatchFacts() {
       const teams = (sm.boxscore?.teams ?? []) as Array<{ homeAway?: string; team?: { id?: string }; statistics?: Array<{ name: string; displayValue?: string }> }>;
       const homeId = (sm.header?.competitions?.[0]?.competitors ?? []).find((x: { homeAway: string }) => x.homeAway === 'home')?.team?.id;
       const cornersOf = (home: boolean) => { const t = teams.find((x) => (x.homeAway ? x.homeAway === (home ? 'home' : 'away') : (x.team?.id === homeId) === home)); const v = Number(t?.statistics?.find((st) => st.name === 'wonCorners')?.displayValue); return Number.isFinite(v) ? v : null; };
-      await query(`UPDATE fixtures SET ht_home=COALESCE($2,ht_home), ht_away=COALESCE($3,ht_away), corners_home=COALESCE($4,corners_home), corners_away=COALESCE($5,corners_away), facts_checked_at=${SQL_NOW()} WHERE id=$1`,
-        [r.id, half('home'), half('away'), cornersOf(true), cornersOf(false)]);
+      // Cards = yellow + red (a second yellow counts as a yellow plus a red, as the books count bookings by card).
+      const cardsOf = (home: boolean) => { const t = teams.find((x) => (x.homeAway ? x.homeAway === (home ? 'home' : 'away') : (x.team?.id === homeId) === home)); const st = (n: string) => Number(t?.statistics?.find((s) => s.name === n)?.displayValue); const y = st('yellowCards'), rd = st('redCards'); return Number.isFinite(y) ? y + (Number.isFinite(rd) ? rd : 0) : null; };
+      await query(`UPDATE fixtures SET ht_home=COALESCE($2,ht_home), ht_away=COALESCE($3,ht_away), corners_home=COALESCE($4,corners_home), corners_away=COALESCE($5,corners_away), cards_home=COALESCE($6,cards_home), cards_away=COALESCE($7,cards_away), facts_checked_at=${SQL_NOW()} WHERE id=$1`,
+        [r.id, half('home'), half('away'), cornersOf(true), cornersOf(false), cardsOf(true), cardsOf(false)]);
     } catch { failures++; await query(`UPDATE fixtures SET facts_checked_at=${SQL_NOW()} WHERE id=$1`, [r.id]); }
   }
   return {failures,checked:rows.length};
@@ -98,7 +102,7 @@ export function resolvedOutcome(r: FactRow, key: string): 'WON' | 'LOST' | 'VOID
  * Writes are batched and only differing outcomes are written; historical picks and prices stay intact. */
 export async function settleAgentPredictions() {
   const rows = await many<FactRow & { id: string; market_key: string; outcome: string | null }>(
-    `SELECT p.id,p.market_key,p.outcome,f.status,f.home_score,f.away_score,f.kickoff_utc,f.ht_home,f.ht_away,f.corners_home,f.corners_away
+    `SELECT p.id,p.market_key,p.outcome,f.status,f.home_score,f.away_score,f.kickoff_utc,f.ht_home,f.ht_away,f.corners_home,f.corners_away,f.cards_home,f.cards_away
      FROM agent_predictions p JOIN fixtures f ON f.id=p.fixture_id
      WHERE p.decision='BET_CANDIDATE' AND p.market_key IS NOT NULL AND f.status IN ('post','cancelled','postponed') ORDER BY p.id`);
   const changed = rows.flatMap((r) => { const outcome=resolvedOutcome(r,r.market_key); return outcome!==r.outcome ? [{id:String(r.id),outcome}] : []; });
@@ -188,7 +192,7 @@ export async function settlePending() {
     sourceErrors += facts.failures;
     const predictionsChanged = await settleAgentPredictions();
     const rows = await many<FactRow & { id: string; ticket_id: string; market_key: string; outcome: string }>(
-      `SELECT s.id,s.ticket_id,s.market_key,s.outcome,f.status,f.home_score,f.away_score,f.kickoff_utc,f.ht_home,f.ht_away,f.corners_home,f.corners_away
+      `SELECT s.id,s.ticket_id,s.market_key,s.outcome,f.status,f.home_score,f.away_score,f.kickoff_utc,f.ht_home,f.ht_away,f.corners_home,f.corners_away,f.cards_home,f.cards_away
        FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE f.status IN ('post','cancelled','postponed')`);
     const changed = rows.flatMap((r) => { const outcome=resolvedOutcome(r,r.market_key) ?? 'PENDING'; return outcome!==r.outcome ? [{id:String(r.id),outcome,ticket:r.ticket_id}] : []; });
     await updateOutcomes('ticket_selections',changed);

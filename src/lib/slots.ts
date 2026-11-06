@@ -77,6 +77,8 @@ export const MARKET_FAMILIES = [
   { id: 'DC', label: 'Șansă dublă', short: 'șansă dublă', prefix: 'DC', test: (k: string) => k.startsWith('DC:') },
   { id: 'AH', label: 'Handicap', short: 'handicap', prefix: 'AH', test: (k: string) => k.startsWith('AH:') || k.startsWith('EH:') },
   { id: 'COMBO', label: 'Combinate (rezultat + total, total + GG)', short: 'combinate', prefix: 'X2T', test: (k: string) => k.startsWith('X2T:') || k.startsWith('TBTTS:') },
+  { id: 'CORNERS', label: 'Cornere (peste)', short: 'cornere', prefix: 'CORN', test: (k: string) => /^(CORN|TCORN):/.test(k) },
+  { id: 'CARDS', label: 'Cartonașe (peste)', short: 'cartonașe', prefix: 'CARD', test: (k: string) => k.startsWith('CARD:') },
   { id: 'EXACT', label: 'Goluri exacte / interval de goluri', short: 'goluri exacte', prefix: 'EG', test: (k: string) => k.startsWith('EG:') || k.startsWith('MG:') },
 ] as const;
 export type MarketFamilyId = (typeof MARKET_FAMILIES)[number]['id'];
