@@ -67,7 +67,7 @@ function dayHours(k: number, now = new Date()) {
   return { from: Math.max(20 / 60, hrs(startUtc)), to: Math.max(hrs(startUtc + 86_400_000), 20 / 60 + 1), label: new Date(startUtc + 12 * 3600_000).toLocaleDateString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Bucharest' }) };
 }
 
-export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_PER_DAY, limit = CUSTOM_LIMIT_PER_DAY }: { agents: AgentCard[]; topAgentIds?: string[]; remaining?: number; limit?: number }) {
+export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_PER_DAY, limit = CUSTOM_LIMIT_PER_DAY, credits = null }: { agents: AgentCard[]; topAgentIds?: string[]; remaining?: number; limit?: number; credits?: number | null }) {
   const router = useRouter();
   const [count, setCount] = useState(1);
   const inFlight = useRef(false);
@@ -325,6 +325,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
         </p>
         {!chosen.length && <p className="text-sm text-gold">Alege cel puțin un agent din „Echipa de agenți”.</p>}
         {error && <p className="text-sm text-rose" role="alert">{error}</p>}
+        {credits !== null && <p className={`mb-2 text-sm ${credits < Math.ceil(legs / 6) * count ? 'text-gold' : 'text-muted'}`} role="status">Acest bilet costă {Math.ceil(legs / 6) * count} {Math.ceil(legs / 6) * count === 1 ? 'credit' : 'credite'}. Ai {credits}. {credits < Math.ceil(legs / 6) * count && <a href="/planuri" className="underline">Alege un plan</a>}</p>}
         <button onClick={create} disabled={busy || remaining === 0 || count < 1 || count > remaining || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && (leagues.length > 0 || sport === 'cs') && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : count === 1 ? 'Pornește dezbaterea' : `Creează ${count} bilete`}</button>
       </div>
   </>);
