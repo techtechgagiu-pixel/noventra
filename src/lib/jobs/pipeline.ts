@@ -780,7 +780,7 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
   }))).flat();
 }
 
-export const MAX_SAME_PICK = 3;
+export const MAX_SAME_PICK = 2;
 /** True when the same pick (match + market) already sits on MAX_SAME_PICK of the user's open tickets, so a new ticket must not take it. */
 export const samePickBlocked = (uses: number) => uses >= MAX_SAME_PICK;
 
