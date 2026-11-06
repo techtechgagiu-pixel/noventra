@@ -39,7 +39,7 @@ export type JobRow = {
   id: string; user_id: string; slot: string; period_key: string; target_odds: string; required_legs: number | null; seed: string;
   config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; votingAgentIds?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number; boost?: boolean }; extendedAt?: string; /** Owner exception (02.11): this ticket may break the „half per market type” rule. */ varietyOverride?: boolean };
   status: string; stage: Stage; checkpoint: Checkpoint; candidate_order: CandidateEntry[] | null; eligible_count: number | null; attempt_count: number;
-  created_at?: Date | string;
+  created_at?: Date | string; started_at?: Date | string | null;
 };
 
 /** Deterministic seeded PRNG (mulberry32 over a SHA-256 of the seed). Same seed → same ordering. */
@@ -829,10 +829,11 @@ export function closestCustomTicket(job: Pick<JobRow, 'config' | 'target_odds'>,
 /** The Odds API prices are refreshed every 3 days and accepted for 4 (owner decision 28.10); ESPN prices for 3 hours. */
 const maxOddsAgeMinutes = (source: string | null | undefined) => source === ODDSPAPI_SOURCE ? config.limits.oddspapiMaxAgeMinutes : source === 'the-odds-api' ? config.limits.oddsApiMaxAgeMinutes : source === IMPORT_SOURCE ? config.limits.importedOddsMaxAgeMinutes : config.limits.oddsMaxAgeMinutes;
 
-/** Owner rule 06.11: the verdict comes in at most 30 minutes after the ticket starts (or after the user asks to complete it). */
+/** Owner rule 06.11: the verdict comes in at most 30 minutes after the ticket starts being analysed (or after the user asks to complete it). */
 export const MAX_JOB_MINUTES = 30;
-export function jobTimeUp(job: Pick<JobRow, 'created_at' | 'config'>, now = Date.now()) {
-  const marks = [job.created_at ? new Date(job.created_at).getTime() : null, job.config.completion?.requestedAt ? Date.parse(job.config.completion.requestedAt) : null].filter((x): x is number => x !== null && !Number.isNaN(x));
+export function jobTimeUp(job: Pick<JobRow, 'created_at' | 'started_at' | 'config'>, now = Date.now()) {
+  // The clock starts when a runner picks the ticket up, not when it was queued: waiting in line must not eat the 30 minutes.
+  const marks = [job.started_at ? new Date(job.started_at).getTime() : job.created_at ? new Date(job.created_at).getTime() : null, job.config.completion?.requestedAt ? Date.parse(job.config.completion.requestedAt) : null].filter((x): x is number => x !== null && !Number.isNaN(x));
   return marks.length > 0 && now - Math.max(...marks) > MAX_JOB_MINUTES * 60_000;
 }
 
