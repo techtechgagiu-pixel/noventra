@@ -39,6 +39,7 @@ import { getAccount } from '@/lib/credits';
 import { config } from '@/lib/config';
 import { topSixAgentIds } from '@/lib/agent-ranking';
 import { databaseIssue } from '@/lib/database-availability';
+import { CreditsBadge } from '@/components/credits-badge';
 import { canRemoveTickets, canSeeAccounts, customLimitFor } from '@/lib/ticket-removal';
 
 export const dynamic = 'force-dynamic';
@@ -100,6 +101,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
             {user.role === 'admin' ? <Link href="/admin/invitations" className="text-xs text-muted hover:text-text" title="Conturi și coduri de acces">Conturi</Link> : canSeeAccounts(user) && <Link href="/conturi" className="text-xs text-muted hover:text-text" title="Cine s-a conectat cu Google">Conturi</Link>}
             {canSeeAccounts(user) && <Link href="/cote" className="text-xs text-muted hover:text-text" title="Import cote Stake">Cote</Link>}
             {user.role === 'admin' && <Link href="/admin/feedback" className="text-xs text-muted hover:text-text" title="Ideile trimise de utilizatori">Sugestii</Link>}
+            <CreditsBadge />
             <Link href="/planuri" className="text-xs text-muted hover:text-text" title="Credite și planuri">Planuri</Link>
             <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
           </div>
