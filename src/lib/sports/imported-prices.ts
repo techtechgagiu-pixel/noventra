@@ -128,6 +128,13 @@ export function labelFor(key: string, home: string, away: string): string {
   if (family === 'MG') return a.endsWith('+') ? `${a.slice(0, -1)} sau mai multe goluri în meci` : `Între ${a.replace('-', ' și ')} goluri în meci`;
   if (family === 'WTN') return b === 'YES' ? `${team(a)} câștigă fără să primească gol` : `${team(a)} nu câștigă fără să primească gol`;
   if (family === 'EH') return `${a === 'DRAW' ? 'Egal' : team(a)} la handicap european (${b}:${key.split(':')[3]})`;
+  if (family === 'X2B') return `${a === 'DRAW' ? 'Egal' : `${team(a)} câștigă`} și ambele echipe marchează – ${b === 'YES' ? 'DA' : 'NU'}`;
+  if (family === 'H1B') return `${a === 'DRAW' ? 'Egal la pauză' : `${team(a)} conduce la pauză`} și ambele marchează în prima repriză – ${b === 'YES' ? 'DA' : 'NU'}`;
+  if (family === 'HT1X2') return a === 'DRAW' ? 'Egal în prima repriză' : `${team(a)} câștigă prima repriză`;
+  if (family === 'HTTOT') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} goluri în prima repriză`;
+  if (family === 'HDC') return a === '1X' ? `${home} sau egal în prima repriză (1X)` : a === 'X2' ? `Egal sau ${away} în prima repriză (X2)` : `${home} sau ${away} în prima repriză (12)`;
+  if (family === 'HHB') return `Ambele marchează: prima repriză ${a === 'Y' ? 'DA' : 'NU'}, repriza a doua ${b === 'Y' ? 'DA' : 'NU'}`;
+  if (family === 'HFT') { const r = (x: string) => (x === 'DRAW' ? 'egal' : team(x)); const k = key.split(':'); return `Pauză ${r(a)}, final ${r(b)} și ${k[3] === 'OVER' ? 'peste' : 'sub'} ${k[4]} goluri`; }
   if (family === 'CARD') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} cartonașe`;
   if (family === 'CORN') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} cornere`;
   if (family === 'TCORN') return `${team(a)} ${b === 'OVER' ? 'peste' : 'sub'} ${key.split(':')[3]} cornere`;
@@ -185,6 +192,58 @@ function mapMarket(m: Obj, home: string, away: string): { family: string | null;
   const spec = (k: string) => new RegExp(`${k}=([^;,\\s]+)`).exec(str(m.specifiers))?.[1];
   const sideOf = (n: string): 'HOME' | 'AWAY' | null => (isHome(n) ? 'HOME' : isAway(n) ? 'AWAY' : null);
   const halfLine = (x: unknown) => { const l = Number(x); return Number.isFinite(l) && Math.abs(l % 1) === 0.5 ? l : null; };
+  // ── Half-time and combined markets (owner request 06.11): 1x2 & BTTS, 1st half 1x2 / total / double chance / 1x2 & BTTS,
+  // 1st/2nd half BTTS and half-time/full-time & total. Settled from the final score plus the half-time score. Only complete
+  // sets are kept; x.5 lines only. ──
+  {
+    const label = `${tpl} ${norm(str(m.name))}`.replace(/\{\$competitor[12]\}/g, '');
+    const resOf = (n: string): 'HOME' | 'DRAW' | 'AWAY' | null => (isDraw(n) ? 'DRAW' : isHome(n) ? 'HOME' : isAway(n) ? 'AWAY' : null);
+    const first = /1st half|first half/.test(label);
+    const none = /corner|booking|card|odd|even|exact|handicap|minute|player|goalscorer|2nd half - /.test(label);
+    if (!none && /halftime\/fulltime & total|half time\/full time & total|ht\/ft & total/.test(label)) {
+      const quotes: ImportedMarket[] = [];
+      for (const o of outcomes) {
+        const x = /^(.+?)\s*\/\s*(.+?)\s*&\s*(over|under)\s*([\d.]+)$/.exec(o.n); if (!x) continue;
+        const r1 = resOf(x[1].trim()), r2 = resOf(x[2].trim()), line = halfLine(x[4]);
+        if (r1 && r2 && line !== null) quotes.push({ key: `HFT:${r1}:${r2}:${x[3] === 'over' ? 'OVER' : 'UNDER'}:${line}`, marketType: 'HALF', odds: r3(o.odds), line });
+      }
+      return { family: 'HFT', quotes: new Set(quotes.map((q) => q.key)).size === quotes.length ? quotes : [] };
+    }
+    if (!none && /1st\/2nd half both teams to score/.test(label)) {
+      const quotes: ImportedMarket[] = [];
+      for (const o of outcomes) { const x = /^(yes|no)\s*\/\s*(yes|no)$/.exec(o.n); if (x) quotes.push({ key: `HHB:${x[1] === 'yes' ? 'Y' : 'N'}:${x[2] === 'yes' ? 'Y' : 'N'}`, marketType: 'HALF', odds: r3(o.odds) }); }
+      return { family: 'HHB', quotes: quotes.length === 4 && new Set(quotes.map((q) => q.key)).size === 4 ? quotes : [] };
+    }
+    if (!none && /1x2 & both teams to score/.test(label)) {
+      const quotes: ImportedMarket[] = [];
+      for (const o of outcomes) { const x = /^(.+?)\s*&\s*(yes|no)$/.exec(o.n); const side = x ? resOf(x[1].trim()) : null; if (x && side) quotes.push({ key: `${first ? 'H1B' : 'X2B'}:${side}:${x[2] === 'yes' ? 'YES' : 'NO'}`, marketType: first ? 'HALF' : 'COMBO', odds: r3(o.odds) }); }
+      return { family: first ? 'H1B' : 'X2B', quotes: quotes.length === 6 && new Set(quotes.map((q) => q.key)).size === 6 ? quotes : [] };
+    }
+    if (!none && first && /double chance/.test(label)) {
+      const quotes: ImportedMarket[] = [];
+      for (const o of outcomes) {
+        const hh = o.n.includes(h), aa = o.n.includes(a), dd = /draw|egal/.test(o.n);
+        const k = hh && dd && !aa ? '1X' : aa && dd && !hh ? 'X2' : hh && aa && !dd ? '12' : null;
+        if (k) quotes.push({ key: `HDC:${k}`, marketType: 'HALF', odds: r3(o.odds) });
+      }
+      return { family: 'HDC', quotes: quotes.length === 3 && new Set(quotes.map((q) => q.key)).size === 3 ? quotes : [] };
+    }
+    if (!none && first && /1x2$/.test(label.trim()) && !/&|total|score|handicap/.test(label)) {
+      const pick = (f: (n: string) => boolean) => outcomes.filter((o) => f(o.n));
+      const [H, D, A] = [pick(isHome), pick(isDraw), pick(isAway)];
+      if (H.length === 1 && D.length === 1 && A.length === 1) return { family: 'HT1X2', quotes: [
+        { key: 'HT1X2:HOME', marketType: 'HALF', odds: r3(H[0].odds) }, { key: 'HT1X2:DRAW', marketType: 'HALF', odds: r3(D[0].odds) }, { key: 'HT1X2:AWAY', marketType: 'HALF', odds: r3(A[0].odds) }] };
+      return { family: 'HT1X2', quotes: [] };
+    }
+    if (!none && first && /total/.test(label) && !/&|and|team|score|btts|both|competitor/.test(label)) {
+      const quotes: ImportedMarket[] = [];
+      for (const o of outcomes) {
+        const x = /^(over|under)\s*([\d.]+)?$/.exec(o.n); const line = halfLine(x?.[2] ?? spec('total'));
+        if (x && line !== null) quotes.push({ key: `HTTOT:${x[1] === 'over' ? 'OVER' : 'UNDER'}:${line}`, marketType: 'HALF', odds: r3(o.odds), line });
+      }
+      if (quotes.length) return { family: 'HTTOT', quotes };
+    }
+  }
   // ── Corners (owner decision 06.11): full-time total and each team's total, x.5 lines, settled from ESPN's corner counts.
   // Half, range, odd/even, first/last corner, handicap and race markets are left out. Cards stay out until Stake's
   // booking-points rule is checked against what ESPN counts. ──

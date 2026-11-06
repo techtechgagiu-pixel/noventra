@@ -11,7 +11,7 @@ export type MatchFacts = { ht?: [number, number] | null; corners?: [number, numb
 /** Which extra match facts a market needs to be settled (beyond the final score). */
 export function needsFacts(key: string): Array<'ht' | 'corners' | 'cards'> {
   const t = key.split(':')[0];
-  return t === 'HT1X2' || t === 'H21X2' || t === 'HTTOT' || t === 'WBH' ? ['ht'] : t === 'CORN' || t === 'TCORN' ? ['corners'] : t === 'CARD' ? ['cards'] : [];
+  return t === 'HT1X2' || t === 'H21X2' || t === 'HTTOT' || t === 'WBH' || t === 'H1B' || t === 'HDC' || t === 'HHB' || t === 'HFT' ? ['ht'] : t === 'CORN' || t === 'TCORN' ? ['corners'] : t === 'CARD' ? ['cards'] : [];
 }
 
 /** Canonical settlement for the market keys this app produces. Returns null when not decidable (yet). */
@@ -37,6 +37,20 @@ export function settleMarket(key: string, home: number, away: number, facts: Mat
     case 'CORN': return corners ? r(side === 'OVER' ? corners[0] + corners[1] > line : corners[0] + corners[1] < line) : null;
     case 'TCORN': { if (!corners) return null; const c = side === 'HOME' ? corners[0] : corners[1]; const l = Number(key.split(':')[3]); return r(key.split(':')[2] === 'OVER' ? c > l : c < l); }
     case 'CARD': return cards ? r(side === 'OVER' ? cards[0] + cards[1] > line : cards[0] + cards[1] < line) : null;
+    case 'X2B': { const w = selectionWins(key, home, away); return w === null ? null : r(w); }
+    case 'H1B': { // 1st half 1x2 & both teams to score: H1B:HOME|DRAW|AWAY:YES|NO
+      if (!ht) return null; const k = key.split(':'); const res = k[1] === 'HOME' ? ht[0] > ht[1] : k[1] === 'AWAY' ? ht[1] > ht[0] : ht[0] === ht[1]; const both = ht[0] > 0 && ht[1] > 0;
+      return r(res && (k[2] === 'YES' ? both : !both));
+    }
+    case 'HDC': return ht ? r(side === '1X' ? ht[0] >= ht[1] : side === 'X2' ? ht[1] >= ht[0] : ht[0] !== ht[1]) : null;
+    case 'HHB': { // both teams to score in the 1st half / in the 2nd half: HHB:Y|N:Y|N
+      if (!ht) return null; const k = key.split(':'); const b1 = ht[0] > 0 && ht[1] > 0, b2 = home - ht[0] > 0 && away - ht[1] > 0;
+      return r(b1 === (k[1] === 'Y') && b2 === (k[2] === 'Y'));
+    }
+    case 'HFT': { // half-time / full-time result & total: HFT:HT:FT:OVER|UNDER:line
+      if (!ht) return null; const k = key.split(':'); const res = (x: string, h: number, a: number) => (x === 'HOME' ? h > a : x === 'AWAY' ? a > h : h === a);
+      return r(res(k[1], ht[0], ht[1]) && res(k[2], home, away) && (k[3] === 'OVER' ? home + away > Number(k[4]) : home + away < Number(k[4])));
+    }
     case 'X2T': case 'TBTTS': case 'EG': case 'MG': case 'WTN': case 'EH': { const w = selectionWins(key, home, away); return w === null ? null : r(w); }
     default: return null;
   }
