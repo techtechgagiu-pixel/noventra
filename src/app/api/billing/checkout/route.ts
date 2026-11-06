@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     'line_items[0][price_data][currency]': 'eur',
     'line_items[0][price_data][unit_amount]': String(plan.priceCents),
     'line_items[0][price_data][product_data][name]': extra === null ? `PRIMUL 11 · ${plan.name} (${plan.credits} credite)` : `PRIMUL 11 · ${plan.credits} credite extra`,
-    'line_items[0][price_data][product_data][description]': `${plan.credits} credite. Un credit acoperă un bilet de până la 6 meciuri.`,
+    'line_items[0][price_data][product_data][description]': `${plan.credits} credite. Un credit acoperă un meci de pe bilet.`,
     success_url: `${config.appBaseUrl}/planuri?plata=ok`,
     cancel_url: `${config.appBaseUrl}/planuri?plata=anulata`,
     client_reference_id: user.id,

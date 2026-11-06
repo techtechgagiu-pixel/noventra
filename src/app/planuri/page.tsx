@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import { Check } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
-import { CREDIT_SIZE, EXTRA_MAX, EXTRA_MIN, EXTRA_PACKS, PLANS, SINGLE_CREDIT_CENTS, creditsForLegs, getAccount } from '@/lib/credits';
+import { FREE_SIGNUP_CREDITS, EXTRA_MAX, EXTRA_MIN, EXTRA_PACKS, PLANS, SINGLE_CREDIT_CENTS, creditsForLegs, getAccount } from '@/lib/credits';
 import { config } from '@/lib/config';
 import { BuyButton, ExtraCredits } from '@/components/plans-buy';
 import { CreditsBadge } from '@/components/credits-badge';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Planuri · PRIMUL 11', description: 'Credite pentru biletele tale: un credit acoperă până la 6 meciuri.' };
+export const metadata = { title: 'Planuri · PRIMUL 11', description: 'Credite pentru biletele tale: un credit acoperă un meci.' };
 
 const eur = (cents: number) => `€${(cents / 100).toFixed(2).replace('.', ',')}`;
 const INCLUDED = ['Toți agenții, cu orice echipă (maximum 6 pe bilet)', 'Bilete custom cu toate opțiunile: cotă, meciuri, ligi, piețe, interval', 'Selectorul „câți agenți trebuie să fie de acord”', 'Dezbatere completă și verdict în maximum 30 de minute', 'Istoricul biletelor și rezultatele'];
@@ -22,7 +22,7 @@ export default async function Planuri({ searchParams }: { searchParams: Promise<
       {user && <CreditsBadge afterPayment={plata === 'ok'} />}
     </div>
     <h1 className="mt-4 font-display text-4xl font-bold leading-tight">Alege-ți pachetul de credite.</h1>
-    <p className="mt-3 max-w-2xl text-muted">Un credit acoperă un bilet de până la {CREDIT_SIZE} meciuri. Un bilet cu mai multe meciuri folosește mai multe credite: 7–12 meciuri costă 2 credite, 13–18 costă 3, iar 20 de meciuri costă 4. Dacă un bilet iese fără nicio selecție, creditele se întorc.</p>
+    <p className="mt-3 max-w-2xl text-muted">Un credit acoperă un meci de pe bilet: un bilet de 6 meciuri costă 6 credite, unul de 12 costă 12. Dacă un bilet iese fără nicio selecție, creditele se întorc.</p>
     {plata === 'ok' && <p role="status" className="mt-5 rounded-xl border border-cyan/50 bg-cyan/10 px-4 py-3 text-sm">Plata a fost primită. Creditele apar în câteva secunde.</p>}
     {plata === 'anulata' && <p role="status" className="mt-5 rounded-xl border border-gold/50 bg-gold/10 px-4 py-3 text-sm text-gold">Plata a fost anulată. Nu s-a retras nimic.</p>}
     {account && <p className="mt-5 text-sm">{account.founder ? <span className="rounded-full border border-gold/60 px-3 py-1 text-gold">Cont fondator: biletele tale rămân gratuite.</span> : <span>Ai <strong className="text-gold">{account.balance}</strong> credite.</span>}</p>}
@@ -34,7 +34,7 @@ export default async function Planuri({ searchParams }: { searchParams: Promise<
           <p className="font-display text-4xl font-bold">{eur(p.priceCents)}</p>
           <p className="text-sm text-muted">{p.credits} credite · {eur(per)} per credit{off > 0 ? ` · −${off}%` : ''}</p>
           <ul className="space-y-1.5 text-sm">
-            <li>până la <strong>{p.credits}</strong> bilete de 6 meciuri</li>
+            <li>până la <strong>{Math.floor(p.credits / creditsForLegs(6))}</strong> bilete de 6 meciuri</li>
             <li>sau <strong>{Math.floor(p.credits / creditsForLegs(12))}</strong> de 12 meciuri</li>
             <li>sau <strong>{Math.floor(p.credits / creditsForLegs(20))}</strong> de 20 de meciuri</li>
             <li className="text-muted">Le poți combina oricum.</li>
@@ -46,9 +46,9 @@ export default async function Planuri({ searchParams }: { searchParams: Promise<
     </div>
     <section id="extra" className="card mt-8 p-6" aria-label="Credite extra">
       <h2 className="font-display text-2xl font-bold">Ți s-au terminat creditele? Încarcă doar cât ai nevoie.</h2>
-      <p className="mt-2 max-w-2xl text-sm text-muted">Creditele extra costă {eur(SINGLE_CREDIT_CENTS)} bucata, fără abonament, și se adaugă la cele pe care le ai deja. Pachetele de mai sus ies mai ieftine pe credit. Un bilet de 10 meciuri costă 2 credite.</p>
+      <p className="mt-2 max-w-2xl text-sm text-muted">Creditele extra costă {eur(SINGLE_CREDIT_CENTS)} bucata, fără abonament, și se adaugă la cele pe care le ai deja. Pachetele de mai sus ies mai ieftine pe credit. Un bilet de 10 meciuri costă 10 credite.</p>
       <div className="mt-4"><ExtraCredits signedIn={!!user} packs={EXTRA_PACKS} minCredits={EXTRA_MIN} maxCredits={EXTRA_MAX} centsPerCredit={SINGLE_CREDIT_CENTS} cryptoEnabled={!!config.nowpaymentsApiKey} /></div>
     </section>
-    <p className="mt-6 text-sm text-muted">Un credit luat separat costă {eur(SINGLE_CREDIT_CENTS)}. Creditele nu expiră. Primești 2 credite gratuite la crearea contului. Plata se face în euro, prin Stripe.</p>
+    <p className="mt-6 text-sm text-muted">Un credit luat separat costă {eur(SINGLE_CREDIT_CENTS)}. Creditele nu expiră. Primești {FREE_SIGNUP_CREDITS} credite gratuite la crearea contului. Plata se face în euro, prin Stripe.</p>
   </main>;
 }
