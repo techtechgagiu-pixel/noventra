@@ -128,6 +128,7 @@ export function labelFor(key: string, home: string, away: string): string {
   if (family === 'MG') return a.endsWith('+') ? `${a.slice(0, -1)} sau mai multe goluri în meci` : `Între ${a.replace('-', ' și ')} goluri în meci`;
   if (family === 'WTN') return b === 'YES' ? `${team(a)} câștigă fără să primească gol` : `${team(a)} nu câștigă fără să primească gol`;
   if (family === 'EH') return `${a === 'DRAW' ? 'Egal' : team(a)} la handicap european (${b}:${key.split(':')[3]})`;
+  if (family === 'CARD') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} cartonașe`;
   if (family === 'CORN') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} cornere`;
   if (family === 'TCORN') return `${team(a)} ${b === 'OVER' ? 'peste' : 'sub'} ${key.split(':')[3]} cornere`;
   return key;
@@ -202,6 +203,20 @@ function mapMarket(m: Obj, home: string, away: string): { family: string | null;
         else quotes.push({ key: `CORN:${dir}:${line}`, marketType: 'CORNERS', odds: r3(o.odds), line });
       }
       if (quotes.length) return { family: teamMarket ? 'TCORN' : 'CORN', quotes };
+    }
+  }
+  // ── Cards (owner decision 06.11): Stake's „Total Bookings”, x.5 lines. Stake counts a yellow as 1 and a red or yellow-red as 2
+  // (sports rules, „Booking markets”); settlement uses the same weights. Booking points, team, half, first-booking,
+  // player and sending-off markets are left out. ──
+  {
+    const label = `${tpl} ${norm(str(m.name))}`;
+    if (/booking/.test(label) && !/point|1st|2nd|half|first|last|range|odd|even|1x2|player|sending|handicap|competitor|and|&/.test(label)) {
+      const quotes: ImportedMarket[] = [];
+      for (const o of outcomes) {
+        const x = /^(over|under)\s*([\d.]+)?$/.exec(o.n); const line = halfLine(x?.[2] ?? spec('total') ?? spec('line'));
+        if (x && line !== null) quotes.push({ key: `CARD:${x[1] === 'over' ? 'OVER' : 'UNDER'}:${line}`, marketType: 'CARDS', odds: r3(o.odds), line });
+      }
+      if (quotes.length) return { family: 'CARD', quotes };
     }
   }
   // ── Further Stake families, all settled on the full-time score (owner decision 06.11) ──
