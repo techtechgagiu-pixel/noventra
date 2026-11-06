@@ -31,6 +31,6 @@ export function CreditsBadge({ afterPayment = false }: { afterPayment?: boolean 
   if (!acc) return null;
   return <Link href="/planuri" title={acc.founder ? 'Cont fondator: biletele tale rămân gratuite. Creditele cumpărate se păstrează.' : 'Creditele tale. Un credit acoperă un bilet de până la 6 meciuri.'}
     className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-gold/50 px-2.5 py-1 text-xs font-semibold text-gold hover:bg-gold/10" aria-live="polite">
-    <Coins size={13} aria-hidden />{acc.plan && <span>{acc.plan} ·</span>}<span>{acc.balance} {acc.balance === 1 ? 'credit' : 'credite'}</span>{added > 0 && <span className="text-emerald">+{added}</span>}
+    <Coins size={13} aria-hidden />{acc.plan && <span className="hidden sm:inline">{acc.plan} ·</span>}<span>{acc.balance} {acc.balance === 1 ? 'credit' : 'credite'}</span>{added > 0 && <span className="text-emerald">+{added}</span>}
   </Link>;
 }
