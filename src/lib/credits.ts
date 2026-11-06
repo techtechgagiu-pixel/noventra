@@ -101,22 +101,12 @@ export async function refundJob(job: { id: string; user_id: string; config: { cu
 
 type LimitUser = { id: string; email: string; role?: string; customDailyLimit?: number | null };
 
-/** The biggest plan this account ever bought (purchases that match a plan's credits); Debut-level limits when it never bought one. */
-export async function bestPlan(userId: string): Promise<Plan> {
-  const rows = await many<{ delta: number }>("SELECT DISTINCT delta FROM credit_ledger WHERE user_id=$1 AND reason='purchase'", [userId]);
-  const owned = PLANS.filter((p) => rows.some((r) => Number(r.delta) === p.credits));
-  return owned.sort((a, b) => b.perDay - a.perDay)[0] ?? PLANS[0];
-}
+/** Technical ceilings only: with credits on, the balance is the one limit (owner decision 06.11), so no per-plan or per-account daily caps. */
+export const CREDITS_DAILY_CAP = 30;
+export const CREDITS_MAX_LEGS = 20;
 
-/** Plan limits apply to paying-model accounts only: not to the owner, founders, accounts with a limit set by hand, or while credits are off. */
-async function planLimited(user: LimitUser) {
-  if (!config.creditsEnabled || canSeeAccounts(user) || user.customDailyLimit != null) return false;
-  return !(await getAccount(user.id)).founder;
-}
 export async function customLimitForUser(user: LimitUser): Promise<number> {
-  return (await planLimited(user)) ? (await bestPlan(user.id)).perDay : customLimitFor(user);
+  return config.creditsEnabled && !canSeeAccounts(user) ? CREDITS_DAILY_CAP : customLimitFor(user);
 }
-/** Most matches a ticket may have for this account (20 for everyone not on a plan). */
-export async function maxLegsForUser(user: LimitUser): Promise<number> {
-  return (await planLimited(user)) ? (await bestPlan(user.id)).maxLegs : 20;
-}
+/** Most matches a ticket may have (20 for everyone; the credits decide how many tickets). */
+export async function maxLegsForUser(_user: LimitUser): Promise<number> { return CREDITS_MAX_LEGS; }
