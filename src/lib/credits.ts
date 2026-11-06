@@ -100,6 +100,15 @@ export async function refundJob(job: { id: string; user_id: string; config: { cu
   if (charged) await credit(job.user_id, creditsForLegs(job.config.custom.legs), 'refund', job.id);
 }
 
+/** A ticket that came out with fewer matches than requested gives back the credits of the missing matches, once per job. */
+export async function refundShortfall(job: { id: string; user_id: string; config: { custom?: { legs: number }; customBatch?: { id: string } } }, delivered: number) {
+  if (!config.creditsEnabled || !job.config.custom || !job.config.customBatch) return;
+  const missing = creditsForLegs(job.config.custom.legs) - creditsForLegs(delivered);
+  if (missing <= 0 || delivered <= 0) return;
+  const charged = await one('SELECT 1 AS x FROM credit_ledger WHERE ref=$1 AND reason=$2', [job.config.customBatch.id, 'charge']);
+  if (charged) await credit(job.user_id, missing, 'refund', `short:${job.id}`);
+}
+
 type LimitUser = { id: string; email: string; role?: string; customDailyLimit?: number | null };
 
 /** Technical ceilings only: with credits on, the balance is the one limit (owner decision 06.11), so no per-plan or per-account daily caps. */

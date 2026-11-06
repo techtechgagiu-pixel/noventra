@@ -325,6 +325,12 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <p className="mt-2 text-sm">Cota {target} din {legs} {legs === 1 ? 'meci' : 'meciuri'} cere ≈ {perLeg.toFixed(2)} pe fiecare meci. Agenții aleg doar selecții sigure, de obicei cu cote între 1,20 și 1,40, iar fiecare trebuie să treacă și pragul de voturi. Biletul poate ieși <strong>incomplet sau cu o cotă mult mai mică</strong>, de exemplu 3 în loc de {target}.</p>
           <p className="mt-2 text-sm text-muted">Ca să ai șanse, folosește aproximativ <strong className="text-text">{need} meciuri</strong>{need > legs ? <> (acum ai {legs})</> : null}, coboară pragul de voturi și alege o perioadă mai lungă. Cota este o țintă, nu o garanție.</p>
         </div>); })()}
+      {sport === 'football' && legs >= 4 && ((onlyMarkets.length === 1 && toHours <= 12) || toHours <= 6) && (
+        <div role="alert" className="rounded-2xl border-2 border-gold bg-gold/10 p-5">
+          <p className="font-display text-xl font-bold text-gold">Atenție: căutarea e prea îngustă.</p>
+          <p className="mt-2 text-sm">Cu {onlyMarkets.length === 1 ? 'o singură piață' : 'o fereastră scurtă'} și meciuri din următoarele {Math.round(toHours)} ore, pot rămâne prea puține meciuri valide pentru {legs} selecții. Biletul poate ieși cu mai puține meciuri. Dacă se întâmplă, <strong>creditele pentru meciurile lipsă se returnează automat</strong>. Pentru rezultat complet, lărgește perioada sau debifează piața.</p>
+        </div>
+      )}
       <div className="custom-submit">
         <p className="text-sm text-muted md:flex-1">
           {count} {count === 1 ? 'bilet' : 'bilete'} · fiecare cu cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {sport === 'cs' ? 'Counter-Strike 2' : leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> voturi pentru o selecție. GPT-6 Luna Pro dă verdictul final.

@@ -1,4 +1,4 @@
-import { refundJob } from '../credits';
+import { refundJob, refundShortfall } from '../credits';
 import { briefForChat, buildMatchBrief } from '../scout/match-brief';
 import { loadOddsMovement } from '../sports/odds-movement';
 import { reportNewsBatch } from '../news-reporter';
@@ -885,6 +885,7 @@ async function build(job: JobRow): Promise<boolean> {
   const chosen = result.status === 'COMPLETED' ? result.legs : [];
   // No ticket came out of it (nothing validated): the credits go back, once per job.
   if (!chosen.length) await refundJob(job as never).catch(() => null);
+  else await refundShortfall(job as never, chosen.length).catch(() => null);
   const byId = new Map(cands.map((c) => [c.fixtureId, c]));
   const summary = {
     ...(job.config.completion ? { completion: job.config.completion } : {}),
