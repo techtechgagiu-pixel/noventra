@@ -45,6 +45,10 @@ export function selectionWins(key: string, hg: number, ag: number): boolean | nu
       const res = parts[1] === 'HOME' ? hg > ag : parts[1] === 'AWAY' ? ag > hg : hg === ag;
       const line = Number(parts[3]); return res && (parts[2] === 'OVER' ? hg + ag > line : hg + ag < line);
     }
+    case 'X2B': { // 1X2 & both teams to score: X2B:HOME|DRAW|AWAY:YES|NO
+      const res = parts[1] === 'HOME' ? hg > ag : parts[1] === 'AWAY' ? ag > hg : hg === ag; const both = hg > 0 && ag > 0;
+      return res && (parts[2] === 'YES' ? both : !both);
+    }
     case 'TBTTS': { // total & both teams to score: TBTTS:OVER|UNDER:line:YES|NO
       const line = Number(parts[2]); const tot = parts[1] === 'OVER' ? hg + ag > line : hg + ag < line;
       return tot && (parts[3] === 'YES' ? hg > 0 && ag > 0 : !(hg > 0 && ag > 0));
@@ -129,6 +133,8 @@ export function fairProbabilities(markets: MarketQuote[]) {
       : parts[0] === 'TCORN' ? `TCORN:${parts[1]}:${m.line}|${book}`
       : parts[0] === 'X2T' ? `X2T:${parts[3]}|${book}`
       : parts[0] === 'TBTTS' ? `TBTTS:${parts[2]}|${book}`
+      : parts[0] === 'X2B' || parts[0] === 'H1B' || parts[0] === 'HHB' ? `${parts[0]}|${book}`
+      : parts[0] === 'HFT' ? `HFT:${parts[4]}|${book}`
       : parts[0] === 'EG' ? `EG|${book}`
       : parts[0] === 'WTN' ? `WTN:${parts[1]}|${book}`
       : parts[0] === 'EH' ? `EH:${parts[2]}:${parts[3]}|${book}`
@@ -146,11 +152,17 @@ export function fairProbabilities(markets: MarketQuote[]) {
     // Partitions of the result: 1X2 & total (6 cells), total & BTTS (4 cells), exact goals (0..N and the open "N+" bucket, no gaps).
     const complete = three ? list.length === 3 : two ? list.length === 2
       : /^X2T:/.test(g) ? list.length === 6 : /^TBTTS:/.test(g) ? list.length === 4
+      : /^(X2B|H1B)\|/.test(g) ? list.length === 6 : /^HHB\|/.test(g) ? list.length === 4 : /^HFT:/.test(g) ? list.length === 18
       : /^EG\|/.test(g) ? egComplete(list) : false;
     const sum = list.reduce((s, m) => s + 1 / m.odds, 0);
     for (const m of list) out.set(m.key, { implied: 1 / m.odds, fair: complete ? 1 / m.odds / sum : null, groupMargin: complete ? sum - 1 : null });
   }
   // Double chance has no complementary price here; derive fair value from the de-margined 1X2 when available.
+  const ht1 = out.get('HT1X2:HOME')?.fair, ht2 = out.get('HT1X2:DRAW')?.fair, ht3 = out.get('HT1X2:AWAY')?.fair;
+  for (const m of markets) if (m.key.startsWith('HDC:') && ht1 != null && ht2 != null && ht3 != null) {
+    const fair = m.key === 'HDC:1X' ? ht1 + ht2 : m.key === 'HDC:X2' ? ht2 + ht3 : ht1 + ht3;
+    out.set(m.key, { implied: 1 / m.odds, fair, groupMargin: null });
+  }
   const h = out.get('1X2:HOME')?.fair, d = out.get('1X2:DRAW')?.fair, a = out.get('1X2:AWAY')?.fair;
   for (const m of markets) if (m.marketType === 'DOUBLE_CHANCE' && h != null && d != null && a != null) {
     const fair = m.key === 'DC:1X' ? h + d : m.key === 'DC:X2' ? d + a : h + a;
