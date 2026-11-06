@@ -319,6 +319,12 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
         </div>
         <p className="mt-2 text-xs text-muted">Aceeași cotă țintă, aceleași ligi și aceeași echipă pentru fiecare bilet. Fiecare are propria analiză și consumă un loc din limita zilnică. Meciurile se pot repeta între bilete.</p>
       </section>
+      {!tooLow && !tooHigh && perLeg > 1.5 && (() => { const need = Math.min(20, Math.max(legs, Math.ceil(Math.log(target) / Math.log(1.3)))); const hard = perLeg > 2; return (
+        <div role="alert" className={`rounded-2xl border-2 p-5 ${hard ? 'border-rose bg-rose/10' : 'border-gold bg-gold/10'}`}>
+          <p className={`font-display text-xl font-bold ${hard ? 'text-rose' : 'text-gold'}`}>Atenție: ținta e greu de atins așa.</p>
+          <p className="mt-2 text-sm">Cota {target} din {legs} {legs === 1 ? 'meci' : 'meciuri'} cere ≈ {perLeg.toFixed(2)} pe fiecare meci. Agenții aleg doar selecții sigure, de obicei cu cote între 1,20 și 1,40, iar fiecare trebuie să treacă și pragul de voturi. Biletul poate ieși <strong>incomplet sau cu o cotă mult mai mică</strong>, de exemplu 3 în loc de {target}.</p>
+          <p className="mt-2 text-sm text-muted">Ca să ai șanse, folosește aproximativ <strong className="text-text">{need} meciuri</strong>{need > legs ? <> (acum ai {legs})</> : null}, coboară pragul de voturi și alege o perioadă mai lungă. Cota este o țintă, nu o garanție.</p>
+        </div>); })()}
       <div className="custom-submit">
         <p className="text-sm text-muted md:flex-1">
           {count} {count === 1 ? 'bilet' : 'bilete'} · fiecare cu cotă <strong className="text-text">{target}</strong> din <strong className="text-text">{legs}</strong> {legs === 1 ? 'meci' : 'meciuri'} · {chosen.length} agenți · {sport === 'cs' ? 'Counter-Strike 2' : leagues.length ? `${leagues.length} ${leagues.length === 1 ? 'ligă' : 'ligi'}` : 'toate ligile'} · minimum <strong className="text-text">{customThreshold(chosen.length)}</strong> voturi pentru o selecție. GPT-6 Luna Pro dă verdictul final.
