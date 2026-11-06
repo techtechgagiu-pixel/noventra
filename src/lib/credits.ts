@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { atomic, many, one, query } from './db';
 import { config } from './config';
 import { SlotError } from './jobs/errors';
@@ -110,3 +111,15 @@ export async function customLimitForUser(user: LimitUser): Promise<number> {
 }
 /** Most matches a ticket may have (20 for everyone; the credits decide how many tickets). */
 export async function maxLegsForUser(_user: LimitUser): Promise<number> { return CREDITS_MAX_LEGS; }
+
+/** Admin adjustment: adds (or removes, never below zero) credits, each change logged once under a unique ref. */
+export async function adjustCredits(userId: string, delta: number, adminId: string) {
+  if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 100_000) throw new SlotError('Număr de credite invalid.', 400);
+  await getAccount(userId);
+  try { await credit(userId, delta, 'admin', `admin:${adminId}:${randomUUID()}`); }
+  catch (e) { if (/CHECK|check constraint|balance/i.test((e as Error).message)) throw new SlotError('Soldul nu poate scădea sub zero.', 400); throw e; }
+}
+export async function setFounder(userId: string, founder: boolean) {
+  await getAccount(userId);
+  await query('UPDATE user_credits SET founder=$2 WHERE user_id=$1', [userId, founder ? 1 : 0]);
+}
