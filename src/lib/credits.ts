@@ -37,6 +37,13 @@ export async function getAccount(userId: string): Promise<Account> {
   return { balance: Number(row?.balance ?? 0), founder: Number(row?.founder ?? 0) === 1 };
 }
 
+/** The plan of the account's latest purchase (by its credit count), or null when it never bought: shown next to the balance. */
+export async function lastPlanName(userId: string): Promise<string | null> {
+  const row = await one<{ delta: number }>("SELECT delta FROM credit_ledger WHERE user_id=$1 AND reason='purchase' ORDER BY id DESC LIMIT 1", [userId]);
+  if (!row) return null;
+  return PLANS.find((p) => p.credits === Number(row.delta))?.name ?? 'Credite extra';
+}
+
 const duplicate = (e: Error) => /UNIQUE|duplicate key/i.test(e.message);
 
 /** Charges a whole batch once (ref = the batch's request id): a retry of the same request never charges twice. */
