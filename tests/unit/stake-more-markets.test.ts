@@ -63,7 +63,9 @@ describe('fair probabilities of the new families', () => {
 describe('bans stay consistent across the new families', () => {
   it('bans every UNDER or „GG – NU” component', () => {
     for (const k of ['X2T:HOME:UNDER:2.5', 'TBTTS:UNDER:2.5:YES', 'TBTTS:OVER:2.5:NO', 'TBTTS:UNDER:2.5:NO', 'TT:HOME:UNDER:1.5']) expect(isBannedMarket(k)).toBe(true);
-    for (const k of ['X2T:HOME:OVER:2.5', 'TBTTS:OVER:2.5:YES', 'EG:3', 'MG:2-4', 'WTN:HOME:YES', 'EH:HOME:0:1']) expect(isBannedMarket(k)).toBe(false);
+    for (const k of ['X2T:HOME:OVER:2.5', 'TBTTS:OVER:2.5:YES', 'EG:3', 'MG:2-4', 'EH:HOME:0:1']) expect(isBannedMarket(k)).toBe(false);
+    // 06.11: Superbet has no „win to nil”.
+    for (const k of ['WTN:HOME:YES', 'WTN:AWAY:NO']) expect(isBannedMarket(k)).toBe(true);
   });
 });
 
