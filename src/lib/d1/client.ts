@@ -63,6 +63,22 @@ export function decodeRow(row: Row): Row {
   }));
 }
 
+/** Temporary D1 failures (overload, reset connection, timeout) that are safe to repeat for a read. */
+export function isTransientD1Error(error: unknown) {
+  return /overloaded|network connection lost|timed out|timeout|temporarily unavailable|reset because its code was updated|Durable Object|internal error/i.test((error as Error)?.message ?? '');
+}
+const isRead = (text: string) => /^\s*(SELECT|WITH)\b/i.test(text) && !/\b(INSERT|UPDATE|DELETE)\b/i.test(text);
+export async function retryRead<T>(text: string, run: () => Promise<T>, delays = [150, 500]): Promise<T> {
+  if (!isRead(text)) return run();
+  for (let i = 0; ; i++) {
+    try { return await run(); }
+    catch (error) {
+      if (i >= delays.length || !isTransientD1Error(error)) throw error;
+      await new Promise((r) => setTimeout(r, delays[i]));
+    }
+  }
+}
+
 export function d1Database(binding: D1Database): Database {
   const prepare = (s: Statement) => binding.prepare(sqliteParameters(s.text)).bind(...(s.params ?? []).map(bind));
   const convert = <T extends Row>(r: { results: Row[]; meta: { changes: number } }): Result<T> => ({
@@ -70,7 +86,7 @@ export function d1Database(binding: D1Database): Database {
   });
   return {
     dialect: 'sqlite',
-    async query<T extends Row>(text: string, params: unknown[] = []) { return convert<T>(await prepare({ text, params }).all<Row>()); },
+    async query<T extends Row>(text: string, params: unknown[] = []) { return convert<T>(await retryRead(text, () => prepare({ text, params }).all<Row>())); },
     async batch(statements) {
       if (!statements.length) return [];
       // D1's batch is an actual atomic transaction. Interactive tx is forbidden.
