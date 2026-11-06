@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Check } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { CREDIT_SIZE, EXTRA_MAX, EXTRA_MIN, EXTRA_PACKS, PLANS, SINGLE_CREDIT_CENTS, creditsForLegs, getAccount } from '@/lib/credits';
+import { config } from '@/lib/config';
 import { BuyButton, ExtraCredits } from '@/components/plans-buy';
 import { CreditsBadge } from '@/components/credits-badge';
 
@@ -39,14 +40,14 @@ export default async function Planuri({ searchParams }: { searchParams: Promise<
             <li className="text-muted">Le poți combina oricum.</li>
           </ul>
           <ul className="space-y-1.5 border-t border-line pt-4 text-sm">{INCLUDED.map((x) => <li key={x} className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-cyan" aria-hidden />{x}</li>)}</ul>
-          <div className="mt-auto"><BuyButton plan={p.id} signedIn={!!user} featured={p.featured} label={`Alege ${p.name}`} /></div>
+          <div className="mt-auto"><div className="space-y-2"><BuyButton plan={p.id} signedIn={!!user} featured={p.featured} label={`Alege ${p.name}`} />{config.nowpaymentsApiKey && <BuyButton crypto plan={p.id} signedIn={!!user} label="Plătește cu crypto" />}</div></div>
         </section>;
       })}
     </div>
     <section id="extra" className="card mt-8 p-6" aria-label="Credite extra">
       <h2 className="font-display text-2xl font-bold">Ți s-au terminat creditele? Încarcă doar cât ai nevoie.</h2>
       <p className="mt-2 max-w-2xl text-sm text-muted">Creditele extra costă {eur(SINGLE_CREDIT_CENTS)} bucata, fără abonament, și se adaugă la cele pe care le ai deja. Pachetele de mai sus ies mai ieftine pe credit. Un bilet de 10 meciuri costă 2 credite.</p>
-      <div className="mt-4"><ExtraCredits signedIn={!!user} packs={EXTRA_PACKS} minCredits={EXTRA_MIN} maxCredits={EXTRA_MAX} centsPerCredit={SINGLE_CREDIT_CENTS} /></div>
+      <div className="mt-4"><ExtraCredits signedIn={!!user} packs={EXTRA_PACKS} minCredits={EXTRA_MIN} maxCredits={EXTRA_MAX} centsPerCredit={SINGLE_CREDIT_CENTS} cryptoEnabled={!!config.nowpaymentsApiKey} /></div>
     </section>
     <p className="mt-6 text-sm text-muted">Un credit luat separat costă {eur(SINGLE_CREDIT_CENTS)}. Creditele nu expiră. Primești 2 credite gratuite la crearea contului. Plata se face în euro, prin Stripe.</p>
   </main>;

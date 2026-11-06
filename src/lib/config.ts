@@ -25,6 +25,8 @@ export const config = {
   creditsEnabled: process.env.CREDITS_ENABLED === '1',
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+  nowpaymentsApiKey: process.env.NOWPAYMENTS_API_KEY || '',
+  nowpaymentsIpnSecret: process.env.NOWPAYMENTS_IPN_SECRET || '',
   ticketRemovers: (process.env.TICKET_REMOVE_EMAILS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean),
   openRouterDailyUsd: Number(process.env.OPENROUTER_DAILY_USD || '5'),
   oddsApiKey: process.env.ODDS_API_KEY || '',
