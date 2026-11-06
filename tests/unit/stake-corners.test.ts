@@ -38,3 +38,18 @@ describe('Stake corners → canonical keys', () => {
     expect(keysOf([mk('Total Corners', 'Total Corners', 'total=10', [o('Over 10', 1.9), o('Under 10', 1.9)])])).toEqual([]);
   });
 });
+
+describe('Stake cards → CARD keys', () => {
+  it('maps Total Bookings and leaves out points, player, first booking and team markets', () => {
+    const k = keysOf([
+      mk('Total Bookings', 'Total Bookings', 'total=3.5', [o('Over 3.5', 1.57), o('Under 3.5', 2.11)]),
+      mk('Total Booking Points', 'Total Booking Points', 'total=45.5', [o('Over 45.5', 1.9), o('Under 45.5', 1.9)]),
+      mk('1st Booking', '1st Booking', '', [o('Everton', 2), o('None', 45), o('Coventry', 1.73)]),
+      mk('Booking 1x2', 'Booking 1x2', '', [o('Everton', 2.8), o('Draw', 3.95), o('Coventry', 2)]),
+      mk('Player to be yellow carded', 'Player to be yellow carded', '', [o('Hamer', 3.65)]),
+      mk('Sending Off', 'Sending Off', '', [o('Yes', 5.4), o('No', 1.12)]),
+    ]);
+    expect(k.sort()).toEqual(['CARD:OVER:3.5', 'CARD:UNDER:3.5']);
+    expect(labelFor('CARD:OVER:3.5', 'Everton', 'Coventry')).toBe('Peste 3.5 cartonașe');
+  });
+});
