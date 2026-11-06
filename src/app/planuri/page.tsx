@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { CREDIT_SIZE, EXTRA_MAX, EXTRA_MIN, EXTRA_PACKS, PLANS, SINGLE_CREDIT_CENTS, creditsForLegs, getAccount } from '@/lib/credits';
 import { BuyButton, ExtraCredits } from '@/components/plans-buy';
+import { CreditsBadge } from '@/components/credits-badge';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Planuri · PRIMUL 11', description: 'Credite pentru biletele tale: un credit acoperă până la 6 meciuri.' };
@@ -15,7 +16,10 @@ export default async function Planuri({ searchParams }: { searchParams: Promise<
   const user = await currentUser();
   const account = user ? await getAccount(user.id) : null;
   return <main className="mx-auto max-w-6xl px-4 py-10">
-    <Link href={user ? '/?tab=custom' : '/'} className="text-sm text-muted hover:text-text">← Înapoi</Link>
+    <div className="flex items-center justify-between gap-3">
+      <Link href={user ? '/?tab=custom' : '/'} className="text-sm text-muted hover:text-text">← Înapoi</Link>
+      {user && <CreditsBadge afterPayment={plata === 'ok'} />}
+    </div>
     <h1 className="mt-4 font-display text-4xl font-bold leading-tight">Alege-ți pachetul de credite.</h1>
     <p className="mt-3 max-w-2xl text-muted">Un credit acoperă un bilet de până la {CREDIT_SIZE} meciuri. Un bilet cu mai multe meciuri folosește mai multe credite: 7–12 meciuri costă 2 credite, 13–18 costă 3, iar 20 de meciuri costă 4. Dacă un bilet iese fără nicio selecție, creditele se întorc.</p>
     {plata === 'ok' && <p role="status" className="mt-5 rounded-xl border border-cyan/50 bg-cyan/10 px-4 py-3 text-sm">Plata a fost primită. Creditele apar în câteva secunde.</p>}
