@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Sparkles } from 'lucide-react';
 import { api } from '@/lib/format';
 
-export function FinishIncompleteTicket({ ticketId, compact = false }: { ticketId: string; compact?: boolean }) {
+export function FinishIncompleteTicket({ ticketId, compact = false, boost = false }: { ticketId: string; compact?: boolean; boost?: boolean }) {
   const router=useRouter();const inFlight=useRef(false);const [busy,setBusy]=useState(false);const [error,setError]=useState<string|null>(null);
   async function finish(){
     if(inFlight.current)return;inFlight.current=true;setBusy(true);setError(null);
@@ -12,8 +12,9 @@ export function FinishIncompleteTicket({ ticketId, compact = false }: { ticketId
     catch(e){setError((e as Error).message);setBusy(false);inFlight.current=false;}
   }
   return <div className={compact?'mt-2 space-y-2':'card space-y-3 border-gold/40 p-4'}>
+    {boost&&<p className="text-xs text-muted">Cota țintă nu a fost atinsă. Reanalizăm cu doar 4 agenți de acord, păstrând analiza făcută, ca să găsim meciurile care lipsesc. Nu costă credite.</p>}
     {!compact&&<p className="text-sm text-muted">Continuă aceeași analiză, cu ținta și echipa păstrate. Reverificăm selecțiile salvate și căutăm meciuri noi. Meciurile începute și cotele indisponibile nu pot intra în biletul final. Dacă nu sunt suficiente selecții valide, biletul rămâne incomplet.</p>}
-    <button type="button" onClick={finish} disabled={busy} className={`btn btn-primary disabled:opacity-50 ${compact?'px-3 py-2 text-xs':'px-5 py-3'}`}><Sparkles size={14} aria-hidden/>{busy?'Pornesc finalizarea…':'Finalizează biletul'}</button>
+    <button type="button" onClick={finish} disabled={busy} className={`btn btn-primary disabled:opacity-50 ${compact?'px-3 py-2 text-xs':'px-5 py-3'}`}><Sparkles size={14} aria-hidden/>{busy?(boost?'Pornesc completarea…':'Pornesc finalizarea…'):boost?'Completează biletul':'Finalizează biletul'}</button>
     {error&&<p role="alert" className="text-sm text-rose">{error}</p>}
   </div>;
 }

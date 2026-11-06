@@ -37,7 +37,7 @@ import type { CandidateEntry, Checkpoint, FixtureSnapshot, LegReview, Stage } fr
 
 export type JobRow = {
   id: string; user_id: string; slot: string; period_key: string; target_odds: string; required_legs: number | null; seed: string;
-  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; votingAgentIds?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number }; extendedAt?: string; /** Owner exception (02.11): this ticket may break the „half per market type” rule. */ varietyOverride?: boolean };
+  config: { windowStart: string; windowDays: number; top10Only: boolean; maxFixtures: number; batchSize: number; avoidFixtures?: string[]; votingAgentIds?: string[]; custom?: CustomConfig; review?: ReviewConfig; completion?: { requestedAt: string; attempt: number; boost?: boolean }; extendedAt?: string; /** Owner exception (02.11): this ticket may break the „half per market type” rule. */ varietyOverride?: boolean };
   status: string; stage: Stage; checkpoint: Checkpoint; candidate_order: CandidateEntry[] | null; eligible_count: number | null; attempt_count: number;
   created_at?: Date | string;
 };

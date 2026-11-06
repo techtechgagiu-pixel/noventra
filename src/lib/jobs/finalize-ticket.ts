@@ -14,7 +14,10 @@ export async function finalizeTicket(job: JobRow, result: {
   generation: 'COMPLETED' | 'INCOMPLETE' | 'NO_BET'; totalOdds: number | null;
   mixedBookmakers: boolean; summary: Record<string, unknown>; selections: SavedLeg[];
 }) {
-  const changed = job.config.completion
+  // „Completează biletul”: a finished ticket is replaced only by a finished result; otherwise it stays as it was.
+  const boost = !!job.config.completion?.boost;
+  const replace = boost && result.generation === 'COMPLETED';
+  const changed = job.config.completion && (!boost || replace)
     ? 'actual_odds=EXCLUDED.actual_odds,leg_count=EXCLUDED.leg_count,generation_status=EXCLUDED.generation_status,outcome_status=EXCLUDED.outcome_status,mixed_bookmakers=EXCLUDED.mixed_bookmakers,summary=EXCLUDED.summary'
     : 'job_id=EXCLUDED.job_id';
   const statements: Statement[] = [{
@@ -22,6 +25,7 @@ export async function finalizeTicket(job: JobRow, result: {
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(job_id) DO UPDATE SET ${changed} RETURNING id`,
     params: [randomUUID(),job.id,job.user_id,job.slot,job.period_key,job.target_odds,result.totalOdds,result.selections.length,result.generation,result.generation==='COMPLETED'?'PENDING':'NOT_APPLICABLE',result.mixedBookmakers,JSON.stringify(result.summary)],
   }];
+  if (replace) statements.push({ text: 'DELETE FROM ticket_selections WHERE ticket_id=(SELECT id FROM tickets WHERE job_id=$1)', params: [job.id] });
   result.selections.forEach((leg, i) => statements.push({
     text: `INSERT INTO ticket_selections(ticket_id,fixture_id,position,market_key,market_label,odds,bookmaker,quote_observed_at,votes_for,model_probability,risk,snapshot)
       VALUES((SELECT id FROM tickets WHERE job_id=$1),$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(ticket_id,fixture_id) DO NOTHING`,

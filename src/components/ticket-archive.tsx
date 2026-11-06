@@ -6,6 +6,7 @@ import { SLOTS_UI } from '@/lib/slots-ui';
 import { FinishIncompleteTicket } from './finish-incomplete-ticket';
 import { RemoveTicket } from './remove-ticket';
 import { TicketPerformance } from './ticket-performance';
+import { missedTarget } from '@/lib/ticket-completion';
 import type { IncompletePick } from '@/lib/incomplete-ticket-picks';
 import type { Creator } from '@/lib/views';
 import { archiveResult } from '@/lib/archive-visibility';
@@ -27,7 +28,9 @@ export function CreatorBadge({ c, small }: { c?: Creator; small?: boolean }) {
   );
 }
 
-type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; job_id?: string; job_status?: string; partialSelections?: IncompletePick[]; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null; kickoff?: string | null; status?: string | null; home_score?: number | null; away_score?: number | null; clock?: string | null; score_at?: string | null }> };
+const boostable = (t: { slot: string; generation_status: string; target_odds: number; actual_odds: number | null; job_status?: string; completed_boost?: boolean }) => t.slot.startsWith('CUSTOM_') && t.generation_status === 'COMPLETED' && !t.completed_boost && missedTarget(t.actual_odds, t.target_odds);
+const boosting = (t: { job_status?: string }) => ['QUEUED', 'RUNNING', 'WAITING'].includes(t.job_status ?? '');
+type T = { id: string; slot: string; period_key: string; target_odds: number; actual_odds: number | null; leg_count: number; generation_status: string; outcome_status: string; created_at: string; creator?: Creator; job_id?: string; job_status?: string; completed_boost?: boolean; partialSelections?: IncompletePick[]; selections: Array<{ match: string; label: string; odds: number; outcome: string; market_key?: string; model_probability?: number | null; kickoff?: string | null; status?: string | null; home_score?: number | null; away_score?: number | null; clock?: string | null; score_at?: string | null }> };
 const FILTERS = [['all', 'Toate'], ['today', 'Azi'], ['yesterday', 'Ieri'], ['week', 'Săptămâna asta'], ['weekly', 'Biletul săptămânii'], ['PENDING', 'În așteptare'], ['WON', 'Verzi'], ['ONE_LOSS', 'Pierdute la un meci']] as const;
 const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
 
@@ -66,7 +69,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
         <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {list.map((t) => {
             const result = archiveResult(t);
-            const finishing = t.generation_status === 'INCOMPLETE' && ['QUEUED', 'RUNNING', 'WAITING'].includes(t.job_status ?? '');
+            const finishing = (t.generation_status === 'INCOMPLETE' || t.generation_status === 'COMPLETED') && ['QUEUED', 'RUNNING', 'WAITING'].includes(t.job_status ?? '');
             const paused = t.generation_status === 'INCOMPLETE' && t.job_status === 'PAUSED';
             const partial = t.generation_status === 'INCOMPLETE' ? t.partialSelections ?? [] : [];
             const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome, kickoff: s.snapshot.kickoff as string | null, status: s.fixture_status ?? null, home_score: s.home_score, away_score: s.away_score, clock: s.live_clock ?? null, score_at: s.score_at ?? null }));
@@ -95,6 +98,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
                 )}
               </Link>
               {t.generation_status === 'INCOMPLETE' && t.creator?.mine && !finishing && <FinishIncompleteTicket ticketId={t.id} compact />}
+              {boostable(t) && t.creator?.mine && !boosting(t) && <FinishIncompleteTicket ticketId={t.id} compact boost />}
               {canRemove && !finishing && <RemoveTicket ticketId={t.id} compact />}
             </li>
           ); })}
