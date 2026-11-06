@@ -17,6 +17,13 @@ export const PLANS: Plan[] = [
 export const SINGLE_CREDIT_CENTS = 60;
 export const planById = (id: unknown) => PLANS.find((p) => p.id === id);
 
+/** Extra credits bought on top of (or without) a plan, at the single-credit price. */
+export const EXTRA_MIN = 1;
+export const EXTRA_MAX = 50;
+export const EXTRA_PACKS = [3, 5, 10, 20];
+export const parseExtra = (n: unknown) => { const v = Number(n); return Number.isInteger(v) && v >= EXTRA_MIN && v <= EXTRA_MAX ? v : null; };
+export const extraCents = (credits: number) => credits * SINGLE_CREDIT_CENTS;
+
 export type Account = { balance: number; founder: boolean };
 
 /** Existing accounts were marked founders by the migration; any later account starts with the free credits. */
@@ -44,7 +51,7 @@ export async function chargeCredits(userId: string, cost: number, ref: string) {
     ]);
   } catch (e) {
     if (duplicate(e as Error)) return; // already charged for this request
-    if (/CHECK|check constraint|balance/i.test((e as Error).message)) throw new SlotError(`Nu ai destule credite: biletul costă ${cost}, ai ${acc.balance}. Alege un plan din „Planuri”.`, 402);
+    if (/CHECK|check constraint|balance/i.test((e as Error).message)) throw new SlotError(`Nu ai destule credite: biletul costă ${cost}, ai ${acc.balance}. Alege un plan sau încarcă credite extra din „Planuri” (/planuri).`, 402);
     throw e;
   }
 }
