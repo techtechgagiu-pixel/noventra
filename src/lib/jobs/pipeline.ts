@@ -673,9 +673,15 @@ async function stepVote(job: JobRow, ids: string[]) {
       // throws the whole match away (owner question 28.10: "de ce nu mai sunt studiate pentru alte pronosticuri").
       // Owner rule 03.11 („alt pronostic din același eveniment pe alt bilet”): a selection this user already has on another
       // open ticket for the same match goes last, so a new ticket gets a different (equally backed) pick when there is one.
-      const usedElsewhere = new Set((await many<{ market_key: string }>(
-        `SELECT DISTINCT s.market_key FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.user_id=$1 AND s.fixture_id=$2 AND s.outcome='PENDING' AND t.hidden_at IS NULL`, [job.user_id, s.fixture.id]).catch(() => [])).map((r) => r.market_key));
-      const ordered = preferUnused([...new Set([c.marketKey, ...(backup ? [backup.key] : []), ...c.shortlist.map((x) => x.key)])], usedElsewhere);
+      const usesRows = await many<{ market_key: string; n: number }>(
+        `SELECT s.market_key, COUNT(*) AS n FROM ticket_selections s JOIN tickets t ON t.id=s.ticket_id WHERE t.user_id=$1 AND s.fixture_id=$2 AND s.outcome='PENDING' AND t.hidden_at IS NULL GROUP BY s.market_key`, [job.user_id, s.fixture.id]).catch(() => []);
+      const usedElsewhere = new Set(usesRows.map((r) => r.market_key));
+      // Owner rule 06.11 + question „alt pronostic din același meci”: a pick already on MAX_SAME_PICK open tickets is left out
+      // here, so the match is still used with another equally backed pick; only when every pick is at the cap does the match drop out.
+      const atCap = new Set(usesRows.filter((r) => samePickBlocked(Number(r.n))).map((r) => r.market_key));
+      const allKeys = [...new Set([c.marketKey, ...(backup ? [backup.key] : []), ...c.shortlist.map((x) => x.key)])];
+      const open = allKeys.filter((k) => !atCap.has(k));
+      const ordered = preferUnused(open.length ? open : allKeys, usedElsewhere);
       const tries = ordered.slice(0, 5);
       const variedFrom = ordered[0] !== c.marketKey ? c.marketKey : null;
       const labels: Record<string, string> = { fixtureStillPreMatch: 'meciul nu mai este pre-meci', oddsAvailable: 'cota nu mai este disponibilă', oddsFresh: 'cota este prea veche', bookmakerIdentified: 'bookmaker neidentificat', selectionConsistent: 'selecție inconsistentă', probabilityPlausible: 'probabilitate estimată prea mică', evNotStronglyNegative: 'valoare așteptată clar negativă', dataSufficient: 'istoric insuficient' };
