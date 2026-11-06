@@ -7,9 +7,9 @@ import { underAllowedBy, type CustomConfig } from '../slots';
 
 /** Compact, identical factual snapshot for all six agents (token-efficient). */
 /** User rule (2026-10-21): no „Under” selections at all — match totals or team totals. */
-/** Owner bans: every "under" line, (02.11) the double chance "12" (1 or 2 at full time, the most picked market) and (06.11) „Ambele echipe marchează – NU”. */
+/** Owner bans: every "under" line, (02.11) the double chance "12" (1 or 2 at full time, the most picked market) (06.11) „Ambele echipe marchează – NU” and „Câștigă fără să primească gol”, which Superbet does not offer. */
 /** `only` = the ticket's ticked market families: a ticked „Sub 1,5 / 2,5 / 3,5” lifts the ban for exactly that line. */
-export const isBannedMarket = (key: string | null, only?: CustomConfig['onlyMarkets']) => !!key && !underAllowedBy(only, key) && (/:UNDER(:|$)/.test(key) || key === 'DC:12' || key === 'BTTS:NO' || /^TBTTS:[A-Z]+:[\d.]+:NO$/.test(key));
+export const isBannedMarket = (key: string | null, only?: CustomConfig['onlyMarkets']) => !!key && !underAllowedBy(only, key) && (/:UNDER(:|$)/.test(key) || key === 'DC:12' || key === 'BTTS:NO' || /^WTN:/.test(key) || /^TBTTS:[A-Z]+:[\d.]+:NO$/.test(key));
 
 // Token economy (owner decision 28.10, widened 03.11 and 06.11 — "toată plaja de pronosticuri"): at most 60 selections per match (Stake's average is ~27, so nearly every match is sent whole), spread over every market type, probabilities rounded to 2 decimals.
 // Agents pick the safest selections anyway; the exact numbers stay in the snapshot and every threshold uses them.
@@ -164,7 +164,7 @@ export function characterViolation(
 ): string | null {
   if (p.decision !== 'BET_CANDIDATE' || !p.marketKey) return null;
   if (!market) return 'piața nu există în cotele observate';
-  if (isBannedMarket(p.marketKey, only)) return p.marketKey === 'DC:12' ? 'șansa dublă „12” este interzisă' : 'pronosticurile „sub” sunt interzise';
+  if (isBannedMarket(p.marketKey, only)) return p.marketKey === 'DC:12' ? 'șansa dublă „12” este interzisă' : p.marketKey.startsWith('WTN:') ? '„câștigă fără să primească gol” nu există la Superbet' : 'pronosticurile „sub” sunt interzise';
   const family = p.marketKey.split(':')[0];
   if (agent.blockedFamilies?.includes(family)) return `${agent.name} este în antrenament: tipul de pariu ${family} îi este închis (pierdea des pe el)`;
   const cap = Math.min(agent.maxOdds + (policy.agentCapBonus ?? 0), policy.maxOdds);

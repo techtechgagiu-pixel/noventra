@@ -78,7 +78,6 @@ export const MARKET_FAMILIES = [
   { id: 'AH', label: 'Handicap', short: 'handicap', prefix: 'AH', test: (k: string) => k.startsWith('AH:') || k.startsWith('EH:') },
   { id: 'COMBO', label: 'Combinate (rezultat + total, total + GG)', short: 'combinate', prefix: 'X2T', test: (k: string) => k.startsWith('X2T:') || k.startsWith('TBTTS:') },
   { id: 'EXACT', label: 'Goluri exacte / interval de goluri', short: 'goluri exacte', prefix: 'EG', test: (k: string) => k.startsWith('EG:') || k.startsWith('MG:') },
-  { id: 'WTN', label: 'Câștigă fără să primească gol', short: 'victorie fără gol primit', prefix: 'WTN', test: (k: string) => k.startsWith('WTN:') },
 ] as const;
 export type MarketFamilyId = (typeof MARKET_FAMILIES)[number]['id'];
 export const MARKET_FAMILY_IDS = MARKET_FAMILIES.map((f) => f.id) as MarketFamilyId[];
