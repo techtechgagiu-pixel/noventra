@@ -59,7 +59,8 @@ export function AdminPanel() {
           <span className={j.startedAt ? 'text-cyan' : 'text-gold'}>{j.startedAt ? `în lucru · ${j.stage}` : 'la rând'}</span>
           <span className="text-muted">cota {j.target}{j.legs ? ` · ${j.legs} meciuri` : ''}{j.batches ? ` · lot ${j.batch}/${j.batches}` : ''}{j.analyzed ? ` · ${j.analyzed} analizate` : ''}</span>
           <span className="text-xs text-muted">de {ago(j.createdAt, now)}</span>
-          <button className="btn btn-ghost ml-auto px-3 py-1 text-xs" onClick={() => act(`j:${j.id}`, () => post('/api/admin/panel/cancel', { jobId: j.id }), true)}>{confirm === `j:${j.id}` ? 'Sigur?' : 'Anulează'}</button></li>)}</ul>
+          <a href={`/?tab=analiza&job=${j.id}`} className="btn btn-primary ml-auto px-3 py-1 text-xs">Vezi dezbaterea</a>
+          <button className="btn btn-ghost px-3 py-1 text-xs" onClick={() => act(`j:${j.id}`, () => post('/api/admin/panel/cancel', { jobId: j.id }), true)}>{confirm === `j:${j.id}` ? 'Sigur?' : 'Anulează'}</button></li>)}</ul>
       </div>)}
     </section>}
 
