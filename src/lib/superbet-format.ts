@@ -45,6 +45,8 @@ export function superbetPick(key: string, home: string, away: string): SuperbetP
       return { market: 'Total goluri repriza 1', pick: `${a === 'OVER' ? 'Peste' : 'Sub'} ${b}` };
     case 'CORN':
       return { market: 'Total cornere', pick: `${a === 'OVER' ? 'Peste' : 'Sub'} ${b}` };
+    case 'CARD':
+      return { market: 'Total cartonașe', pick: `${a === 'OVER' ? 'Peste' : 'Sub'} ${b}`, note: 'cartonașe galbene și roșii din meci' };
     case 'TCORN': {
       const team = a === 'HOME' ? home : away;
       return { market: `Cornere ${team}`, pick: `${b === 'OVER' ? 'Peste' : 'Sub'} ${c}` };

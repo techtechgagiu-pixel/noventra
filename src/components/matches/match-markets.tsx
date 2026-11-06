@@ -7,7 +7,7 @@ type Data = { bookmaker: string | null; observedAt: string | null; markets: Mark
 const GROUPS: Array<{ type: MarketQuote['marketType']; title: string }> = [
   { type: '1X2', title: 'Rezultat final' }, { type: 'DOUBLE_CHANCE', title: 'Șansă dublă' }, { type: 'TOTAL', title: 'Goluri în meci (peste / sub)' },
   { type: 'BTTS', title: 'Ambele marchează' }, { type: 'TEAM_TOTAL', title: 'Goluri pe echipă' }, { type: 'HANDICAP', title: 'Handicap' },
-  { type: 'HALF', title: 'Reprize' }, { type: 'CORNERS', title: 'Cornere' }, { type: 'CLEAN_SHEET', title: 'Fără gol primit' }, { type: 'TEAM_SPECIAL', title: 'Speciale' },
+  { type: 'HALF', title: 'Reprize' }, { type: 'CORNERS', title: 'Cornere' }, { type: 'CARDS', title: 'Cartonașe' }, { type: 'CLEAN_SHEET', title: 'Fără gol primit' }, { type: 'TEAM_SPECIAL', title: 'Speciale' },
 ];
 const shortBook = (b?: string) => (!b ? '' : b.startsWith('The Odds API') ? 'The Odds API' : b.split(' · ')[0]);
 
