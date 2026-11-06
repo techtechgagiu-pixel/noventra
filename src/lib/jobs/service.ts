@@ -76,7 +76,7 @@ export async function createOrGetJob(userId: string, slotId: string, at = new Da
   const est = estimateCalls(slot);
   if (usage.requests + est.firstBatch > config.limits.aiDailyCalls) throw new SlotError(`Cota AI zilnică a aplicației este aproape epuizată (${usage.requests}/${config.limits.aiDailyCalls} apeluri). Slotul nu a fost consumat; încearcă după miezul nopții UTC.`, 503);
   const running = await one<{ n: string }>("SELECT count(*) AS n FROM ticket_generation_jobs WHERE status IN ('QUEUED','RUNNING','WAITING')");
-  if (Number(running?.n ?? 0) >= config.limits.maxConcurrentJobs * 4) throw new SlotError('Prea multe analize în desfășurare acum. Încearcă din nou în câteva minute. Slotul nu a fost consumat.', 503);
+  if (Number(running?.n ?? 0) >= config.limits.maxQueuedJobs) throw new SlotError('Prea multe analize în desfășurare acum. Încearcă din nou în câteva minute. Slotul nu a fost consumat.', 503);
 
   const window = fixtureWindow(slot, at);
   let avoidFixtures: string[] = [];
