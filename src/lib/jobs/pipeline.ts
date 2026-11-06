@@ -1,3 +1,4 @@
+import { refundJob } from '../credits';
 import { briefForChat, buildMatchBrief } from '../scout/match-brief';
 import { loadOddsMovement } from '../sports/odds-movement';
 import { reportNewsBatch } from '../news-reporter';
@@ -874,6 +875,8 @@ async function build(job: JobRow): Promise<boolean> {
   } });
   const generation = result.status === 'COMPLETED' ? 'COMPLETED' : job.config.completion ? 'INCOMPLETE' : cands.length === 0 ? 'NO_BET' : 'INCOMPLETE';
   const chosen = result.status === 'COMPLETED' ? result.legs : [];
+  // No ticket came out of it (nothing validated): the credits go back, once per job.
+  if (!chosen.length) await refundJob(job as never).catch(() => null);
   const byId = new Map(cands.map((c) => [c.fixtureId, c]));
   const summary = {
     ...(job.config.completion ? { completion: job.config.completion } : {}),

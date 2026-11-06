@@ -35,6 +35,8 @@ import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
 import { localDate } from '@/lib/time';
+import { getAccount } from '@/lib/credits';
+import { config } from '@/lib/config';
 import { topSixAgentIds } from '@/lib/agent-ranking';
 import { databaseIssue } from '@/lib/database-availability';
 import { canRemoveTickets, canSeeAccounts, customLimitFor } from '@/lib/ticket-removal';
@@ -98,6 +100,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
             {user.role === 'admin' ? <Link href="/admin/invitations" className="text-xs text-muted hover:text-text" title="Conturi și coduri de acces">Conturi</Link> : canSeeAccounts(user) && <Link href="/conturi" className="text-xs text-muted hover:text-text" title="Cine s-a conectat cu Google">Conturi</Link>}
             {canSeeAccounts(user) && <Link href="/cote" className="text-xs text-muted hover:text-text" title="Import cote Stake">Cote</Link>}
             {user.role === 'admin' && <Link href="/admin/feedback" className="text-xs text-muted hover:text-text" title="Ideile trimise de utilizatori">Sugestii</Link>}
+            <Link href="/planuri" className="text-xs text-muted hover:text-text" title="Credite și planuri">Planuri</Link>
             <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
           </div>
         </div>
@@ -216,14 +219,14 @@ async function CustomTab({ userId, job, limit }: { userId: string; job?: string;
       return <CustomLive key={job} jobId={job} initialMeta={plain(meta)} initialEvents={plain(events)} info={info} />;
     }
   }
-  const [cards, recent, ranking] = await Promise.all([agentCards(), customJobs(userId, Math.max(limit, 20)), agentRanking()]);
+  const [cards, recent, ranking, account] = await Promise.all([agentCards(), customJobs(userId, Math.max(limit, 20)), agentRanking(), getAccount(userId).catch(() => null)]);
   return (
     <div className="custom-tab space-y-6">
       <div>
         <h1 className="page-title">Bilet custom</h1>
         <p className="custom-extra mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {limit} bilete custom pe zi.</p>
       </div>
-      <CustomForm agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
+      <CustomForm credits={config.creditsEnabled && account && !account.founder ? account.balance : null} agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
       {recent.length > 0 && (
         <section className="custom-extra">
           <h3 className="mb-2 font-display text-lg font-bold">Biletele tale custom</h3>

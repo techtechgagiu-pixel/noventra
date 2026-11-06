@@ -6,6 +6,7 @@ import { createD1Job, resumeD1Job, transitionD1Job } from '../d1/job-mutations';
 import { SQL_NOW } from '../db';
 import { providerConfigured, resetModelExhaustion } from '../ai/router';
 import { aiUsageToday } from '../usage';
+import { chargeCredits, creditsForLegs, refundBatch } from '../credits';
 import { CUSTOM_LIMIT_PER_DAY, MARKET_FAMILY_IDS, needsVarietyOverride, type MarketFamilyId, MAX_CUSTOM_AGENTS, REVIEW_LIMIT_PER_DAY, SLOTS, customPolicy, isCustomSlot, isReviewSlot, slotInfo, type ReviewLeg, fixtureWindow, nextReset, periodKey, slotById, type CustomConfig, type SlotDefinition } from '../slots';
 import { VOTING_AGENTS } from '../ai/agents';
 import { localDate } from '../time';
@@ -159,7 +160,9 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
   const maxFixtures = Math.min(weekly ? config.limits.maxFixturesWeekly : config.limits.maxFixturesDaily, Math.max(12, custom.legs * 4));
   const cfg = { windowStart: key, windowDays: days, top10Only: false, maxFixtures, batchSize: config.limits.batchSize, avoidFixtures: [] as string[], custom, ...(needsVarietyOverride(custom.onlyMarkets) ? { varietyOverride: true } : {}) };
   const checkpoint: Checkpoint = { phase: 'DISCOVER', batchIndex: 0, batchStep: 'FETCH', batches: [], agentsDone: [], analyzed: 0, qualified: 0 };
-  const result = isD1() ? await createD1CustomJobs({userId,day:key,requestId,count,custom,cfg,checkpoint,policy,callLimit:config.limits.aiDailyCalls,dailyLimit:limit}) : await tx(async (c) => {
+  const creditCost = creditsForLegs(custom.legs) * count;
+  await chargeCredits(userId, creditCost, requestId);
+  const result = await (async () => isD1() ? await createD1CustomJobs({userId,day:key,requestId,count,custom,cfg,checkpoint,policy,callLimit:config.limits.aiDailyCalls,dailyLimit:limit}) : await tx(async (c) => {
     // One user lock protects the daily allowance and retry IDs, including retries after midnight.
     await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`custom:${userId}`]);
     const previous = await c.query(`SELECT id, config FROM ticket_generation_jobs WHERE user_id=$1 AND config->'customBatch'->>'id'=$2 ORDER BY (config->'customBatch'->>'index')::int`, [userId, requestId]);
@@ -195,7 +198,7 @@ export async function createCustomJob(userId: string, input: unknown, at = new D
       await c.query("INSERT INTO audit_logs(user_id, action, detail) VALUES ($1,'job_created',$2)", [userId, JSON.stringify({ jobId, slot, period: key, custom, customBatch })]);
     }
     return { jobIds, created: true };
-  });
+  }))().catch(async (error) => { await refundBatch(userId, creditCost, requestId).catch(() => null); throw error; });
   kickWorker();
   return { jobId: result.jobIds[0], ...result, batchId: requestId };
 }
