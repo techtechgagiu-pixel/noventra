@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { fail, json, rateLimited, requireUser, sameOrigin } from '@/lib/http';
-import { planById } from '@/lib/credits';
+import { EXTRA_MAX, EXTRA_MIN, extraCents, parseExtra, planById } from '@/lib/credits';
 import { config } from '@/lib/config';
 
 export const dynamic = 'force-dynamic';
@@ -12,15 +12,17 @@ export async function POST(req: NextRequest) {
   if (user instanceof NextResponse) return user;
   if (rateLimited(`checkout:${user.id}`, 5, 60_000)) return fail('Prea multe cereri. Așteaptă un minut.', 429);
   if (!config.stripeSecretKey) return fail('Plata nu este configurată încă.', 503);
-  const body = await req.json().catch(() => null) as { plan?: string } | null;
-  const plan = planById(body?.plan);
+  const body = await req.json().catch(() => null) as { plan?: string; extra?: number } | null;
+  const extra = body?.extra !== undefined ? parseExtra(body.extra) : null;
+  if (body?.extra !== undefined && extra === null) return fail(`Alege între ${EXTRA_MIN} și ${EXTRA_MAX} credite.`, 400);
+  const plan = extra === null ? planById(body?.plan) : { id: 'extra', name: 'Credite extra', credits: extra, priceCents: extraCents(extra) };
   if (!plan) return fail('Plan necunoscut.', 400);
   const form = new URLSearchParams({
     mode: 'payment',
     'line_items[0][quantity]': '1',
     'line_items[0][price_data][currency]': 'eur',
     'line_items[0][price_data][unit_amount]': String(plan.priceCents),
-    'line_items[0][price_data][product_data][name]': `PRIMUL 11 · ${plan.name} (${plan.credits} credite)`,
+    'line_items[0][price_data][product_data][name]': extra === null ? `PRIMUL 11 · ${plan.name} (${plan.credits} credite)` : `PRIMUL 11 · ${plan.credits} credite extra`,
     'line_items[0][price_data][product_data][description]': `${plan.credits} credite. Un credit acoperă un bilet de până la 6 meciuri.`,
     success_url: `${config.appBaseUrl}/planuri?plata=ok`,
     cancel_url: `${config.appBaseUrl}/planuri?plata=anulata`,

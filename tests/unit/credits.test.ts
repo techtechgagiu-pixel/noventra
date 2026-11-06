@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { creditsForLegs, PLANS } from '../../src/lib/credits';
+import { creditsForLegs, extraCents, parseExtra, EXTRA_MAX, PLANS } from '../../src/lib/credits';
 import { verifySignature } from '../../src/lib/stripe-signature';
 import { createHmac } from 'node:crypto';
 
@@ -11,6 +11,14 @@ describe('credite', () => {
     const per = PLANS.map((p) => p.priceCents / p.credits);
     expect(per[0]).toBeGreaterThan(per[1]); expect(per[1]).toBeGreaterThan(per[2]);
     expect(per[0]).toBeLessThan(60);
+  });
+});
+
+describe('credite extra', () => {
+  it('acceptă doar numere întregi în interval și costă 0,60 € per credit', () => {
+    expect([1, 5, EXTRA_MAX, '7'].map(parseExtra)).toEqual([1, 5, EXTRA_MAX, 7]);
+    expect([0, -2, 1.5, EXTRA_MAX + 1, 'x', null, undefined].map(parseExtra)).toEqual([null, null, null, null, null, null, null]);
+    expect(extraCents(5)).toBe(300);
   });
 });
 

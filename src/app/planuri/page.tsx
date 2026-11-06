@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { Check } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
-import { CREDIT_SIZE, PLANS, SINGLE_CREDIT_CENTS, creditsForLegs, getAccount } from '@/lib/credits';
-import { BuyButton } from '@/components/plans-buy';
+import { CREDIT_SIZE, EXTRA_MAX, EXTRA_MIN, EXTRA_PACKS, PLANS, SINGLE_CREDIT_CENTS, creditsForLegs, getAccount } from '@/lib/credits';
+import { BuyButton, ExtraCredits } from '@/components/plans-buy';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Planuri · PRIMUL 11', description: 'Credite pentru biletele tale: un credit acoperă până la 6 meciuri.' };
@@ -39,6 +39,11 @@ export default async function Planuri({ searchParams }: { searchParams: Promise<
         </section>;
       })}
     </div>
+    <section id="extra" className="card mt-8 p-6" aria-label="Credite extra">
+      <h2 className="font-display text-2xl font-bold">Ți s-au terminat creditele? Încarcă doar cât ai nevoie.</h2>
+      <p className="mt-2 max-w-2xl text-sm text-muted">Creditele extra costă {eur(SINGLE_CREDIT_CENTS)} bucata, fără abonament, și se adaugă la cele pe care le ai deja. Pachetele de mai sus ies mai ieftine pe credit. Un bilet de 10 meciuri costă 2 credite.</p>
+      <div className="mt-4"><ExtraCredits signedIn={!!user} packs={EXTRA_PACKS} minCredits={EXTRA_MIN} maxCredits={EXTRA_MAX} centsPerCredit={SINGLE_CREDIT_CENTS} /></div>
+    </section>
     <p className="mt-6 text-sm text-muted">Un credit luat separat costă {eur(SINGLE_CREDIT_CENTS)}. Creditele nu expiră. Primești 2 credite gratuite la crearea contului. Plata se face în euro, prin Stripe.</p>
   </main>;
 }
