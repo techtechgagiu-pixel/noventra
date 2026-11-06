@@ -23,21 +23,26 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 const g = globalThis as unknown as { __betmindWorker?: { running: number; timer: NodeJS.Timeout | null; started: boolean } };
 const state = (g.__betmindWorker ??= { running: 0, timer: null, started: false });
 
+/** Fair scheduling: a job that already started keeps going; a never-started one begins only if its user has no started ticket in progress and a slot is free (slots = maxConcurrentJobs tickets in progress). */
+const fairClause = (max: string) => `(c.started_at IS NOT NULL OR (
+  NOT EXISTS (SELECT 1 FROM ticket_generation_jobs s WHERE s.user_id=c.user_id AND s.started_at IS NOT NULL AND s.status IN ('QUEUED','RUNNING','WAITING'))
+  AND (SELECT count(*) FROM ticket_generation_jobs s WHERE s.started_at IS NOT NULL AND s.status IN ('QUEUED','RUNNING','WAITING')) < ${max}))`;
+
 /** Atomically claims one runnable job (expired leases are reclaimed after a restart). */
 async function claim(): Promise<(JobRow & { recovered: boolean }) | null> {
   if(isD1())return one<JobRow & {recovered:boolean}>(`UPDATE ticket_generation_jobs SET claim_recovered=(status='RUNNING'),lease_owner=$1,lease_expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','+3 minutes'),status='RUNNING',started_at=COALESCE(started_at,strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    WHERE id=(SELECT id FROM ticket_generation_jobs WHERE ((status IN ('QUEUED','WAITING') AND julianday(next_run_at)<=julianday('now')) OR (status='RUNNING' AND (lease_expires_at IS NULL OR julianday(lease_expires_at)<julianday('now')))) ORDER BY next_run_at LIMIT 1)
+    WHERE id=(SELECT c.id FROM ticket_generation_jobs c WHERE ((c.status IN ('QUEUED','WAITING') AND julianday(c.next_run_at)<=julianday('now') AND ${fairClause('$2')}) OR (c.status='RUNNING' AND (c.lease_expires_at IS NULL OR julianday(c.lease_expires_at)<julianday('now')))) ORDER BY (c.started_at IS NULL), c.next_run_at LIMIT 1)
       AND (SELECT count(*) FROM ticket_generation_jobs WHERE status='RUNNING' AND julianday(lease_expires_at)>julianday('now'))<$2
     RETURNING *,claim_recovered AS recovered`,[WORKER_ID,config.limits.maxConcurrentJobs]);
   return one<JobRow & { recovered: boolean }>(
     `WITH picked AS (
-       SELECT id, (status = 'RUNNING') AS recovered FROM ticket_generation_jobs
-       WHERE ((status IN ('QUEUED','WAITING') AND next_run_at <= now()) OR (status='RUNNING' AND (lease_expires_at IS NULL OR lease_expires_at < now())))
-       ORDER BY next_run_at LIMIT 1 FOR UPDATE SKIP LOCKED)
+       SELECT c.id, (c.status = 'RUNNING') AS recovered FROM ticket_generation_jobs c
+       WHERE ((c.status IN ('QUEUED','WAITING') AND c.next_run_at <= now() AND ${fairClause('$3::int')}) OR (c.status='RUNNING' AND (c.lease_expires_at IS NULL OR c.lease_expires_at < now())))
+       ORDER BY (c.started_at IS NULL), c.next_run_at LIMIT 1 FOR UPDATE SKIP LOCKED)
      UPDATE ticket_generation_jobs j SET lease_owner=$1, lease_expires_at=now() + ($2 || ' milliseconds')::interval, status='RUNNING', started_at=COALESCE(started_at, now())
      FROM picked WHERE j.id = picked.id
      RETURNING j.id, j.user_id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.target_odds, j.required_legs, j.seed, j.config, j.status, j.stage, j.checkpoint, j.candidate_order, j.eligible_count, j.attempt_count, j.created_at, j.started_at, picked.recovered`,
-    [WORKER_ID, String(LEASE_MS)],
+    [WORKER_ID, String(LEASE_MS), config.limits.maxConcurrentJobs],
   );
 }
 

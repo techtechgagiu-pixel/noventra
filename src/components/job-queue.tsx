@@ -10,6 +10,9 @@ const ACTIVE = ['QUEUED', 'RUNNING', 'WAITING', 'PAUSED'];
 const ago = (iso: string, now: number) => { if (!now) return '…'; const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000)); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
 
 /** Live queue of analyses: what is running, what waits its turn (max 2 at once) and what just finished. */
+/** „ești primul la rând” / „ești al 3-lea în coadă, ~42 min” */
+export const queueText = (position: number, etaMin: number | null) => `${position === 1 ? 'ești primul la rând' : `ești al ${position}-lea în coadă`}${etaMin ? `, ~${etaMin} min` : ''}`;
+
 export function JobQueue({ initial, onlyCustom = false }: { initial: QueueItem[]; onlyCustom?: boolean }) {
   const [items, setItems] = useState(initial);
   const [now, setNow] = useState(0); // set after mount: server and browser clocks differ (hydration)
@@ -50,7 +53,7 @@ export function JobQueue({ initial, onlyCustom = false }: { initial: QueueItem[]
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">
                     <span className="truncate">{i.title}</span>
-                    <span className={`text-xs font-semibold ${tone}`}>{i.status === 'QUEUED' && i.position ? `#${i.position} la rând` : STATUS_RO[i.status] ?? i.status}</span>
+                    <span className={`text-xs font-semibold ${tone}`}>{i.status === 'QUEUED' && i.position ? queueText(i.position, i.etaMin) : STATUS_RO[i.status] ?? i.status}</span>
                   </p>
                   <p className="text-xs text-muted">
                     {live ? <>{STAGE[i.stage] ?? i.stage}{i.batches ? ` · lot ${Math.max(1, i.batch)}/${i.batches}` : ''}{i.analyzed ? ` · ${i.analyzed} meciuri analizate` : ''} · de {ago(i.createdAt, now)}</>

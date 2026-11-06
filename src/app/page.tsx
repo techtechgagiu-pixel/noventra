@@ -40,7 +40,8 @@ import { config } from '@/lib/config';
 import { topSixAgentIds } from '@/lib/agent-ranking';
 import { databaseIssue } from '@/lib/database-availability';
 import { CreditsBadge } from '@/components/credits-badge';
-import { canRemoveTickets, canSeeAccounts, customLimitFor } from '@/lib/ticket-removal';
+import { canRemoveTickets, canSeeAccounts } from '@/lib/ticket-removal';
+import { customLimitForUser } from '@/lib/credits';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,7 +115,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       <main className="app-main mx-auto max-w-6xl px-4 pb-24 pt-8">
         <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.sport,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
-        {tab === 'custom' && <CustomTab limit={customLimitFor(user)} userId={user.id} job={sp.job} />}
+        {tab === 'custom' && <CustomTab limit={await customLimitForUser(user)} userId={user.id} job={sp.job} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} sport={sp.sport} />}

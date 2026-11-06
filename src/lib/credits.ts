@@ -1,6 +1,7 @@
-import { atomic, one, query } from './db';
+import { atomic, many, one, query } from './db';
 import { config } from './config';
 import { SlotError } from './jobs/errors';
+import { canSeeAccounts, customLimitFor } from './ticket-removal';
 
 /** 1 credit = up to 6 matches on a ticket (owner plan 06.11). A 7–12 match ticket costs 2, 13–18 costs 3, 20 costs 4. */
 export const CREDIT_SIZE = 6;
@@ -96,4 +97,26 @@ export async function refundJob(job: { id: string; user_id: string; config: { cu
   if (!config.creditsEnabled || !job.config.custom || !job.config.customBatch) return;
   const charged = await one('SELECT 1 AS x FROM credit_ledger WHERE ref=$1 AND reason=$2', [job.config.customBatch.id, 'charge']);
   if (charged) await credit(job.user_id, creditsForLegs(job.config.custom.legs), 'refund', job.id);
+}
+
+type LimitUser = { id: string; email: string; role?: string; customDailyLimit?: number | null };
+
+/** The biggest plan this account ever bought (purchases that match a plan's credits); Debut-level limits when it never bought one. */
+export async function bestPlan(userId: string): Promise<Plan> {
+  const rows = await many<{ delta: number }>("SELECT DISTINCT delta FROM credit_ledger WHERE user_id=$1 AND reason='purchase'", [userId]);
+  const owned = PLANS.filter((p) => rows.some((r) => Number(r.delta) === p.credits));
+  return owned.sort((a, b) => b.perDay - a.perDay)[0] ?? PLANS[0];
+}
+
+/** Plan limits apply to paying-model accounts only: not to the owner, founders, accounts with a limit set by hand, or while credits are off. */
+async function planLimited(user: LimitUser) {
+  if (!config.creditsEnabled || canSeeAccounts(user) || user.customDailyLimit != null) return false;
+  return !(await getAccount(user.id)).founder;
+}
+export async function customLimitForUser(user: LimitUser): Promise<number> {
+  return (await planLimited(user)) ? (await bestPlan(user.id)).perDay : customLimitFor(user);
+}
+/** Most matches a ticket may have for this account (20 for everyone not on a plan). */
+export async function maxLegsForUser(user: LimitUser): Promise<number> {
+  return (await planLimited(user)) ? (await bestPlan(user.id)).maxLegs : 20;
 }
