@@ -14,7 +14,7 @@ import type { Creator } from '@/lib/views';
 
 type Sel = { position: number; fixture_id: string; market_key: string; market_label: string; odds: number; bookmaker: string; quote_observed_at: string; votes_for: number; model_probability: number | null; risk: string; snapshot: { match: string; home: string; away: string; league: string; kickoff: string; source: string }; outcome: string; home_score: number | null; away_score: number | null; fixture_status?: string | null; live_clock?: string | null; score_at?: string | null };
 export type TicketData = {
-  id: string; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string; creator?: Creator; mine?: boolean;
+  id: string; number?: number | null; title: string; subtitle: string; target: number; actualOdds: number | null; legCount: number; generationStatus: string; outcomeStatus: string; mixedBookmakers: boolean; createdAt: string; creator?: Creator; mine?: boolean;
   summary: { completion?: { requestedAt: string; attempt: number }; review?: { legs: Array<{ fixtureId: string; match: string; label: string; odds: number; verdict: 'SOLID' | 'RISCANT' | 'SLAB' | 'NEANALIZAT'; supporters: string[]; responded: number; engineProbability: number | null; suggestion: { label: string; odds: number; supporters: number } | null; note: string }>; overall: string; advice: string[]; chance: number | null; model: string | null; userAdvice: string | null; solid: number; risky: number; weak: number }; digest?: { lines: string[]; source: 'ai' | 'data'; model: string | null; createdAt: string }; agents?: number; threshold?: number; analyzed?: number; qualified?: number; eligible?: number; reason?: string; closest?: { totalOdds: number; legs: Array<{ match?: string; label?: string; odds: number }> } | null };
   selections: Sel[]; partialSelections?: IncompletePick[];
   predictions?: Array<{ id: string; fixture_id: string; agent_id: string; round: number; model_id: string; decision: string; market_key: string | null; outcome: string | null; current_in_stats: boolean; payload: { marketLabel?: string | null } }>;
@@ -25,8 +25,11 @@ export type TicketData = {
 const VERDICT: Record<string, { t: string; c: string }> = { SOLID: { t: '✓ SOLID', c: 'text-emerald' }, RISCANT: { t: '⚠ RISCANT', c: 'text-gold' }, SLAB: { t: '✗ SLAB', c: 'text-rose' }, NEANALIZAT: { t: '— NEANALIZAT', c: 'text-muted' } };
 const RISK_RO: Record<string, string> = { LOW: 'Risc scăzut', MEDIUM: 'Risc mediu', HIGH: 'Risc ridicat' };
 
+/** „Biletul #249 · ” (owner request 07.11), empty for tickets saved before numbering. */
+export const ticketRef = (t: { number?: number | null }) => (t.number ? `Biletul #${t.number} · ` : '');
+
 export function ticketText(t: TicketData) {
-  const lines = [`PRIMUL 11 — ${t.title}`, `Creat: ${fmtDateTime(t.createdAt)} (ora României)`, `Țintă: ${t.target} · Cotă reală: ${odds(t.actualOdds)} · ${t.legCount} meciuri`, ''];
+  const lines = [`PRIMUL 11 — ${ticketRef(t)}${t.title}`, `Creat: ${fmtDateTime(t.createdAt)} (ora României)`, `Țintă: ${t.target} · Cotă reală: ${odds(t.actualOdds)} · ${t.legCount} meciuri`, ''];
   t.selections.forEach((s) => lines.push(`${s.position}. ${s.snapshot.match} (${s.snapshot.league}) — ${fmtDateTime(s.snapshot.kickoff)}`, `   ${s.market_label} @ ${odds(s.odds)} · ${s.bookmaker} · cotă observată ${fmtDateTime(s.quote_observed_at)} · ${s.votes_for}/${t.summary.agents ?? 6} voturi`));
   if (t.mixedBookmakers) lines.push('', 'Atenție: cotele provin de la bookmakeri diferiți; cota combinată poate să nu fie reproductibilă la un singur operator.');
   lines.push('', 'Cotele sunt cele observate la creare și se pot schimba. Analiza nu garantează rezultatul. 18+');
@@ -35,7 +38,7 @@ export function ticketText(t: TicketData) {
 
 /** Plain text to rebuild the ticket by hand in the Superbet app (search team → market → pick). */
 export function superbetText(t: TicketData) {
-  const lines = [`PRIMUL 11 — ${t.title} — pentru Superbet`, `${t.legCount} meciuri · cota la noi ${odds(t.actualOdds)}`, ''];
+  const lines = [`PRIMUL 11 — ${ticketRef(t)}${t.title} — pentru Superbet`, `${t.legCount} meciuri · cota la noi ${odds(t.actualOdds)}`, ''];
   t.selections.forEach((s) => {
     const p = superbetPick(s.market_key, s.snapshot.home, s.snapshot.away);
     lines.push(`${s.position}. ${s.snapshot.home} – ${s.snapshot.away} · ${fmtDateTime(s.snapshot.kickoff)}`,
@@ -64,7 +67,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
   const share = async () => {
     setSharing('busy');
     try {
-      const r = await shareTicketImage({ title: t.title, createdAt: t.createdAt, actualOdds: t.actualOdds, outcomeStatus: t.outcomeStatus,
+      const r = await shareTicketImage({ title: t.number ? `#${t.number} · ${t.title}` : t.title, createdAt: t.createdAt, actualOdds: t.actualOdds, outcomeStatus: t.outcomeStatus,
         legs: t.selections.map((s) => ({ home: s.snapshot.home, away: s.snapshot.away, league: s.snapshot.league, kickoff: s.snapshot.kickoff, label: s.market_label, odds: s.odds, outcome: s.outcome, homeScore: s.home_score, awayScore: s.away_score })) });
       setSharing(r === 'downloaded' ? 'downloaded' : 'idle');
       if (r === 'downloaded') setTimeout(() => setSharing('idle'), 2500);
@@ -75,7 +78,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
   const partial = t.generationStatus === 'INCOMPLETE' ? t.partialSelections ?? [] : [];
   const shown = completed ? t.selections : partial;
   const copy = async () => { await navigator.clipboard.writeText(ticketText(t)); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const download = () => { const url = URL.createObjectURL(new Blob([ticketText(t)], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = `primul11-${t.title.replace(/\W+/g, '-').toLowerCase()}-${t.createdAt.slice(0, 10)}.txt`; a.click(); URL.revokeObjectURL(url); };
+  const download = () => { const url = URL.createObjectURL(new Blob([ticketText(t)], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = `primul11-${t.number ? `${t.number}-` : ''}${t.title.replace(/\W+/g, '-').toLowerCase()}-${t.createdAt.slice(0, 10)}.txt`; a.click(); URL.revokeObjectURL(url); };
   const names = Object.fromEntries(t.fixtures.map((f) => [f.fixtureId, `${f.fixture.home} – ${f.fixture.away}`]));
   return (
     <div className="space-y-6">
@@ -87,7 +90,7 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
         )}
         <div className="flex flex-col gap-4 border-b border-line p-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-medium text-muted">{t.subtitle}</p>
+            <p className="text-xs font-medium text-muted">{t.number ? <span className="mr-2 font-semibold text-cyan tabular" title="Numărul biletului">Biletul #{t.number}</span> : null}{t.subtitle}</p>
             <h1 className="mt-1 font-display text-[2.4rem] font-bold leading-none">{t.title}</h1>
             <p className="mt-2 text-sm text-muted">Creat {fmtDateTime(t.createdAt)} · {t.summary.analyzed ?? 0} meciuri analizate</p>
             <div className="mt-1"><CreatorBadge c={t.creator} /></div>

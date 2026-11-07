@@ -54,7 +54,7 @@ export async function jobEvents(userId: string, jobId: string, after = 0) {
 /** "Bilete create": every account's tickets, newest first, each with its creator. */
 export async function listTickets(userId: string) {
   const rows = await many<Record<string, unknown> & { creator_id: string; creator_name: string | null; creator_email: string | null; creator_picture: string | null; creator_sub: string | null }>(
-    `SELECT t.id, t.slot, ${dialect("to_char(t.period_key,'YYYY-MM-DD')", 't.period_key')} AS period_key, CAST(t.target_odds AS DOUBLE PRECISION) AS target_odds, CAST(t.actual_odds AS DOUBLE PRECISION) AS actual_odds, t.leg_count, t.generation_status, t.outcome_status, t.created_at, t.mixed_bookmakers,
+    `SELECT t.id, t.ticket_no, t.slot, ${dialect("to_char(t.period_key,'YYYY-MM-DD')", 't.period_key')} AS period_key, CAST(t.target_odds AS DOUBLE PRECISION) AS target_odds, CAST(t.actual_odds AS DOUBLE PRECISION) AS actual_odds, t.leg_count, t.generation_status, t.outcome_status, t.created_at, t.mixed_bookmakers,
             j.id AS job_id, j.status AS job_status, COALESCE(CAST(j.config->'completion'->>'boost' AS TEXT), '') IN ('true','1') AS completed_boost, j.last_event_seq AS event_count,
             COALESCE((SELECT ${dialect('json_agg', 'json_group_array')}(${dialect('json_build_object', 'json_object')}('match', s.snapshot->>'match', 'label', s.market_label, 'market_key', s.market_key, 'model_probability', CAST(s.model_probability AS DOUBLE PRECISION), 'odds', CAST(s.odds AS DOUBLE PRECISION), 'outcome', s.outcome, 'kickoff', s.snapshot->>'kickoff', 'status', f.status, 'home_score', f.home_score, 'away_score', f.away_score, 'clock', f.live_clock, 'score_at', f.source_observed_at) ORDER BY s.position) FROM ticket_selections s LEFT JOIN fixtures f ON f.id=s.fixture_id WHERE s.ticket_id=t.id), '[]') AS selections
             , ${CREATOR_COLS}
@@ -86,7 +86,7 @@ export async function ticketDetail(userId: string, ticketId: string) {
   const slot = slotInfo(t.slot as string, Number(t.target_odds), t.leg_count as number);
   return {
     creator: creatorOf(t as never, userId), mine: t.creator_id === userId,
-    id: t.id as string, jobId: t.job_id as string, slot: slot.id, title: slot.title, subtitle: slot.subtitle, target: t.target as number, actualOdds: t.actual as number | null,
+    id: t.id as string, number: (t.ticket_no as number | null) ?? null, jobId: t.job_id as string, slot: slot.id, title: slot.title, subtitle: slot.subtitle, target: t.target as number, actualOdds: t.actual as number | null,
     legCount: t.leg_count as number, generationStatus: t.generation_status as string, outcomeStatus: t.outcome_status as string, mixedBookmakers: t.mixed_bookmakers as boolean,
     createdAt: new Date(t.created_at as string).toISOString(), periodKey: t.period as string, summary: cleanPayload(t.summary) as Record<string, unknown>, eligibleCount: t.eligible_count as number | null,
     selections, partialSelections: partial.get(ticketId) ?? [], decisions: cleanPayload(decisions), predictions: cleanPayload(predictions), dossiers,
