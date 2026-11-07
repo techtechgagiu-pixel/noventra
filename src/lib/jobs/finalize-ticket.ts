@@ -21,8 +21,9 @@ export async function finalizeTicket(job: JobRow, result: {
     ? 'actual_odds=EXCLUDED.actual_odds,leg_count=EXCLUDED.leg_count,generation_status=EXCLUDED.generation_status,outcome_status=EXCLUDED.outcome_status,mixed_bookmakers=EXCLUDED.mixed_bookmakers,summary=EXCLUDED.summary'
     : 'job_id=EXCLUDED.job_id';
   const statements: Statement[] = [{
-    text: `INSERT INTO tickets(id,job_id,user_id,slot,period_key,target_odds,actual_odds,leg_count,generation_status,outcome_status,mixed_bookmakers,summary)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(job_id) DO UPDATE SET ${changed} RETURNING id`,
+    // ticket_no (owner request 07.11): the next visible number; a re-save of the same job keeps its number.
+    text: `INSERT INTO tickets(id,job_id,user_id,slot,period_key,target_odds,actual_odds,leg_count,generation_status,outcome_status,mixed_bookmakers,summary,ticket_no)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,(SELECT COALESCE(MAX(ticket_no),0)+1 FROM tickets)) ON CONFLICT(job_id) DO UPDATE SET ${changed} RETURNING id`,
     params: [randomUUID(),job.id,job.user_id,job.slot,job.period_key,job.target_odds,result.totalOdds,result.selections.length,result.generation,result.generation==='COMPLETED'?'PENDING':'NOT_APPLICABLE',result.mixedBookmakers,JSON.stringify(result.summary)],
   }];
   if (replace) statements.push({ text: 'DELETE FROM ticket_selections WHERE ticket_id=(SELECT id FROM tickets WHERE job_id=$1)', params: [job.id] });
