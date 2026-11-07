@@ -33,11 +33,18 @@ export function useJobEvents(jobId: string, initialEvents: NexusEvent[], initial
       es = new EventSource(`/api/jobs/${jobId}/events?after=${cursor.current}`);
       es.addEventListener('job', (m) => { add([JSON.parse((m as MessageEvent).data)]); setConnected(true); failures = 0; });
       es.addEventListener('meta', (m) => { const d = JSON.parse((m as MessageEvent).data); if (d) setMeta(d); setConnected(true); });
-      es.addEventListener('end', () => { es?.close(); if (!stopped) setTimeout(open, 1000); });
-      es.onerror = () => { es?.close(); failures++; setConnected(false); if (failures >= 3) startPolling(); else setTimeout(open, 2000 * failures); };
+      es.addEventListener('end', () => { es?.close(); es = null; if (!stopped && document.visibilityState !== 'hidden') setTimeout(open, 1000); });
+      es.onerror = () => { es?.close(); es = null; failures++; setConnected(false); if (document.visibilityState === 'hidden') return; if (failures >= 3) startPolling(); else setTimeout(open, 2000 * failures); };
     };
-    open();
-    return () => { stopped = true; es?.close(); if (poll) clearInterval(poll); };
+    // A hidden tab keeps no stream open (perf 07.11): each open stream reads the database every few seconds.
+    // When the tab is visible again, the stream resumes from the last event, so nothing is missed.
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') { es?.close(); es = null; if (poll) { clearInterval(poll); poll = null; } }
+      else if (!es && !poll) { failures = 0; open(); }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    if (document.visibilityState !== 'hidden') open();
+    return () => { stopped = true; document.removeEventListener('visibilitychange', onVisibility); es?.close(); if (poll) clearInterval(poll); };
   }, [jobId, meta.status, drained]);
 
   return { events, meta, setMeta, connected };

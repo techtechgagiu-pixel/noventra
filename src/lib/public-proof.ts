@@ -1,4 +1,5 @@
 import { many, one } from './db';
+import { memo } from './memo';
 
 /**
  * Real results for the logged-out home page: the latest won ticket and the settled totals.
@@ -18,17 +19,24 @@ export type PublicProof = {
 export const WINS_SHOWN = 10;
 const num = (v: unknown) => (v == null ? 0 : Number(v));
 
+/** Cached 5 min: the logged-out home is the most visited page and these numbers change only when a match is settled (perf 07.11). */
 export async function publicProof(): Promise<PublicProof | null> {
-  try {
+  return memo('publicProof', 5 * 60_000, publicProofFresh).catch(() => null);
+}
+
+async function publicProofFresh(): Promise<PublicProof | null> {
+  {
     const recent = await many<{ id: string; actual_odds: number | string; settled_at: string | Date }>(
       `SELECT id, actual_odds, settled_at FROM tickets
         WHERE outcome_status='WON' AND generation_status='COMPLETED' AND hidden_at IS NULL AND settled_at IS NOT NULL
         ORDER BY settled_at DESC LIMIT ${WINS_SHOWN}`);
     const wins: WonTicket[] = [];
-    for (const w of recent) {
-      const legs = await many<{ home_team: string; away_team: string; market_label: string; odds: number | string; home_score: number | null; away_score: number | null }>(
-        `SELECT f.home_team, f.away_team, s.market_label, s.odds, f.home_score, f.away_score
-           FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE s.ticket_id=$1 ORDER BY s.position`, [w.id]);
+    // The legs of the 10 wins in parallel (they used to be read one after another: ten round trips per visit).
+    const allLegs = await Promise.all(recent.map((w) => many<{ home_team: string; away_team: string; market_label: string; odds: number | string; home_score: number | null; away_score: number | null }>(
+      `SELECT f.home_team, f.away_team, s.market_label, s.odds, f.home_score, f.away_score
+         FROM ticket_selections s JOIN fixtures f ON f.id=s.fixture_id WHERE s.ticket_id=$1 ORDER BY s.position`, [w.id])));
+    for (const [i, w] of recent.entries()) {
+      const legs = allLegs[i];
       if (legs.length) wins.push({ odds: num(w.actual_odds), settledAt: new Date(w.settled_at).toISOString(),
         legs: legs.map((l) => ({ home: l.home_team, away: l.away_team, label: l.market_label, odds: num(l.odds), homeScore: l.home_score, awayScore: l.away_score })) });
     }
@@ -44,7 +52,5 @@ export async function publicProof(): Promise<PublicProof | null> {
       tickets: { won: num(t?.won), settled: num(t?.settled) },
       picks: { won: num(p?.won), decided: num(p?.decided) },
     };
-  } catch {
-    return null;
   }
 }

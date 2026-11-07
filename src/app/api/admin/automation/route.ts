@@ -16,5 +16,5 @@ export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return json({ error: 'Origine respinsă.' }, 403);
   if (rateLimited(`settlement:${user.id}`, 1, 60_000)) return json({ error: 'O verificare pe minut este suficientă.' }, 429);
   const result = await settlePending();
-  return json({ result, health: await automationHealth() });
+  return json({ result, health: await automationHealth(true) });
 }
