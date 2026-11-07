@@ -12,12 +12,15 @@ export async function memo<T>(key: string, ttlMs: number, load: () => Promise<T>
   const store = (g.__bmMemo ??= new Map());
   const hit = store.get(key);
   if (hit && 'value' in hit && Date.now() - hit.at < ttlMs) return hit.value as T;
-  if (hit?.pending) return hit.pending as Promise<T>;
+  // On Cloudflare a promise started by one request must not be awaited by another (the runtime ties I/O to its request),
+  // so there only finished values are shared; on Render concurrent callers also share the load in flight.
+  const shareInFlight = !process.env.BETMIND_RUNTIME?.startsWith('cloudflare');
+  if (shareInFlight && hit?.pending) return hit.pending as Promise<T>;
   const pending = load().then(
     (value) => { store.set(key, { at: Date.now(), value }); return value; },
     (error) => { if (hit && 'value' in hit) store.set(key, { at: hit.at, value: hit.value }); else store.delete(key); throw error; },
   );
-  store.set(key, { ...(hit ?? { at: 0 }), pending });
+  if (shareInFlight) store.set(key, { ...(hit ?? { at: 0 }), pending });
   if (store.size > MAX_KEYS) store.delete(store.keys().next().value as string);
   return pending;
 }

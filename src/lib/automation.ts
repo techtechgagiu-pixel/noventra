@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { many, one, query, dialect, isD1, SQL_NOW, SQL_AGO, timeCompare } from './db';
+import { memo } from './memo';
 
 /** Database lease prevents overlapping checks during rolling deploys; it expires after a crashed process. */
 export async function runAutomation(name: string, work: () => Promise<Record<string, unknown>>) {
@@ -27,7 +28,12 @@ export async function runAutomation(name: string, work: () => Promise<Record<str
   } finally { if (timer) clearInterval(timer); }
 }
 
-export async function automationHealth() {
+/** Cached 60 s (perf 07.11): it scans every prediction and the AI usage log, and the owner opens Statistics often. */
+export async function automationHealth(fresh = false) {
+  return fresh ? automationHealthFresh() : memo('automationHealth', 60_000, automationHealthFresh);
+}
+
+async function automationHealthFresh() {
   const [runs, pending, jobs, agents] = await Promise.all([
     many(`SELECT name,started_at,finished_at,last_success_at,last_error,detail,lease_until FROM automation_runs ORDER BY name`),
     one(`SELECT
