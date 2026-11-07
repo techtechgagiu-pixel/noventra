@@ -1,0 +1,15 @@
+# 07.11 performance: static files were served with max-age=0, so every visit re-checked the 2.7 MB video, portraits and scripts.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+/video/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/ai-portraits/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/agents/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/*.png
+  Cache-Control: public, max-age=86400
+/*.svg
+  Cache-Control: public, max-age=86400
+/*.jpg
+  Cache-Control: public, max-age=86400

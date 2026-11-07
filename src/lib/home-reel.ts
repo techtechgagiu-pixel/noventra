@@ -1,6 +1,7 @@
 import { cleanPayload } from './agent-names';
 import { many, one, dialect, SQL_AGO, timeCompare } from './db';
 import { slotInfo } from './slots';
+import { memo } from './memo';
 import type { NexusEvent } from './nexus-state';
 
 /**
@@ -48,7 +49,12 @@ export type NewsCard = { match: string; at: string; headlines: Array<{ title: st
 const clip = (s: unknown, n: number) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t; };
 
 /** Real debate fragments from the last days: who proposed what, who objected, who changed his mind, what the brain chose. */
+/** Cached 60 s (the community view is the same for everyone): every home page used to re-read thousands of debate events. */
 export async function homeThreads(userId: string, scope: 'mine' | 'community' = 'mine'): Promise<{ threads: Thread[]; news: NewsCard | null }> {
+  return memo(`homeThreads|${scope === 'community' ? 'all' : userId}`, 60_000, () => homeThreadsFresh(userId, scope));
+}
+
+async function homeThreadsFresh(userId: string, scope: 'mine' | 'community'): Promise<{ threads: Thread[]; news: NewsCard | null }> {
   const rows = await many<{ job_id: string; slot: string; target_odds: string; required_legs: number | null; seq: number; type: string; fixture_id: string | null; agent_id: string | null; payload: Record<string, any>; created_at: Date }>(
     `SELECT e.job_id, j.slot, j.target_odds, j.required_legs, e.seq, e.type, e.fixture_id, e.agent_id, e.payload, e.created_at
      FROM analysis_events e JOIN ticket_generation_jobs j ON j.id=e.job_id

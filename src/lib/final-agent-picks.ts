@@ -7,8 +7,11 @@ import { dialect } from './db';
 /** Sport of the picks: football and Counter-Strike (fixtures ps:…) are judged separately (owner request 30.10), so CS
  * results never move an agent's football record, coaching, calibration or vote weight. 'all' = both (ticket pages). */
 export type PickSport = 'football' | 'cs' | 'all';
-export function finalAgentPicksCte(mine = false, sport: PickSport = 'football') {
-  const where = [mine ? `(${dialect('$1::uuid', '$1')} IS NULL OR j.user_id=$1)` : '', sport === 'cs' ? "p.fixture_id LIKE 'ps:%'" : sport === 'football' ? "p.fixture_id NOT LIKE 'ps:%'" : ''].filter(Boolean);
+/** `fixtureScope` (perf 07.11): an optional, fixed SQL condition on p.fixture_id. The final pick is decided per match and agent,
+ * so limiting the window to the matches a page needs (one ticket, one month) gives the same rows without ranking all
+ * 55,000 predictions — that full ranking blocked the database for everyone. Never user-provided SQL. */
+export function finalAgentPicksCte(mine = false, sport: PickSport = 'football', fixtureScope = '') {
+  const where = [mine ? `(${dialect('$1::uuid', '$1')} IS NULL OR j.user_id=$1)` : '', sport === 'cs' ? "p.fixture_id LIKE 'ps:%'" : sport === 'football' ? "p.fixture_id NOT LIKE 'ps:%'" : '', fixtureScope].filter(Boolean);
   return `WITH rounds_ranked AS (
     SELECT p.id,p.job_id,p.fixture_id,p.agent_id,p.round,p.created_at,
            ROW_NUMBER() OVER (PARTITION BY p.job_id,p.fixture_id,p.agent_id ORDER BY p.round DESC,p.id DESC) AS rn_round
