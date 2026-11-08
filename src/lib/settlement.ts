@@ -11,7 +11,7 @@ export type MatchFacts = { ht?: [number, number] | null; corners?: [number, numb
 /** Which extra match facts a market needs to be settled (beyond the final score). */
 export function needsFacts(key: string): Array<'ht' | 'corners' | 'cards'> {
   const t = key.split(':')[0];
-  return t === 'HT1X2' || t === 'H21X2' || t === 'HTTOT' || t === 'WBH' || t === 'H1B' || t === 'HDC' || t === 'HHB' || t === 'HFT' ? ['ht'] : t === 'CORN' || t === 'TCORN' ? ['corners'] : t === 'CARD' ? ['cards'] : [];
+  return t === 'HT1X2' || t === 'H21X2' || t === 'HTTOT' || t === 'H2TOT' || t === 'WBH' || t === 'H1B' || t === 'HDC' || t === 'HHB' || t === 'HFT' ? ['ht'] : t === 'CORN' || t === 'TCORN' ? ['corners'] : t === 'CARD' ? ['cards'] : [];
 }
 
 /** Canonical settlement for the market keys this app produces. Returns null when not decidable (yet). */
@@ -33,6 +33,7 @@ export function settleMarket(key: string, home: number, away: number, facts: Mat
     case 'HT1X2': return ht ? r(side === 'HOME' ? ht[0] > ht[1] : side === 'AWAY' ? ht[1] > ht[0] : ht[0] === ht[1]) : null;
     case 'H21X2': { if (!ht) return null; const h = home - ht[0], a = away - ht[1]; return r(side === 'HOME' ? h > a : side === 'AWAY' ? a > h : h === a); }
     case 'HTTOT': return ht ? r(side === 'OVER' ? ht[0] + ht[1] > line : ht[0] + ht[1] < line) : null;
+    case 'H2TOT': { if (!ht) return null; const g = home - ht[0] + (away - ht[1]); return r(side === 'OVER' ? g > line : g < line); }
     case 'WBH': { if (!ht) return null; const h2 = [home - ht[0], away - ht[1]]; return r(side === 'HOME' ? ht[0] > ht[1] && h2[0] > h2[1] : ht[1] > ht[0] && h2[1] > h2[0]); }
     case 'CORN': return corners ? r(side === 'OVER' ? corners[0] + corners[1] > line : corners[0] + corners[1] < line) : null;
     case 'TCORN': { if (!corners) return null; const c = side === 'HOME' ? corners[0] : corners[1]; const l = Number(key.split(':')[3]); return r(key.split(':')[2] === 'OVER' ? c > l : c < l); }
@@ -71,7 +72,7 @@ const factsOf = (r: FactRow): MatchFacts => ({
 });
 
 /** Reads half-time score and corners from the finished match's summary, once, for fixtures whose markets need them. */
-const factMarket = (column: string) => dialect(`${column} ~ '^(HT1X2|H21X2|HTTOT|WBH|CORN|TCORN|CARD):'`, `substr(${column},1,instr(${column},':')-1) IN ('HT1X2','H21X2','HTTOT','WBH','CORN','TCORN','CARD')`);
+const factMarket = (column: string) => dialect(`${column} ~ '^(HT1X2|H21X2|HTTOT|H2TOT|WBH|CORN|TCORN|CARD):'`, `substr(${column},1,instr(${column},':')-1) IN ('HT1X2','H21X2','HTTOT','H2TOT','WBH','CORN','TCORN','CARD')`);
 
 async function loadMatchFacts() {
   let failures = 0;

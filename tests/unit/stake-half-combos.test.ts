@@ -55,4 +55,16 @@ describe('Stake half-time and combined markets', () => {
     expect(f.get('HHB:N:N')?.fair).toBeGreaterThan(0.5); expect(f.get('HDC:1X')?.fair).toBeGreaterThan(0.7);
     expect(fairProbabilities([q('HHB:N:N', 1.58, 'HALF'), q('HHB:Y:N', 5.4, 'HALF')]).get('HHB:N:N')?.fair).toBeNull();
   });
+
+  it('maps and settles the 2nd-half total', () => {
+    const k = keysOf([mk('2nd Half - Asian Total', '2nd Half - Asian Total', '', [o('Over 1.5', 2), o('Under 1.5', 1.76), o('Over 1.25', 1.68), o('Under 1.25', 2.1), o('Over 1', 1.37), o('Under 1', 2.9)])]);
+    expect(k).toContain('H2TOT:OVER:1.5'); expect(k).toContain('H2TOT:UNDER:1.5');
+    expect(k).not.toContain('H2TOT:OVER:1.25'); expect(k).not.toContain('H2TOT:OVER:1');
+    expect(labelFor('H2TOT:OVER:1.5', 'Everton', 'Coventry')).toBe('Peste 1.5 goluri în repriza a doua');
+    expect(settleMarket('H2TOT:OVER:1.5', 3, 1, { ht: [1, 0] })).toBe('WON'); // 2nd half 2-1
+    expect(settleMarket('H2TOT:OVER:1.5', 2, 1, { ht: [1, 1] })).toBe('LOST'); // 2nd half 1-0
+    expect(settleMarket('H2TOT:UNDER:1.5', 2, 1, { ht: [1, 1] })).toBe('WON');
+    expect(settleMarket('H2TOT:OVER:0.5', 2, 1)).toBeNull();
+    expect(marketAllowedBy(['HALF'], 'H2TOT:OVER:0.5')).toBe(true);
+  });
 });
