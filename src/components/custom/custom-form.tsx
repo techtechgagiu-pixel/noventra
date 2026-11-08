@@ -154,16 +154,6 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   }
 
   const basicsBlock = (<>
-      <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Sportul biletului">
-        {([['football', '⚽ Fotbal'], ['cs', '🎮 Counter-Strike 2']] as const).map(([id, label]) => (
-          <button key={id} type="button" role="radio" aria-checked={sport === id} onClick={() => chooseSport(id)}
-            className={`chip px-4 py-2 text-sm font-semibold ${sport === id ? 'border-cyan text-cyan' : 'text-muted'}`}>{label}</button>
-        ))}
-        {sport === 'cs' && <span className="text-xs text-muted">
-          Doar meciuri CS2 cu cote (Stake, OddsPapi): câștigător, handicap pe hărți, total hărți.
-          {catalog ? ` ${available} ${available === 1 ? 'meci disponibil' : 'meciuri disponibile'} în intervalul ales.` : ''}
-        </span>}
-      </div>
       <div className="custom-basics">
         <div className="card p-4">
           <label htmlFor="target" className="text-xs font-semibold text-muted">Cota dorită</label>

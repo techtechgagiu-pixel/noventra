@@ -149,9 +149,8 @@ export async function loadFixtures(startDate: string, days: number, opts: { top1
   const { errors } = provided;
   // Fixtures without any price at ESPN/LPF get The Odds API prices when available (cached, credit-budgeted).
   const football = g.__bmFixtureOverride ? provided.fixtures : await withTheOddsPrices(provided.fixtures).catch(() => provided.fixtures);
-  // Counter-Strike fixtures come from the CS sync (PandaScore + OddsPapi), already stored with their latest prices.
-  const withStake = [...football, ...(await storedStakeFixtures(window, leagues).catch(() => []))];
-  const priced = leagues.some((l) => l.provider === 'pandascore') ? [...withStake, ...(await storedCsFixtures(window).catch(() => []))] : withStake;
+  // Counter-Strike was removed (owner decision 08.11): football only.
+  const priced = [...football, ...(await storedStakeFixtures(window, leagues).catch(() => []))];
   // Odds the owner imported from his Stake export (no network): main prices for 4 days after the export.
   const fixtures = await withImportedPrices(priced).catch(() => priced);
   if (opts.persist !== false) await persistFixtures(fixtures);
