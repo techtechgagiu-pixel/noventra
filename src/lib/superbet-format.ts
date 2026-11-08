@@ -43,6 +43,8 @@ export function superbetPick(key: string, home: string, away: string): SuperbetP
       return { market: 'Repriza 2 (1X2)', pick: a === 'HOME' ? '1' : a === 'AWAY' ? '2' : 'X' };
     case 'HTTOT':
       return { market: 'Total goluri repriza 1', pick: `${a === 'OVER' ? 'Peste' : 'Sub'} ${b}` };
+    case 'H2TOT':
+      return { market: 'Total goluri repriza 2', pick: `${a === 'OVER' ? 'Peste' : 'Sub'} ${b}` };
     case 'CORN':
       return { market: 'Total cornere', pick: `${a === 'OVER' ? 'Peste' : 'Sub'} ${b}` };
     case 'CARD':

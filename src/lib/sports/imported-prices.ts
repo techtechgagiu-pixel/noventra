@@ -132,6 +132,7 @@ export function labelFor(key: string, home: string, away: string): string {
   if (family === 'H1B') return `${a === 'DRAW' ? 'Egal la pauză' : `${team(a)} conduce la pauză`} și ambele marchează în prima repriză – ${b === 'YES' ? 'DA' : 'NU'}`;
   if (family === 'HT1X2') return a === 'DRAW' ? 'Egal în prima repriză' : `${team(a)} câștigă prima repriză`;
   if (family === 'HTTOT') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} goluri în prima repriză`;
+  if (family === 'H2TOT') return `${a === 'OVER' ? 'Peste' : 'Sub'} ${b} goluri în repriza a doua`;
   if (family === 'HDC') return a === '1X' ? `${home} sau egal în prima repriză (1X)` : a === 'X2' ? `Egal sau ${away} în prima repriză (X2)` : `${home} sau ${away} în prima repriză (12)`;
   if (family === 'HHB') return `Ambele marchează: prima repriză ${a === 'Y' ? 'DA' : 'NU'}, repriza a doua ${b === 'Y' ? 'DA' : 'NU'}`;
   if (family === 'HFT') { const r = (x: string) => (x === 'DRAW' ? 'egal' : team(x)); const k = key.split(':'); return `Pauză ${r(a)}, final ${r(b)} și ${k[3] === 'OVER' ? 'peste' : 'sub'} ${k[4]} goluri`; }
@@ -242,6 +243,15 @@ function mapMarket(m: Obj, home: string, away: string): { family: string | null;
         if (x && line !== null) quotes.push({ key: `HTTOT:${x[1] === 'over' ? 'OVER' : 'UNDER'}:${line}`, marketType: 'HALF', odds: r3(o.odds), line });
       }
       if (quotes.length) return { family: 'HTTOT', quotes };
+    }
+    // Owner decision 08.11: 2nd-half goal total, x.5 lines only (Stake's "2nd Half - Asian Total"). Settled as the final score minus the half-time score.
+    if (/2nd half|second half/.test(label) && /total/.test(label) && !/&|and|team|score|btts|both|competitor|corner|booking|card|exact|odd|even|minute|player/.test(label)) {
+      const quotes: ImportedMarket[] = [];
+      for (const o of outcomes) {
+        const x = /^(over|under)\s*([\d.]+)?$/.exec(o.n); const line = halfLine(x?.[2] ?? spec('total'));
+        if (x && line !== null) quotes.push({ key: `H2TOT:${x[1] === 'over' ? 'OVER' : 'UNDER'}:${line}`, marketType: 'HALF', odds: r3(o.odds), line });
+      }
+      if (quotes.length) return { family: 'H2TOT', quotes };
     }
   }
   // ── Corners (owner decision 06.11): full-time total and each team's total, x.5 lines, settled from ESPN's corner counts.
