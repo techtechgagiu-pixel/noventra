@@ -24,11 +24,6 @@ export function StatsView({ agents, totals, month, scope = 'all', sport = 'footb
         <h1 className="page-title">Statistici</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">Ultima poziție a fiecărui agent pe fiecare meci, fără dublarea analizelor repetate. Luna se referă la data meciului. Rata și mediile folosesc doar selecțiile decise (verde/roșu), inclusiv cele rămase în afara biletelor. Data analizei este afișată separat.</p>
         <p className="stats-ai-note">Modele AI cu roluri, stiluri și limite de risc diferite. Portretele sunt ilustrative. Fiecare rol își păstrează istoricul și poate folosi un model de rezervă; rezultatele nu sunt cumulate între roluri.</p>
-        <nav aria-label="Sportul" className="mt-3 flex gap-2">
-          <Link href={`/?tab=statistici&luna=${month}&scope=${scope}`} aria-current={sport === 'football' ? 'page' : undefined} className={`chip px-4 py-2 text-sm font-semibold ${sport === 'football' ? 'border-cyan text-cyan' : 'text-muted'}`}>⚽ Fotbal</Link>
-          <Link href={`/?tab=statistici&luna=${month}&scope=${scope}&sport=cs`} aria-current={sport === 'cs' ? 'page' : undefined} className={`chip px-4 py-2 text-sm font-semibold ${sport === 'cs' ? 'border-cyan text-cyan' : 'text-muted'}`}>🎮 Counter-Strike</Link>
-        </nav>
-        {sport === 'cs' && <p className="mt-2 max-w-2xl text-xs text-muted">Doar pronosticurile pe meciuri Counter-Strike 2, decise din scorul pe hărți. Nu intră în procentele de fotbal ale agenților.</p>}
         <nav aria-label="Sfera statisticilor" className="mt-3 flex gap-2"><Link href={`/?tab=statistici&luna=${month}&scope=all${identityQuery}`} aria-current={scope === 'all' ? 'page' : undefined} className={`chip ${scope === 'all' ? 'text-cyan' : 'text-muted'}`}>Toată comunitatea</Link><Link href={`/?tab=statistici&luna=${month}&scope=mine${identityQuery}`} aria-current={scope === 'mine' ? 'page' : undefined} className={`chip ${scope === 'mine' ? 'text-cyan' : 'text-muted'}`}>Analizele mele</Link></nav>
         <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Luna">
           {choices.map((c) => <Link key={c} href={`/?tab=statistici&luna=${c}&scope=${scope}${identityQuery}`} aria-current={c === month ? 'page' : undefined} className={`chip ${c === month ? 'text-cyan' : 'text-muted'}`}>{c === 'all' ? 'De la început' : monthName(c)}</Link>)}

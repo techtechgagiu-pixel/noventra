@@ -119,7 +119,7 @@ export function MatchesView() {
       </div>}
 
       {data?.additionalSource?.configured && <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sursa meciurilor">
-        {([{ id: 'all', label: 'Toate sursele' }, { id: 'existing', label: 'ESPN / LPF' }, { id: 'the-odds-api', label: 'The Odds API' }, { id: 'stake', label: 'Stake' }, { id: 'cs2', label: '🎮 Counter-Strike' }] as const).map((s) =>
+        {([{ id: 'all', label: 'Toate sursele' }, { id: 'existing', label: 'ESPN / LPF' }, { id: 'the-odds-api', label: 'The Odds API' }, { id: 'stake', label: 'Stake' }] as const).map((s) =>
           <button key={s.id} onClick={() => { setSource(s.id); setLeagues([]); setDay('all'); setStatus('all'); }} aria-pressed={source === s.id} className={`chip ${source === s.id ? 'text-cyan' : 'text-muted'}`}>{s.label}</button>)}
       </div>}
 
