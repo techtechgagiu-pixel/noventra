@@ -1,4 +1,4 @@
-const LABELS: Record<string, string> = { acasa: 'Acasă', custom: 'Bilet custom', verifica: 'Biletul tău', analiza: 'Analiză', istoric: 'Bilete create', statistici: 'Statistici', meciuri: 'Meciuri' };
+const LABELS: Record<string, string> = { acasa: 'Acasă', custom: 'Bilet custom', oddsxmatch: 'oddsxmatch', verifica: 'Biletul tău', analiza: 'Analiză', istoric: 'Bilete create', statistici: 'Statistici', meciuri: 'Meciuri' };
 
 export function TabLoading({ tab }: { tab?: string }) {
   return <div className="space-y-5" role="status" aria-label={`Se încarcă ${LABELS[tab ?? ''] ?? 'pagina'}`}>

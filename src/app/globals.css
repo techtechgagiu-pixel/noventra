@@ -70,6 +70,10 @@ input, select, textarea { accent-color: var(--color-cyan); }
 .app-tab:hover { color: var(--color-text); }
 .app-tab[aria-current='page'] { color: var(--color-text); }
 .app-tab[aria-current='page']::after { content: ''; position: absolute; left: .6rem; right: .6rem; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--color-cyan); }
+.app-tab-hot { color: var(--color-gold); background: rgba(255,227,110,.1); border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(255,227,110,.55); }
+.app-tab-hot:hover { color: var(--color-gold); background: rgba(255,227,110,.18); }
+.app-tab-hot[aria-current='page'] { color: var(--color-gold); background: rgba(255,227,110,.18); }
+.app-tab-hot[aria-current='page']::after { background: var(--color-gold); }
 .app-tab-dot { position: absolute; top: .7rem; right: .25rem; width: 7px; height: 7px; border-radius: 50%; background: var(--color-emerald); box-shadow: 0 0 0 0 rgba(127,220,108,.6); animation: live-dot 1.8s ease-out infinite; }
 @keyframes live-dot { 0% { box-shadow: 0 0 0 0 rgba(127,220,108,.6); } 80%, 100% { box-shadow: 0 0 0 7px rgba(127,220,108,0); } }
 /* Phones: the same tabs as a bottom bar, within thumb reach. */

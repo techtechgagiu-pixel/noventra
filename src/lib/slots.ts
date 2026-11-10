@@ -57,6 +57,8 @@ export type CustomConfig = { target: number; legs: number; agents: string[]; win
   fromHours?: number; toHours?: number;
   /** League ids the user ticked; absent = every league. */
   leagues?: string[];
+  /** Owner request 10.11 (oddsxmatch): the user picked these exact matches; the agents only choose the pick for each, to reach the target price. */
+  fixtures?: string[];
   /** Owner request 05.11 / 06.11: every selection of the ticket must belong to one of these market families (absent = any market). */
   onlyMarkets?: MarketFamilyId[];
   /** Owner request 06.11: a selection reaches the ticket only if EVERY chosen agent backs it (default: the usual vote threshold). */
