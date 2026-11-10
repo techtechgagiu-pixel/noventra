@@ -29,6 +29,8 @@ export type LegPolicy = {
   maxAheadHours?: number;
   /** Which qualified selection wins a fixture: the one most agents back ('safest') or the highest price still ≥ threshold ('highest'). */
   pick?: 'safest' | 'highest';
+  /** Custom ticket that accepts higher prices and lower probabilities (agents' own price and probability limits are relaxed). */
+  bold?: boolean;
 };
 export const POLICIES = {
   five: { minOdds: 1.15, maxOdds: 1.65, minProbability: 0.6, minLegs: 3, maxLegs: 7, minLeadHours: 2, maxAheadHours: 48 },
@@ -60,7 +62,9 @@ export type CustomConfig = { target: number; legs: number; agents: string[]; win
   /** Owner request 06.11: a selection reaches the ticket only if EVERY chosen agent backs it (default: the usual vote threshold). */
   unanimous?: boolean;
   /** Owner request 06.11: exactly how many of the chosen agents must back a selection (2..N); absent = the automatic threshold. */
-  minAgree?: number };
+  minAgree?: number;
+  /** Owner request 10.11: "riscă și cote mari" — wider price band, lower probability floors and agent price caps lifted, so a big target (e.g. 1000) can really be reached. */
+  bold?: boolean };
 /** Market families the owner can restrict a ticket to. `prefix` is the key family used by the variety rule. */
 export const MARKET_FAMILIES = [
   { id: 'BTTS', label: 'Ambele echipe marchează – DA (GG)', short: 'GG', prefix: 'BTTS', test: (k: string) => k === 'BTTS:YES' },
@@ -119,6 +123,14 @@ export function customPolicy(c: CustomConfig): LegPolicy {
   const minOdds = Math.max(1.1, Math.round(perLeg * 0.72 * 100) / 100);
   const maxOdds = Math.min(4, Math.round((perLeg * 1.4 + 0.05) * 100) / 100);
   const minProbability = Math.min(0.75, Math.max(0.3, Math.round((0.95 / perLeg - 0.1) * 100) / 100));
+  if (c.bold) {
+    return {
+      minOdds: Math.max(1.1, Math.round(perLeg * 0.85 * 100) / 100), maxOdds: Math.min(6, Math.round(perLeg * 2.6 * 100) / 100),
+      minProbability: Math.min(minProbability, Math.max(0.2, Math.round((0.7 / perLeg - 0.1) * 100) / 100)),
+      minLegs: c.legs, maxLegs: c.legs, agentCapBonus: 6, pick: 'highest', bold: true,
+      minLeadHours: c.fromHours ?? 2, maxAheadHours: c.toHours ?? (c.window === '24h' ? 24 : c.window === '48h' ? 48 : 168),
+    };
+  }
   return {
     minOdds, maxOdds, minProbability, minLegs: c.legs, maxLegs: c.legs,
     agentCapBonus: Math.max(0, Math.round((perLeg - 1.4) * 100) / 100), pick: perLeg >= 1.45 ? 'highest' : 'safest',

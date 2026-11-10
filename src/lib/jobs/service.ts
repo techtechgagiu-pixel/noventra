@@ -137,7 +137,7 @@ export function parseCustom(input: unknown): CustomConfig {
   // Leagues the user ticked (ids are validated against the league table when the job is created). Empty = all.
   const leagues = [...new Set(Array.isArray(o.leagues) ? o.leagues.map(String).filter((x) => /^[A-Z0-9]{2,12}$/.test(x)) : [])].slice(0, 120);
   const onlyMarkets = [...new Set(Array.isArray(o.onlyMarkets) ? o.onlyMarkets.filter((x): x is MarketFamilyId => MARKET_FAMILY_IDS.includes(x as MarketFamilyId)) : [])];
-  return { target, legs, agents, window, fromHours, toHours, ...(leagues.length ? { leagues } : {}), ...(onlyMarkets.length ? { onlyMarkets } : {}), ...(agents.length >= 2 && Number.isFinite(Number(o.minAgree)) && Number(o.minAgree) >= 2 ? { minAgree: Math.min(agents.length, Math.round(Number(o.minAgree))) } : {}) };
+  return { target, legs, agents, window, fromHours, toHours, ...(leagues.length ? { leagues } : {}), ...(onlyMarkets.length ? { onlyMarkets } : {}), ...(o.bold === true ? { bold: true } : {}), ...(agents.length >= 2 && Number.isFinite(Number(o.minAgree)) && Number(o.minAgree) >= 2 ? { minAgree: Math.min(agents.length, Math.round(Number(o.minAgree))) } : {}) };
 }
 
 /** Atomically queues 1…20 custom jobs, with one daily allowance and retry identity. */
