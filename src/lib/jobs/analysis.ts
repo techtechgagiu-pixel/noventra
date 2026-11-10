@@ -122,7 +122,7 @@ export function setVoteWeights(w: Map<string, number> | null) { voteWeights = w;
 const weightOf = (agentId: string) => voteWeights?.get(agentId) ?? 1;
 const EPS = 1e-9;
 
-export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 10, availableKeys?: Array<{ key: string; odds: number }>, pick: 'safest' | 'highest' = 'safest', fixedVotes: number | null = null): ConsensusResult {
+export function consensus(positions: FinalPosition[], threshold: number, totalAgents = 10, availableKeys?: Array<{ key: string; odds: number }>, pick: 'safest' | 'highest' | 'nearest' = 'safest', fixedVotes: number | null = null, aim?: number): ConsensusResult {
   const bets = positions.filter((p) => picksOf(p).length > 0);
   const noBet = positions.length - bets.length;
   const abstentions = totalAgents - positions.length;
@@ -139,9 +139,13 @@ export function consensus(positions: FinalPosition[], threshold: number, totalAg
     .sort((a, b) => b.weight - a.weight || b.supporters.length - a.supporters.length || a.odds - b.odds || b.direct - a.direct);
   // Owner request 06.11: the ticket's owner fixes how many agents must back a selection (2..all); vote weights do not count then.
   const enough = (s: { weight: number; supporters: string[] }) => (fixedVotes !== null ? s.supporters.length >= fixedVotes : s.weight >= required - EPS);
-  const qualified = pick === 'highest'
+  // 'nearest': the backed price closest to what each leg needs, so the whole ticket lands near the target.
+  const gap = (odds: number) => (aim && aim > 1 && odds > 1 ? Math.abs(Math.log(odds) - Math.log(aim)) : -odds);
+  const qualified = pick === 'highest' || (pick === 'nearest' && !aim)
     ? support.filter(enough).sort((a, b) => b.odds - a.odds || b.weight - a.weight)[0]
-    : support.find(enough);
+    : pick === 'nearest'
+      ? support.filter(enough).sort((a, b) => gap(a.odds) - gap(b.odds) || b.weight - a.weight)[0]
+      : support.find(enough);
   const top = qualified ?? support[0];
   // Only selections at least one agent actually proposed (not merely implied) are offered to the brain.
   const shortlist = support.filter((s) => enough(s) && s.direct > 0).slice(0, 6);

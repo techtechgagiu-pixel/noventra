@@ -27,8 +27,12 @@ export type LegPolicy = {
   /** Daily tickets: kickoff must be at least minLeadHours and at most maxAheadHours from the moment of creation. */
   minLeadHours?: number;
   maxAheadHours?: number;
-  /** Which qualified selection wins a fixture: the one most agents back ('safest') or the highest price still ≥ threshold ('highest'). */
-  pick?: 'safest' | 'highest';
+  /** Which qualified selection wins a fixture: the one most agents back ('safest'), the highest price still ≥ threshold
+   * ('highest'), or the price closest to `aim`, the price each leg needs (custom tickets, 10.11: 'highest' on every match
+   * gave a 7641 ticket for a 500 target). */
+  pick?: 'safest' | 'highest' | 'nearest';
+  /** Price each leg needs for 'nearest' (target^(1/legs)). */
+  aim?: number;
   /** Custom ticket that accepts higher prices and lower probabilities (agents' own price and probability limits are relaxed). */
   bold?: boolean;
 };
@@ -129,13 +133,13 @@ export function customPolicy(c: CustomConfig): LegPolicy {
     return {
       minOdds: Math.max(1.1, Math.round(perLeg * 0.85 * 100) / 100), maxOdds: Math.min(6, Math.round(perLeg * 2.6 * 100) / 100),
       minProbability: Math.min(minProbability, Math.max(0.2, Math.round((0.7 / perLeg - 0.1) * 100) / 100)),
-      minLegs: c.legs, maxLegs: c.legs, agentCapBonus: 6, pick: 'highest', bold: true,
+      minLegs: c.legs, maxLegs: c.legs, agentCapBonus: 6, pick: 'nearest', aim: perLeg, bold: true,
       minLeadHours: c.fromHours ?? 2, maxAheadHours: c.toHours ?? (c.window === '24h' ? 24 : c.window === '48h' ? 48 : 168),
     };
   }
   return {
     minOdds, maxOdds, minProbability, minLegs: c.legs, maxLegs: c.legs,
-    agentCapBonus: Math.max(0, Math.round((perLeg - 1.4) * 100) / 100), pick: perLeg >= 1.45 ? 'highest' : 'safest',
+    agentCapBonus: Math.max(0, Math.round((perLeg - 1.4) * 100) / 100), ...(perLeg >= 1.45 ? { pick: 'nearest' as const, aim: perLeg } : { pick: 'safest' as const }),
     minLeadHours: c.fromHours ?? 2, maxAheadHours: c.toHours ?? (c.window === '24h' ? 24 : c.window === '48h' ? 48 : 168),
   };
 }
