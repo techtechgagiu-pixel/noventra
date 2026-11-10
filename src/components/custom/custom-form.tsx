@@ -251,7 +251,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
             </fieldset>
           );
         })()}
-          <div className="mb-4 flex flex-wrap gap-3" aria-label="Echipa selectată">{chosen.flatMap((id) => agents.filter((a) => a.id === id)).map((a) => <div key={a.id} className="flex items-center gap-2 rounded-lg border border-line px-2 py-1.5"><img src={AGENT_META[a.id]?.img} alt="" className="h-8 w-8 rounded-full object-cover" /><div><p className="text-xs font-semibold">{a.name}</p><p className="text-[10px] text-muted">{a.model ?? 'Model AI'}</p></div></div>)}</div>
+          <div className="mb-4 flex flex-wrap gap-3" aria-label="Echipa selectată">{chosen.flatMap((id) => agents.filter((a) => a.id === id)).map((a) => <div key={a.id} className="flex items-center gap-2 rounded-lg border border-line px-2 py-1.5"><img src={AGENT_META[a.id]?.thumb} alt="" className="h-8 w-8 rounded-full object-cover" /><div><p className="text-xs font-semibold">{a.name}</p><p className="text-[10px] text-muted">{a.model ?? 'Model AI'}</p></div></div>)}</div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h3 className="font-display text-lg font-bold">Alege agenții din teren</h3>
           <span className="text-sm text-muted">{chosen.length} {chosen.length === 1 ? 'ales' : 'aleși'}</span>
@@ -283,7 +283,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
             return (
               <button key={a.id} onClick={() => toggle(a.id)} aria-pressed={on}
                 className={`card relative flex gap-3 p-3 text-left transition ${on ? '' : 'opacity-55 hover:opacity-90'}`} style={on ? { borderColor: `${meta?.accent}aa`, boxShadow: `0 0 0 1px ${meta?.accent}55, 0 8px 30px ${meta?.accent}1f` } : undefined}>
-                <img src={meta?.img} alt="" className="h-16 w-16 shrink-0 rounded-2xl border-2 object-cover" style={{ borderColor: meta?.accent }} />
+                <img src={meta?.thumb} alt="" className="h-16 w-16 shrink-0 rounded-2xl border-2 object-cover" style={{ borderColor: meta?.accent }} />
                 <div className="min-w-0 flex-1">
                   <p className="font-bold leading-tight" style={{ color: meta?.accent }}>{a.name}</p>
                   <p className="text-xs font-semibold text-text">{role}</p>
@@ -359,7 +359,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
       </details>
 
       <details className="custom-options">
-        <summary><span>Echipa de agenți</span><span className="custom-team-peek" aria-hidden="true">{chosen.slice(0, 5).map((id) => <img key={id} src={AGENT_META[id]?.img} alt="" width={24} height={24} />)}</span><span>{chosen.length} {chosen.length === 1 ? 'agent ales' : 'agenți aleși'} · schimbă echipa</span></summary>
+        <summary><span>Echipa de agenți</span><span className="custom-team-peek" aria-hidden="true">{chosen.slice(0, 5).map((id) => <img key={id} src={AGENT_META[id]?.thumb} alt="" width={24} height={24} />)}</span><span>{chosen.length} {chosen.length === 1 ? 'agent ales' : 'agenți aleși'} · schimbă echipa</span></summary>
         <div className="custom-options-body">
           {agentsBlock}
         </div>

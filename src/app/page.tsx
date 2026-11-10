@@ -24,7 +24,6 @@ import { allTrackRecords } from '@/lib/track-record';
 import { customJobs, jobQueue } from '@/lib/jobs/service';
 import { homeThreads } from '@/lib/home-reel';
 import { HomeIntro, HowItWorks } from '@/components/home/home-intro';
-import { ScrollPreview } from '@/components/home/scroll-preview';
 import { StatsView } from '@/components/stats-view';
 import { AutomationPanel } from '@/components/automation-panel';
 import { automationHealth } from '@/lib/automation';
@@ -65,11 +64,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
   }
   // Old daily-ticket URLs remain readable through the shared archive.
   const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'verifica' ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'oddsxmatch' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric'; // "Biletul tău" was removed (27.10); old links land on Acasă
-  const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
-    "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
-  // When the OpenRouter account runs out of credits the agents fall back to slow free models: say so plainly.
-  const creditsOut = await one<{ n: number }>(
-    `SELECT count(*) AS n FROM model_health WHERE model_key='openrouter:*' AND ${timeCompare('exhausted_until', '>', SQL_NOW())}`).catch(() => null);
+  // Perf 10.11: both header reads go out together (they used to wait for each other on every tab change).
+  const [running, creditsOut] = await Promise.all([
+    many<{ id: string; slot: string; status: string; created_at: Date }>(
+      "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]),
+    // When the OpenRouter account runs out of credits the agents fall back to slow free models: say so plainly.
+    one<{ n: number }>(`SELECT count(*) AS n FROM model_health WHERE model_key='openrouter:*' AND ${timeCompare('exhausted_until', '>', SQL_NOW())}`).catch(() => null),
+  ]);
   const slowAi = (creditsOut?.n ?? 0) > 0;
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof Ticket; badge?: boolean; hot?: boolean }> = [
@@ -140,7 +141,6 @@ async function AcasaTab({ userId }: { userId: string }) {
   const models = Object.fromEntries([...assignments].map(([id, a]) => [id, a.primary.model]));
   return <div className="home-page">
     <HomeIntro signedIn thread={frag.threads[0] ? plain(frag.threads[0]) : undefined} models={models} />
-    <ScrollPreview />
     {queue.length > 0 && <div className="mt-8"><JobQueue initial={plain(queue)} /></div>}
     <HowItWorks />
     <nav aria-label="Ce vrei să faci" className="home-shortcuts">
@@ -244,7 +244,7 @@ async function CustomTab({ userId, job, limit }: { userId: string; job?: string;
               const tone = j.outcome_status === 'WON' ? 'border-emerald/60' : j.outcome_status === 'LOST' ? 'border-rose/60' : '';
               return (
                 <Link key={j.id} href={`/?tab=custom&job=${j.id}`} className={`card-soft flex items-center gap-3 p-3 hover:border-cyan/50 ${tone}`}>
-                  <div className="flex -space-x-2">{(c?.agents ?? []).slice(0, 4).map((a) => <img key={a} src={AGENT_META[a]?.img} alt="" className="h-7 w-7 rounded-full border-2 border-ink object-cover" />)}</div>
+                  <div className="flex -space-x-2">{(c?.agents ?? []).slice(0, 4).map((a) => <img key={a} src={AGENT_META[a]?.thumb} alt="" className="h-7 w-7 rounded-full border-2 border-ink object-cover" />)}</div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">Cotă {Number(j.target_odds)} · {j.required_legs} meciuri{j.actual_odds ? <span className="text-emerald"> → {Number(j.actual_odds).toFixed(2)}</span> : null}</p>
                     <p className="text-xs text-muted">{fmtDateTime(j.created_at.toISOString())} · {(c?.agents ?? []).length} agenți</p>

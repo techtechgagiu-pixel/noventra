@@ -48,7 +48,7 @@ export function JobQueue({ initial, onlyCustom = false }: { initial: QueueItem[]
             <li key={i.id}>
               <Link href={href} className="card-soft flex items-center gap-3 p-3 transition hover:border-cyan/50">
                 {i.agents?.length ? (
-                  <div className="flex shrink-0 -space-x-2">{i.agents.slice(0, 3).map((a) => <img key={a} src={AGENT_META[a]?.img} alt="" className="h-7 w-7 rounded-full border-2 border-ink object-cover" />)}{i.agents.length > 3 && <span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-ink bg-panel-2 text-[10px] font-bold">+{i.agents.length - 3}</span>}</div>
+                  <div className="flex shrink-0 -space-x-2">{i.agents.slice(0, 3).map((a) => <img key={a} src={AGENT_META[a]?.thumb} alt="" className="h-7 w-7 rounded-full border-2 border-ink object-cover" />)}{i.agents.length > 3 && <span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-ink bg-panel-2 text-[10px] font-bold">+{i.agents.length - 3}</span>}</div>
                 ) : <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-panel-2">{live ? <Loader2 size={14} className="animate-spin text-cyan" aria-hidden /> : <Clock size={14} className="text-muted" aria-hidden />}</span>}
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">

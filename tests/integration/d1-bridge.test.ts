@@ -54,6 +54,16 @@ describe('authenticated Render → Cloudflare D1 bridge',()=>{
     expect((await databaseBridge(await signed(body,undefined,nonce),binding,secret)).status).toBe(200);
     expect((await databaseBridge(await signed(body,undefined,nonce),binding,secret)).status).toBe(401);
   });
+  it('keeps a statement own UNIQUE failure apart from a replay, and rolls the guard back with it',async()=>{
+    const insert=JSON.stringify({statements:[{text:"INSERT INTO users(google_sub,email) VALUES('dup-sub','dup@test')"}],batch:false});
+    expect((await databaseBridge(await signed(insert),binding,secret)).status).toBe(200);
+    const nonce=crypto.randomUUID();
+    const again=await databaseBridge(await signed(insert,undefined,nonce),binding,secret);
+    expect(again.status).toBe(409);
+    expect(await again.json()).toEqual({error:'database_operation_failed'});
+    // The failed batch did not keep its nonce: one guarded call is one atomic D1 batch.
+    expect((await binding.prepare('SELECT count(*) AS n FROM d1_bridge_nonces WHERE nonce=?1').bind(nonce).first<{n:number}>())?.n).toBe(0);
+  });
   it('blocks DDL/multiple statements and rolls back a failed atomic batch over HTTP',async()=>scope(async()=>{
     for(const text of ['DROP TABLE users','SELECT 1; DELETE FROM users;','BEGIN']){
       const response=await databaseBridge(await signed(JSON.stringify({statements:[{text}],batch:false})),binding,secret);

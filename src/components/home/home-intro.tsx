@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { ArrowUpRight, MessagesSquare, SlidersHorizontal, Ticket, Vote } from 'lucide-react';
-import { DebateVideo } from './debate-video';
 import type { Thread } from '@/lib/home-reel';
 
 export function HomeIntro({ signedIn = false, thread, models }: { signedIn?: boolean; thread?: Thread; models?: Record<string, string> }) {
@@ -12,7 +11,11 @@ export function HomeIntro({ signedIn = false, thread, models }: { signedIn?: boo
       <div className="home-intro-actions"><Link href={signedIn ? '/?tab=custom' : '/login?next=custom'} className="btn btn-primary px-5 py-3.5"><Ticket size={19} aria-hidden />Creează bilet custom<ArrowUpRight size={17} aria-hidden /></Link><Link href={signedIn ? '/?tab=istoric' : '#cum-functioneaza'} className="home-secondary-link">{signedIn ? 'Vezi biletele create' : 'Cum funcționează'}</Link></div>
       <p className="home-intro-note">Alegi cota și numărul de meciuri. Poți schimba echipa, ligile și intervalul.{!signedIn && ' Te conectezi înainte de a porni analiza.'}</p>
     </div>
-    <DebateVideo />
+    {/* Perf 10.11: the looping clip was replaced by its still frame (46 KB instead of 0.9 MB on every visit to Acasă). */}
+    <figure className="debate-video">
+      <img src="/dezbatere.jpg" alt="Agenții AI dezbat în jurul aceleiași mese" width={854} height={480} decoding="async" fetchPriority="high" />
+      <figcaption><strong>La masa dezbaterii</strong><span>Șase agenți, aceleași date, păreri diferite. Rămâne ce susțin cei mai mulți.</span></figcaption>
+    </figure>
   </section>;
 }
 

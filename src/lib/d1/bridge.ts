@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { verifyInternal } from '../internal-signature';
-import { d1Database, type Statement } from './client';
+import { d1Database, isTransientD1Error, type Statement } from './client';
 import { splitSqlScript } from './sql-script';
 
 const reply=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
@@ -26,21 +26,22 @@ export async function databaseBridge(request:Request,binding:D1Database,secret:s
       if(typeof statement.text!=='string'||new TextEncoder().encode(statement.text).length>100_000||splitSqlScript(statement.text).length!==1||!/^\s*(SELECT|WITH|INSERT|UPDATE|DELETE)\b/i.test(statement.text)||!Array.isArray(statement.params??[])||(statement.params?.length??0)>100)throw new Error();
     }
   }catch{return reply({error:'invalid_request'},400);}
+  // Perf 10.11: the replay guard travels in the same atomic batch as the work, so one bridge call is one D1 round trip
+  // (it used to be two: the nonce insert, then the query). A replayed nonce rolls the whole batch back.
+  const guard:Statement={text:'INSERT INTO d1_bridge_nonces(nonce,expires_at) VALUES($1,$2)',params:[nonce,Date.now()+120_000]};
   try{
-    await binding.prepare('INSERT INTO d1_bridge_nonces(nonce,expires_at) VALUES(?1,?2)').bind(nonce,Date.now()+120_000).run();
-  }catch(error){
-    if((error as Error).message.includes('UNIQUE constraint failed'))return reply({error:'replayed_request'},401);
-    return reply({error:'database_unavailable'},503);
-  }
-  try{
-    const db=d1Database(binding);
-    const results=input.batch?await db.batch!(input.statements):[await db.query(input.statements[0].text,input.statements[0].params)];
+    const results=(await d1Database(binding).batch!([guard,...input.statements])).slice(1);
     return reply({results});
   }catch(error){
-    const message=(error as Error).message;
+    const message=(error as Error)?.message??'';
+    // Only the guard's own constraint means a replay; a statement can fail its own UNIQUE constraint (that stays 409).
+    if(/UNIQUE constraint failed: d1_bridge_nonces\./.test(message))return reply({error:'replayed_request'},401);
     const known=['custom_daily_cap','review_daily_cap','request_settings_match','request_budget_available'];
-    const code=known.find(c=>message.includes(c))??'database_operation_failed';
-    console.warn(JSON.stringify({event:'database_bridge_failed',code}));
-    return reply({error:code},409);
+    const code=known.find(c=>message.includes(c));
+    if(code)return reply({error:code},409);
+    const transient=isTransientD1Error(error);
+    console.warn(JSON.stringify({event:'database_bridge_failed',code:transient?'database_unavailable':'database_operation_failed',message:message.slice(0,240)}));
+    // 503 = D1 did not answer (overload, reset, timeout): the runner may send a read again.
+    return transient?reply({error:'database_unavailable'},503):reply({error:'database_operation_failed'},409);
   }
 }

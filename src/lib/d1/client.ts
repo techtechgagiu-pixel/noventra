@@ -67,7 +67,8 @@ export function decodeRow(row: Row): Row {
 export function isTransientD1Error(error: unknown) {
   return /overloaded|network connection lost|timed out|timeout|temporarily unavailable|reset because its code was updated|Durable Object|internal error/i.test((error as Error)?.message ?? '');
 }
-const isRead = (text: string) => /^\s*(SELECT|WITH)\b/i.test(text) && !/\b(INSERT|UPDATE|DELETE)\b/i.test(text);
+/** A statement that only reads (safe to send again after a lost or refused response). */
+export const isRead = (text: string) => /^\s*(SELECT|WITH)\b/i.test(text) && !/\b(INSERT|UPDATE|DELETE)\b/i.test(text);
 export async function retryRead<T>(text: string, run: () => Promise<T>, delays = [150, 500]): Promise<T> {
   if (!isRead(text)) return run();
   for (let i = 0; ; i++) {
