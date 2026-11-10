@@ -113,4 +113,15 @@ describe('authenticated Render → Cloudflare D1 bridge',()=>{
       expect(await scheduledMaintenance('https://example.onrender.com')).toMatchObject({queued:1,wake:{status:'awake',httpStatus:200}});
     }finally{spy.mockRestore();await query("UPDATE ticket_generation_jobs SET status='PAUSED' WHERE id=$1",[job.id]);}
   }));
+  it('leaves the wake to the Workflow step when asked (10.11: the 30 s maintenance step cut the cold start off)',async()=>scope(async()=>{
+    const user=(await one<{id:string}>("INSERT INTO users(google_sub,email) VALUES('deferred-wake','deferred-wake@test') RETURNING id"))!;
+    const job=(await one<{id:string}>("INSERT INTO ticket_generation_jobs(user_id,slot,period_key,target_odds,seed,config,checkpoint,status,stage) VALUES($1,'CUSTOM_98','2026-11-10',3,'defer','{}','{}','QUEUED','QUEUED') RETURNING id",[user.id]))!;
+    const spy=vi.spyOn(globalThis,'fetch');
+    try{
+      const r=await scheduledMaintenance('https://example.onrender.com',{wake:false});
+      expect(r.queued).toBeGreaterThan(0);
+      expect(r.wake).toEqual({status:'deferred'});
+      expect(spy.mock.calls.some(c=>String(c[0]).includes('onrender.com'))).toBe(false);
+    }finally{spy.mockRestore();await query("UPDATE ticket_generation_jobs SET status='PAUSED' WHERE id=$1",[job.id]);}
+  }));
 });
