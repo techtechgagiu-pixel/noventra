@@ -97,7 +97,7 @@ export function DebateChat({ events, upTo, live }: { events: NexusEvent[]; upTo:
         {!shown.length && <p className="py-10 text-center text-sm text-muted">Discuția începe când agenții primesc primele meciuri.</p>}
         {typing.length > 0 && (
           <div className="flex items-center gap-2 pl-1 text-xs text-muted">
-            <div className="flex -space-x-2">{typing.slice(0, 5).map((a) => <img key={a} src={AGENT_META[a]?.img} alt="" className="h-6 w-6 rounded-full border-2 border-ink object-cover" />)}</div>
+            <div className="flex -space-x-2">{typing.slice(0, 5).map((a) => <img key={a} src={AGENT_META[a]?.thumb} alt="" className="h-6 w-6 rounded-full border-2 border-ink object-cover" />)}</div>
             <span>{typing.map((a) => AGENT_META[a]?.short ?? a).slice(0, 4).join(', ')}{typing.length > 4 ? ` +${typing.length - 4}` : ''} {typing.length === 1 ? 'scrie' : 'scriu'}</span>
             <span className="flex gap-0.5" aria-hidden>{[0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan" style={{ animationDelay: `${i * 0.15}s` }} />)}</span>
           </div>
@@ -119,7 +119,7 @@ function AgentBubble({ m, match }: { m: Extract<Msg, { kind: 'agent' }>; match?:
   const border = m.tone === 'objection' ? '#ffe36e' : m.tone === 'brain' ? '#ffe36e' : m.tone === 'failed' ? '#ff6150' : m.tone === 'nobet' ? '#275341' : accent;
   return (
     <article className="flex gap-2.5">
-      {meta?.img ? <img src={meta.img} alt="" className="mt-0.5 h-9 w-9 shrink-0 rounded-full border-2 object-cover" style={{ borderColor: accent }} /> : <div className="h-9 w-9 shrink-0 rounded-full bg-panel-2" />}
+      {meta?.thumb ? <img src={meta.thumb} alt="" className="mt-0.5 h-9 w-9 shrink-0 rounded-full border-2 object-cover" style={{ borderColor: accent }} /> : <div className="h-9 w-9 shrink-0 rounded-full bg-panel-2" />}
       <div className="min-w-0 max-w-[88%] rounded-2xl rounded-tl-sm border bg-panel/80 px-3 py-2" style={{ borderColor: `${border}66` }}>
         <p className="flex flex-wrap items-baseline gap-x-2 text-xs">
           <span className="font-bold" style={{ color: accent }}>{meta?.name ?? m.agent}</span>

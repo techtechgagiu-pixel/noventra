@@ -23,7 +23,7 @@ export function DebatePreview({ thread, models = {} }: { thread?: Thread; models
     <div className="debate-preview-top"><span>{thread ? 'Dintr-o analiză reală' : 'La masa dezbaterii'}</span><span>{thread ? fmtDateTime(thread.at) : '32 de analiști AI + redacția'}</span></div>
     <div className="debate-cast">
       {ids.map((id) => { const a = AGENT_META[id]; if (!a) return null; return <div key={id} className="debate-cast-agent" style={{ ['--agent-color' as string]: a.accent }}>
-        <img src={a.img} alt="" width={64} height={64} />
+        <img src={a.thumb} alt="" width={64} height={64} />
         <strong>{a.short}</strong><span>{models[id] ? models[id].split('/').at(-1) : 'Agent AI'}</span>
       </div>; })}
     </div>
@@ -35,7 +35,7 @@ export function DebatePreview({ thread, models = {} }: { thread?: Thread; models
       {thread ? messages?.length ? messages.map((m) => {
         const a = m.agentId ? AGENT_META[m.agentId] : null;
         return <div key={m.seq} className={`debate-excerpt ${m.kind === 'result' ? 'debate-excerpt-result' : ''}`}>
-          {a && <img src={a.img} alt="" width={32} height={32} />}
+          {a && <img src={a.thumb} alt="" width={32} height={32} />}
           <div><p className="debate-speaker" style={{ color: a?.accent }}><strong>{a?.name ?? 'Rezultatul dezbaterii'}</strong> {VERBS[m.kind]}</p>{m.chip && <p className="debate-market">{m.chip}</p>}<p>{m.text}</p></div>
         </div>;
       }) : <p className="text-sm text-muted">Etapa nu are un fragment înregistrat pentru acest meci. Jurnalul păstrează contextul complet.</p> : <div className="debate-explanation"><h3>{EXPLAIN[step].title}</h3><p>{EXPLAIN[step].text}</p></div>}

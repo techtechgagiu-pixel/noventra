@@ -350,27 +350,6 @@ a.slip:hover { border-color: #3f7a5d; transform: translateY(-1px); }
 .won-dots button[aria-pressed='true'] { background: var(--color-emerald); width: 20px; }
 .won-dots button:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
 
-/* Entrance preview (03.11): a looping clip with a broadcast-style scoreboard strip. */
-.scroll-preview { margin: 2.5rem 0 1rem; }
-.scroll-preview .sv-pin { position: relative; overflow: hidden; border: 1px solid var(--color-line); border-radius: 22px; background: var(--color-ink); aspect-ratio: 16 / 9; max-height: 78vh; width: 100%; }
-@media (max-width: 640px) { .scroll-preview .sv-pin { aspect-ratio: 4 / 5; } }
-.sv-media { position: absolute; inset: 0; }
-.sv-video { width: 100%; height: 100%; object-fit: cover; }
-.sv-scrim { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg, rgba(8,22,16,.88) 0%, rgba(8,22,16,.25) 38%, rgba(8,22,16,0) 60%); }
-.sv-toggle { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; border: 1px solid rgba(238,245,236,.28); background: rgba(8,22,16,.6); color: var(--color-text); backdrop-filter: blur(4px); transition: background .15s, transform .12s; }
-.sv-toggle:hover { background: rgba(8,22,16,.85); }
-.sv-toggle:active { transform: scale(.92); }
-/* The strip reads like a TV scorebug: club mark + step, then the caption, a thin running clock underneath. */
-.sv-strip { position: absolute; left: clamp(12px, 3vw, 28px); right: clamp(12px, 3vw, 28px); bottom: clamp(12px, 3vw, 28px); display: grid; grid-template-columns: auto 1fr; overflow: hidden; border-radius: 10px; background: rgba(11,29,21,.9); border: 1px solid var(--color-line); box-shadow: 0 18px 40px -20px #000; }
-.sv-strip-badge { display: flex; align-items: center; gap: .5rem; padding: 0 .9rem; background: var(--color-cyan); color: #142006; }
-.sv-strip-step { font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
-.sv-strip-copy { padding: .7rem 1rem .85rem; min-width: 0; animation: sv-in .45s cubic-bezier(.2,.8,.2,1); }
-.sv-strip-copy h2 { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.15rem, 2.6vw, 1.75rem); line-height: 1.05; color: var(--color-text); }
-.sv-strip-copy p { margin-top: .2rem; font-size: clamp(.8rem, 1.4vw, .95rem); color: var(--color-muted); }
-.sv-progress { grid-column: 1 / -1; height: 3px; background: rgba(238,245,236,.08); }
-.sv-progress > div { height: 100%; background: var(--color-cyan); transform: scaleX(0); transform-origin: left; }
-.sv-noscript { position: absolute; inset: auto 16px 16px; color: var(--color-text); }
-@keyframes sv-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
 
 /* Buttons answer the hand (03.11): the main action catches a floodlight sweep on hover and presses in on click. */
 .btn-primary { position: relative; overflow: hidden; isolation: isolate; }
@@ -384,7 +363,6 @@ a.slip:hover { border-color: #3f7a5d; transform: translateY(-1px); }
 @media (prefers-reduced-motion: reduce) {
   .btn-primary:hover::after { animation: btn-sweep .7s ease-out !important; }
   .btn, .chip { transition: transform .12s, background .15s, border-color .15s, color .15s, box-shadow .15s !important; }
-  .sv-strip-copy { animation: none; }
 }
 
 /* Site assistant (03.11): bottom-left, opposite the feedback button. */
@@ -420,7 +398,7 @@ a.slip:hover { border-color: #3f7a5d; transform: translateY(-1px); }
 .custom-tab:has([data-wizard='on']) .custom-extra { display: none; }
 
 .debate-video { position: relative; margin: 0; overflow: hidden; border: 1px solid var(--color-line); border-radius: 22px; background: var(--color-ink); aspect-ratio: 16 / 9; align-self: center; }
-.debate-video video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.debate-video img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .debate-video figcaption { position: absolute; inset: auto 0 0 0; padding: 2.5rem 1.25rem 1rem; background: linear-gradient(to top, rgb(5 18 12 / .9), transparent); display: flex; flex-direction: column; gap: .15rem; }
 .debate-video figcaption strong { color: var(--color-gold, #f5b83a); font-size: 1rem; }
 .debate-video figcaption span { color: var(--color-muted); font-size: .85rem; max-width: 36rem; }

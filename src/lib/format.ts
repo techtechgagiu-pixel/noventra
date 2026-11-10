@@ -43,7 +43,7 @@ const ACCENTS: Record<string, string> = {
   "fulger": "#e1da81",
   "scout": "#22d3ee"
 };
-export const AGENT_META: Record<string, { name: string; short: string; title: string; accent: string; img: string }> = Object.fromEntries(Object.entries(AGENT_ROLES).map(([id,title]) => [id, { name: modelAgentName(id), short: modelAgentName(id), title, accent: ACCENTS[id] ?? '#22d3ee', img: modelPortrait(id)! }]));
+export const AGENT_META: Record<string, { name: string; short: string; title: string; accent: string; img: string; thumb: string }> = Object.fromEntries(Object.entries(AGENT_ROLES).map(([id,title]) => [id, { name: modelAgentName(id), short: modelAgentName(id), title, accent: ACCENTS[id] ?? '#22d3ee', img: modelPortrait(id)!, thumb: modelPortrait(id)!.replace('/ai-portraits/', '/ai-portraits/sm/') }]));
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) }, cache: 'no-store' });
   const data = await res.json().catch(() => ({}));

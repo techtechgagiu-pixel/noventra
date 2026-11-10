@@ -69,7 +69,7 @@ export function HomeStage({ events, title, finishedAt, target }: { events: Nexus
       {shown && (
         <div key={shown.seq} className="animate-[lowerthird_.5s_cubic-bezier(.2,.8,.2,1)] flex w-full max-w-xl items-stretch overflow-hidden rounded-xl border border-white/10 bg-[#0b1d15]/92 shadow-2xl backdrop-blur">
           <div className="w-1.5 shrink-0" style={{ background: tone }} />
-          {meta ? <img src={meta.img} alt="" className="h-auto w-20 shrink-0 object-cover" /> : <img src="/logo.svg" alt="" className="h-20 w-20 shrink-0 p-3" />}
+          {meta ? <img src={meta.thumb} alt="" className="h-auto w-20 shrink-0 object-cover" /> : <img src="/logo.svg" alt="" className="h-20 w-20 shrink-0 p-3" />}
           <div className="min-w-0 px-4 py-3">
             <p className="text-sm font-bold" style={{ color: tone }}>{meta?.name ?? 'Primul 11'}{shown.detail && <span className="font-normal text-muted"> — {shown.detail}</span>}</p>
             <p className="mt-1 text-[15px] leading-snug text-text">{shown.kind === 'objection' || shown.kind === 'revised' || shown.kind === 'pick' || shown.kind === 'brain' ? `„${shown.text}”` : shown.text}</p>

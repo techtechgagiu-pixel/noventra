@@ -30,7 +30,7 @@ function Bubble({ m }: { m: ThreadMsg }) {
   const hot = m.kind === 'objection' || m.kind === 'brain';
   return (
     <div className="flex gap-3">
-      <img src={meta?.img} alt="" className="mt-0.5 h-9 w-9 shrink-0 rounded-full border-2 object-cover" style={{ borderColor: meta?.accent }} />
+      <img src={meta?.thumb} alt="" className="mt-0.5 h-9 w-9 shrink-0 rounded-full border-2 object-cover" style={{ borderColor: meta?.accent }} />
       <div className={`min-w-0 rounded-2xl rounded-tl-sm border px-3.5 py-2.5 ${hot ? 'border-gold/50 bg-gold/[.07]' : 'border-line bg-ink/50'}`}>
         <p className="text-xs"><span className="font-bold" style={{ color: meta?.accent }}>{meta?.name ?? m.agentId}</span> <span className={hot ? 'text-gold' : 'text-muted'}>{VERB[m.kind]}</span></p>
         {m.chip && <p className="mt-1 inline-block rounded-md bg-cyan/10 px-1.5 py-0.5 text-[11px] font-semibold text-cyan">{m.chip}</p>}
@@ -65,7 +65,7 @@ function News({ c }: { c: NewsCard }) {
   return (
     <aside ref={ref} className="rounded-[1.4rem] border border-[#84cc16]/40 bg-[linear-gradient(180deg,rgba(132,204,22,.08),rgba(15,26,53,.6))] p-4 md:p-5" aria-label="Știrile lui Nemotron 3.5 Super VL">
       <div className="flex items-center gap-3">
-        <img src={h.img} alt="" className="h-12 w-12 rounded-full border-2 object-cover" style={{ borderColor: h.accent }} />
+        <img src={h.thumb} alt="" className="h-12 w-12 rounded-full border-2 object-cover" style={{ borderColor: h.accent }} />
         <div><p className="font-display text-lg font-bold leading-tight" style={{ color: h.accent }}>Nemotron 3.5 Super VL a citit presa</p><p className="text-xs text-muted">{c.match}, {fmtDateTime(c.at)}</p></div>
       </div>
       <ul className="mt-4 space-y-2">
