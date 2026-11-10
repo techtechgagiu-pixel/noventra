@@ -2,7 +2,7 @@ import { describeModel } from '@/lib/model-identities';
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Activity, BarChart3, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
+import { Activity, BarChart3, History, House, ListOrdered, Scale, SlidersHorizontal, Ticket } from 'lucide-react';
 import { MatchesView } from '@/components/matches/matches-view';
 import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
@@ -34,6 +34,7 @@ import { TabLoading } from '@/components/tab-loading';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
+import { OddsXMatch } from '@/components/custom/odds-x-match';
 import { localDate } from '@/lib/time';
 import { getAccount } from '@/lib/credits';
 import { config } from '@/lib/config';
@@ -45,7 +46,7 @@ import { customLimitForUser } from '@/lib/credits';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'acasa' | 'custom' | 'analiza' | 'istoric' | 'statistici' | 'meciuri';
+type Tab = 'acasa' | 'custom' | 'oddsxmatch' | 'analiza' | 'istoric' | 'statistici' | 'meciuri';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -63,7 +64,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     return <PublicHome google={googleConfigured()} />;
   }
   // Old daily-ticket URLs remain readable through the shared archive.
-  const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'verifica' ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric'; // "Biletul tău" was removed (27.10); old links land on Acasă
+  const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'verifica' ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'oddsxmatch' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric'; // "Biletul tău" was removed (27.10); old links land on Acasă
   const running = await many<{ id: string; slot: string; status: string; created_at: Date }>(
     "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]);
   // When the OpenRouter account runs out of credits the agents fall back to slow free models: say so plainly.
@@ -71,10 +72,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     `SELECT count(*) AS n FROM model_health WHERE model_key='openrouter:*' AND ${timeCompare('exhausted_until', '>', SQL_NOW())}`).catch(() => null);
   const slowAi = (creditsOut?.n ?? 0) > 0;
 
-  const tabs: Array<{ id: Tab; label: string; icon: typeof Ticket; badge?: boolean }> = [
+  const tabs: Array<{ id: Tab; label: string; icon: typeof Ticket; badge?: boolean; hot?: boolean }> = [
     { id: 'acasa', label: 'Acasă', icon: House },
     { id: 'istoric', label: 'Bilete create', icon: History },
     { id: 'custom', label: 'Custom', icon: SlidersHorizontal, badge: running.some((j) => j.slot.startsWith('CUSTOM_')) },
+    { id: 'oddsxmatch', label: 'oddsxmatch', icon: Scale, hot: true },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
     { id: 'meciuri', label: 'Meciuri', icon: ListOrdered },
     { id: 'statistici', label: 'Statistici', icon: BarChart3 },
@@ -91,8 +93,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
             <span className="rounded border border-gold/50 px-1.5 py-px text-[10px] font-semibold text-gold">beta</span>
           </Link>
           <nav className="app-tabs md:ml-auto" aria-label="Secțiuni">
-            {tabs.map(({ id, label, icon: Icon, badge }) => (
-              <TabLink key={id} href={`/?tab=${id}`} label={label} active={tab === id}>
+            {tabs.map(({ id, label, icon: Icon, badge, hot }) => (
+              <TabLink key={id} href={`/?tab=${id}`} label={label} active={tab === id} highlight={hot}>
                 <Icon size={17} aria-hidden /> <span className="md:hidden">{label.split(' ')[0]}</span><span className="hidden lg:inline">{label}</span>
                 {badge && <span className="app-tab-dot" aria-label="analiză în curs" />}
               </TabLink>
@@ -117,6 +119,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.sport,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
         {tab === 'custom' && <CustomTab limit={await customLimitForUser(user)} userId={user.id} job={sp.job} />}
+        {tab === 'oddsxmatch' && <OddsXMatchTab limit={await customLimitForUser(user)} userId={user.id} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} viewer={user} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} sport={sp.sport} />}
@@ -253,6 +256,19 @@ async function CustomTab({ userId, job, limit }: { userId: string; job?: string;
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+async function OddsXMatchTab({ userId, limit }: { userId: string; limit: number }) {
+  const [cards, recent, ranking, account] = await Promise.all([agentCards(), customJobs(userId, Math.max(limit, 20)), agentRanking(), getAccount(userId).catch(() => null)]);
+  return (
+    <div className="custom-tab space-y-6">
+      <div>
+        <h1 className="page-title">oddsxmatch</h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Tu alegi meciurile sau un campionat întreg și cota dorită. Agenții aleg pronosticul de la fiecare meci, iar rezultatul este un bilet obișnuit. Se numără la cele {limit} bilete custom pe zi.</p>
+      </div>
+      <OddsXMatch credits={config.creditsEnabled && account && !account.founder ? account.balance : null} agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
     </div>
   );
 }

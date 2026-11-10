@@ -8,11 +8,11 @@ function PendingHint() {
 }
 
 /** Warm only a tab the user points to or focuses, rather than querying all seven. */
-export function TabLink({ href, label, active, children }: { href: string; label: string; active: boolean; children: ReactNode }) {
+export function TabLink({ href, label, active, highlight = false, children }: { href: string; label: string; active: boolean; highlight?: boolean; children: ReactNode }) {
   const [intent, setIntent] = useState(false);
   return <Link href={href} title={label} aria-label={label} aria-current={active ? 'page' : undefined}
     prefetch={intent} onMouseEnter={() => setIntent(true)} onFocus={() => setIntent(true)}
-    className="app-tab">
+    className={highlight ? 'app-tab app-tab-hot' : 'app-tab'}>
     {children}<PendingHint />
   </Link>;
 }

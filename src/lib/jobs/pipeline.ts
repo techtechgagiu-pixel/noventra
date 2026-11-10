@@ -80,7 +80,8 @@ async function discover(job: JobRow) {
   const only = job.config.custom?.leagues?.length ? new Set(job.config.custom.leagues) : null;
   const seen = job.config.completion || job.config.extendedAt ? new Set((await many<{ fixture_id: string }>('SELECT fixture_id FROM final_decisions WHERE job_id=$1', [job.id])).map((r) => r.fixture_id)) : new Set<string>();
   // Counter-Strike only when its league is ticked explicitly (a football ticket never picks up esports by default).
-  const fixtures = loaded.fixtures.filter((f) => (only ? only.has(f.leagueId) : f.provider !== 'pandascore') && !seen.has(f.id));
+  const picked = job.config.custom?.fixtures?.length ? new Set(job.config.custom.fixtures) : null; // oddsxmatch: only the matches the user ticked
+  const fixtures = loaded.fixtures.filter((f) => (only ? only.has(f.leagueId) : f.provider !== 'pandascore') && (!picked || picked.has(f.id)) && !seen.has(f.id));
   const now = Date.now();
   const pol = jobPolicy(job);
   // Daily tickets use a rolling window measured from the job's creation: start ≥ minLeadHours, ≤ maxAheadHours.

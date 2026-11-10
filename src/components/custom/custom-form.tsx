@@ -76,6 +76,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const [legs, setLegs] = useState(4);
   const [fromI, setFromI] = useState(0); // owner request 31.10: from 20 minutes on by default
   const [toI, setToI] = useState(STOPS.indexOf(48));
+  const [bold, setBold] = useState(false); // owner request 10.11: accept higher prices so a big target can be reached
   const [onlyMarkets, setOnlyMarkets] = useState<MarketFamilyId[]>([]); // owner request 05.11: none ticked = any market
   const [day, setDay] = useState<number | null>(null); // owner request 05.11: pick a whole day (today … in 3 days) instead of an interval
   const [minute, setMinute] = useState(0);
@@ -145,7 +146,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true); setError(null);
-    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues: sentLeagues, count, ...(minAgree && chosen.length >= 2 ? { minAgree: Math.min(minAgree, chosen.length) } : {}), ...(sport === 'football' && onlyMarkets.length ? { onlyMarkets } : {}) });
+    const body = JSON.stringify({ target, legs, agents: chosen, fromHours, toHours, leagues: sentLeagues, count, ...(minAgree && chosen.length >= 2 ? { minAgree: Math.min(minAgree, chosen.length) } : {}), ...(sport === 'football' && onlyMarkets.length ? { onlyMarkets } : {}), ...(bold ? { bold: true } : {}) });
     if (attempt.current?.body !== body) attempt.current = { body, requestId: crypto.randomUUID() };
     try {
       const r = await api<{ jobId: string }>('/api/custom-tickets', { method: 'POST', body: JSON.stringify({ ...JSON.parse(body), requestId: attempt.current.requestId }) });
@@ -160,6 +161,10 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <input id="target" type="number" inputMode="decimal" min={1.2} max={1000} step={0.1} value={target} onChange={(e) => setTarget(Number(e.target.value) || 0)}
             className="board-num mt-2 w-full rounded-lg border border-line bg-ink px-3 py-1.5 text-[2.6rem] outline-none focus:border-cyan" />
           <div className="mt-2 flex flex-wrap gap-1.5">{TARGETS.map((t) => <button key={t} onClick={() => setTarget(t)} className={`chip ${target === t ? 'text-cyan' : 'text-muted'}`}>{t}</button>)}</div>
+          <label className="mt-3 flex cursor-pointer items-start gap-2 border-t border-line pt-3 text-sm">
+            <input type="checkbox" checked={bold} onChange={(e) => setBold(e.target.checked)} className="mt-0.5 h-4 w-4 accent-cyan" />
+            <span><span className="font-semibold">Riscă și cote mari</span><span className="mt-0.5 block text-[11px] text-muted">Agenții pot alege selecții cu cote mai mari și probabilitate mai mică. Util pentru cote țintă mari (de exemplu 1000). Crește riscul ca biletul să piardă.</span></span>
+          </label>
           {sport === 'football' && <fieldset className="mt-3 border-t border-line pt-3">
             <legend className="sr-only">Tipul pronosticurilor de pe bilet</legend>
             <p className="text-xs font-semibold text-muted">Piețe permise pentru agenți</p>

@@ -118,7 +118,9 @@ export async function createOrGetJob(userId: string, slotId: string, at = new Da
 export function parseCustom(input: unknown): CustomConfig {
   const o = (input ?? {}) as Record<string, unknown>;
   const target = Math.round(Number(o.target) * 100) / 100;
-  const legs = Math.round(Number(o.legs));
+  // oddsxmatch: with picked matches every one of them is a leg.
+  const fixtureIds = [...new Set(Array.isArray(o.fixtures) ? o.fixtures.map(String).filter((x) => /^[\w:.-]{3,80}$/.test(x)) : [])].slice(0, 20);
+  const legs = fixtureIds.length ? fixtureIds.length : Math.round(Number(o.legs));
   const ids = new Set<string>(VOTING_AGENTS.map((a) => a.id));
   const agents = [...new Set(Array.isArray(o.agents) ? o.agents.map(String) : [])].filter((a) => ids.has(a));
   // Minute precision on the start (owner request 31.10: matches from 20 minutes on); quarter hours on the end.
@@ -137,7 +139,7 @@ export function parseCustom(input: unknown): CustomConfig {
   // Leagues the user ticked (ids are validated against the league table when the job is created). Empty = all.
   const leagues = [...new Set(Array.isArray(o.leagues) ? o.leagues.map(String).filter((x) => /^[A-Z0-9]{2,12}$/.test(x)) : [])].slice(0, 120);
   const onlyMarkets = [...new Set(Array.isArray(o.onlyMarkets) ? o.onlyMarkets.filter((x): x is MarketFamilyId => MARKET_FAMILY_IDS.includes(x as MarketFamilyId)) : [])];
-  return { target, legs, agents, window, fromHours, toHours, ...(leagues.length ? { leagues } : {}), ...(onlyMarkets.length ? { onlyMarkets } : {}), ...(agents.length >= 2 && Number.isFinite(Number(o.minAgree)) && Number(o.minAgree) >= 2 ? { minAgree: Math.min(agents.length, Math.round(Number(o.minAgree))) } : {}) };
+  return { target, legs, agents, window, fromHours, toHours, ...(leagues.length ? { leagues } : {}), ...(fixtureIds.length ? { fixtures: fixtureIds } : {}), ...(onlyMarkets.length ? { onlyMarkets } : {}), ...(o.bold === true ? { bold: true } : {}), ...(agents.length >= 2 && Number.isFinite(Number(o.minAgree)) && Number(o.minAgree) >= 2 ? { minAgree: Math.min(agents.length, Math.round(Number(o.minAgree))) } : {}) };
 }
 
 /** Atomically queues 1…20 custom jobs, with one daily allowance and retry identity. */
