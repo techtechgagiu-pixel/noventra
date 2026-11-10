@@ -2,6 +2,10 @@ import { one, query } from '../db';
 import { settlePending } from '../settlement';
 import { autoContinueJobs } from './auto-continue';
 
+/** A Free Render service takes 25-65 s to boot; a request abandoned before the boot finishes leaves it asleep,
+ * so the wake has to outwait the cold start. */
+export const RUNNER_WAKE_TIMEOUT_MS=100_000;
+
 /** Only wakes an existing runner, which drains already-authorized queued jobs.
  * A wake never creates a ticket or calls a model by itself. */
 export async function wakeAnalysisRunner(origin:string|undefined){
@@ -11,7 +15,7 @@ export async function wakeAnalysisRunner(origin:string|undefined){
   try{
     // workerd rejects redirect:'error' before sending the request. Manual keeps
     // the wake on the configured origin without following an unexpected redirect.
-    const response=await fetch(url,{signal:AbortSignal.timeout(25_000),redirect:'manual'});
+    const response=await fetch(url,{signal:AbortSignal.timeout(RUNNER_WAKE_TIMEOUT_MS),redirect:'manual'});
     await response.body?.cancel();
     return {status:response.ok?'awake':'starting',httpStatus:response.status};
   }catch(error){return {status:'starting',reason:error instanceof Error?`${error.name}: ${error.message.slice(0,180)}`:'network_error'};}
