@@ -44,6 +44,8 @@ export type MatchRow = {
   sources?: Array<'espn' | 'lpf' | 'the-odds-api' | 'demo' | 'pandascore' | 'stake'>;
   id: string; leagueId: string; league: string; country: string; home: string; away: string; homeLogo: string | null; awayLogo: string | null;
   kickoff: string; status: string; score: string | null; odds: { home: number | null; draw: number | null; away: number | null; markets: number; bookmaker: string } | null;
+  /** Team history exists (ESPN teams); Stake-only matches have prices only (10.11). */
+  history?: boolean;
   analysis: { outcome: string; selectionOutcome: string | null; label: string | null; odds: number | null; votes: number; onTicket: boolean; at: string; jobId: string } | null;
 };
 
@@ -83,7 +85,7 @@ export async function matchList(userId: string, scope: 'all' | 'mine' = 'all', i
     const kickoff = useStored ? cached.kickoff_utc.toISOString() : f.kickoff;
     const homeScore = useStored ? cached.home_score : f.homeScore, awayScore = useStored ? cached.away_score : f.awayScore;
     return {
-      source: f.provider,
+      source: f.provider, history: f.provider === 'espn' && !!f.homeTeamId && !!f.awayTeamId,
       id: f.id, leagueId: f.leagueId, league: f.leagueName, country: f.country, home: f.home, away: f.away, homeLogo: f.homeLogo ?? null, awayLogo: f.awayLogo ?? null,
       kickoff, status, score: homeScore != null && awayScore != null ? `${homeScore}–${awayScore}` : null,
       // Counter-Strike has no draw: the row shows the match-winner prices (1 / 2).

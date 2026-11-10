@@ -505,11 +505,12 @@ function idealPerLeg(job: JobRow) {
 function ticketBrief(job: JobRow, p: LegPolicy) {
   if (job.config.review) return `biletul adus de utilizator: ${job.config.review.legs.length} meciuri, cotă totală ${Number(job.target_odds)}. Judeci fiecare meci separat; nu ești obligat să urmărești cota.`;
   const base = `${job.config.custom ? `bilet CUSTOM cerut de utilizator: exact ${job.config.custom.legs} meciuri, ${job.config.custom.onlyMarkets?.length ? `TOATE selecțiile doar pe: ${job.config.custom.onlyMarkets.map((o) => ONLY_MARKET_LABEL[o]).join(' sau ')} (alegerea utilizatorului${job.config.custom.onlyMarkets.some((o) => o.startsWith('UNDER')) ? '; pentru acest bilet „sub” pe liniile bifate este PERMIS, oricât de interzis ar fi în general' : ''}), ` : ''}` : ''}țintă cotă ${Number(job.target_odds)}, construit din ${job.config.custom ? 'exact' : 'minimum'} ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
+  const picked = job.config.custom?.fixtures?.length ? ' Meciurile au fost alese de utilizator. Unele nu au istoric de rezultate (doar cote): atunci decizi din cote, știrile zilei, lot, motivație și context. Lipsa istoricului NU este singură un motiv de NO BET.' : '';
   if (p.pick === 'highest' || p.pick === 'nearest') {
     const avg = Math.pow(Number(job.target_odds), 1 / p.minLegs);
-    return `${base} Biletul are nevoie de o cotă medie de aproximativ ${avg.toFixed(2)} pe meci, deci aici NU alegi automat varianta cea mai mică: alege selecția solidă cu cotă între ${p.minOdds.toFixed(2)} și ${p.maxOdds.toFixed(2)}. La acest bilet limita ta de cotă este mărită cu +${(p.agentCapBonus ?? 0).toFixed(2)}.`;
+    return `${base} Biletul are nevoie de o cotă medie de aproximativ ${avg.toFixed(2)} pe meci, deci aici NU alegi automat varianta cea mai mică: alege selecția solidă cu cotă între ${p.minOdds.toFixed(2)} și ${p.maxOdds.toFixed(2)}. La acest bilet limita ta de cotă este mărită cu +${(p.agentCapBonus ?? 0).toFixed(2)}.${picked}`;
   }
-  return `${base} Caută selecția SIGURĂ, nu cota mare.`;
+  return `${base} Caută selecția SIGURĂ, nu cota mare.${picked}`;
 }
 
 /** Applies the character guard: out-of-character votes become NO_BET (and are reported, never silently dropped). */
@@ -702,7 +703,9 @@ async function stepVote(job: JobRow, ids: string[]) {
           selectionConsistent: s.model.markets.some((m) => m.key === key),
           probabilityPlausible: est.estimatedProbability !== null && est.estimatedProbability >= 0.25,
           evNotStronglyNegative: est.estimatedProbability !== null && freshQuote ? est.estimatedProbability * freshQuote.odds - 1 >= -0.12 : false,
-          dataSufficient: s.dataQuality.historyHome >= 3 && s.dataQuality.historyAway >= 3,
+          // oddsxmatch (owner 10.11, „fă să parieze oricum pe ele, din știri”): matches the user picked are not dropped for
+          // missing history (Stake-only matches have none); the agents decide from prices, news and context.
+          dataSufficient: !!job.config.custom?.fixtures?.length || (s.dataQuality.historyHome >= 3 && s.dataQuality.historyAway >= 3),
         };
         for (const k of Object.keys(validation)) delete validation[k];
         Object.assign(validation, checks, { originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt, bookmaker: freshQuote?.bookmaker ?? fresh?.odds?.bookmaker ?? s.odds.bookmaker });

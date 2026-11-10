@@ -111,7 +111,7 @@ export function OddsXMatch({ agents, topAgentIds = [], remaining, limit, credits
           <h2 className="font-display text-lg font-bold">Alege meciurile</h2>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Caută echipă sau campionat" aria-label="Caută echipă sau campionat" className="ml-auto w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm outline-none focus:border-cyan sm:w-64" />
         </div>
-        <p className="mt-1 text-[11px] text-muted">Deschide un campionat ca să vezi meciurile, sau bifează-l întreg (maximum {MAX_MATCHES}). Lista se actualizează singură la fiecare minut{updated ? <> · ultima actualizare {new Date(updated).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Bucharest' })}</> : null}. Agenții aleg pronosticul de la fiecare meci, ca biletul să ajungă la cota ta.</p>
+        <p className="mt-1 text-[11px] text-muted">Deschide un campionat ca să vezi meciurile, sau bifează-l întreg (maximum {MAX_MATCHES}). La meciurile „fără istoric” agenții decid din cote și știri. Lista se actualizează singură la fiecare minut{updated ? <> · ultima actualizare {new Date(updated).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Bucharest' })}</> : null}. Agenții aleg pronosticul de la fiecare meci, ca biletul să ajungă la cota ta.</p>
         {loadError && <p className="mt-3 text-sm text-rose" role="alert">Nu am putut încărca meciurile. <button type="button" className="underline" onClick={() => { setRows(null); setRetry((x) => x + 1); }}>Reîncearcă</button></p>}
         {!rows && !loadError && <p className="mt-3 text-sm text-muted" role="status">Se încarcă meciurile…</p>}
         {rows && !groups.length && <p className="mt-3 text-sm text-muted">{q ? 'Niciun meci pentru căutarea ta.' : 'Nu sunt meciuri cu cote în următoarele 7 zile.'}</p>}
@@ -135,7 +135,7 @@ export function OddsXMatch({ agents, topAgentIds = [], remaining, limit, credits
                     <li key={m.id} className="border-t border-line/60">
                       <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm">
                         <input type="checkbox" checked={sel.has(m.id)} onChange={() => toggle(m.id)} className="h-4 w-4 accent-cyan" />
-                        <span className="min-w-0 flex-1 truncate">{m.home} – {m.away}</span>
+                        <span className="min-w-0 flex-1 truncate">{m.home} – {m.away}{m.history === false && <span className="ml-2 rounded border border-gold/40 px-1 py-px text-[10px] font-semibold text-gold" title="Fără istoric de rezultate: agenții decid din cote, știri și context">fără istoric</span>}</span>
                         <span className="shrink-0 text-xs text-muted">{when(m.kickoff)}</span>
                         {m.odds && <span className="tabular hidden shrink-0 text-xs text-muted sm:inline">{[m.odds.home, m.odds.draw, m.odds.away].map((x) => (x ? x.toFixed(2) : '–')).join(' · ')}</span>}
                       </label>
