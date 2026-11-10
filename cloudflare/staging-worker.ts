@@ -21,7 +21,11 @@ export class SettlementWorkflow extends WorkflowEntrypoint<Primul11Env,{schedule
     // A ticket was just created: wake the runner now instead of waiting up to 5 minutes for the next pass.
     if(event.payload?.wakeOnly)return {wake:await this.wakeRunner(step,'wake-on-request')};
     const maintenance=await step.do('maintenance',{retries:{limit:2,delay:'5 seconds'},timeout:'30 seconds'},()=>withDatabase(d1Database(this.env.DB),()=>scheduledMaintenance(this.env.ANALYSIS_RUNNER_URL,{wake:false})));
-    const wake=maintenance.queued?await this.wakeRunner(step,'wake-runner'):{status:'idle'};
+    // Keep-alive (owner choice 10.11): Render Free sleeps after 15 minutes without a request, and a cold start costs a
+    // queued ticket 25-65 s or more. A ping on every 5-minute pass keeps it awake around the clock (one service ≈ 744 of
+    // the 750 free hours a month). RUNNER_KEEP_AWAKE=0 goes back to waking it only when tickets wait.
+    const keepAwake=(this.env as Primul11Env & {RUNNER_KEEP_AWAKE?:string}).RUNNER_KEEP_AWAKE!=='0';
+    const wake=keepAwake||maintenance.queued?await this.wakeRunner(step,'wake-runner'):{status:'idle'};
     let pages=0,moreWork=false;
     for(let page=0;page<30;page++){
       const result=await step.do(`results-${page}`,{retries:{limit:2,delay:'15 seconds'},timeout:'5 minutes'},()=>withDatabase(d1Database(this.env.DB),async()=>{
