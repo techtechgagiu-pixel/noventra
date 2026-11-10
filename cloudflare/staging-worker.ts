@@ -10,10 +10,18 @@ import { maintenanceGate } from '../src/lib/d1/maintenance-gate';
 const maintenanceEnabled=(env:Primul11Env)=>(env as Primul11Env & {BETMIND_MAINTENANCE?:string}).BETMIND_MAINTENANCE==='1';
 
 /** Bounded deterministic result checks; AI execution stays on Render. */
-export class SettlementWorkflow extends WorkflowEntrypoint<Primul11Env,{scheduledAt:number}> {
-  async run(_event:WorkflowEvent<{scheduledAt:number}>,step:WorkflowStep){
+export class SettlementWorkflow extends WorkflowEntrypoint<Primul11Env,{scheduledAt:number;wakeOnly?:boolean}> {
+  /** Wakes the Render runner in a step long enough for its cold start (25-65 s); a failure never stops the results pass. */
+  private async wakeRunner(step:WorkflowStep,name:string){
+    try{return await step.do(name,{retries:{limit:1,delay:'10 seconds'},timeout:'3 minutes'},()=>wakeAnalysisRunner(this.env.ANALYSIS_RUNNER_URL));}
+    catch(error){return {status:'failed',reason:String(error).slice(0,180)};}
+  }
+  async run(event:WorkflowEvent<{scheduledAt:number;wakeOnly?:boolean}>,step:WorkflowStep){
     if(maintenanceEnabled(this.env))return {status:'maintenance'};
-    const maintenance=await step.do('maintenance',{retries:{limit:2,delay:'5 seconds'},timeout:'30 seconds'},()=>withDatabase(d1Database(this.env.DB),()=>scheduledMaintenance(this.env.ANALYSIS_RUNNER_URL)));
+    // A ticket was just created: wake the runner now instead of waiting up to 5 minutes for the next pass.
+    if(event.payload?.wakeOnly)return {wake:await this.wakeRunner(step,'wake-on-request')};
+    const maintenance=await step.do('maintenance',{retries:{limit:2,delay:'5 seconds'},timeout:'30 seconds'},()=>withDatabase(d1Database(this.env.DB),()=>scheduledMaintenance(this.env.ANALYSIS_RUNNER_URL,{wake:false})));
+    const wake=maintenance.queued?await this.wakeRunner(step,'wake-runner'):{status:'idle'};
     let pages=0,moreWork=false;
     for(let page=0;page<30;page++){
       const result=await step.do(`results-${page}`,{retries:{limit:2,delay:'15 seconds'},timeout:'5 minutes'},()=>withDatabase(d1Database(this.env.DB),async()=>{
@@ -25,7 +33,7 @@ export class SettlementWorkflow extends WorkflowEntrypoint<Primul11Env,{schedule
       moreWork=result.moreWork;
       if(!moreWork)break;
     }
-    return {maintenance,pages,moreWork}; // Any remaining backlog is picked up next scheduled pass.
+    return {maintenance,wake,pages,moreWork}; // Any remaining backlog is picked up next scheduled pass.
   }
 }
 export default {
@@ -43,9 +51,13 @@ export default {
     return withDatabase(d1Database(env.DB),async()=>{
       const response=await nextWorker.fetch(request,env,ctx);
       // The catalog is shared in D1; refresh it on the runner when requested and stale.
-      if((request.method==='POST'&&/^\/api\/(?:custom-tickets$|review-tickets$|ticket-slots\/[^/]+\/generate$|jobs\/[^/]+\/resume$|tickets\/[^/]+\/complete$)/.test(path))||['/api/matches','/api/fixtures','/api/custom-tickets'].includes(path)){
+      const startsWork=request.method==='POST'&&/^\/api\/(?:custom-tickets$|review-tickets$|ticket-slots\/[^/]+\/generate$|jobs\/[^/]+\/resume$|tickets\/[^/]+\/complete$)/.test(path);
+      if(startsWork||['/api/matches','/api/fixtures','/api/custom-tickets'].includes(path)){
         ctx.waitUntil(wakeAnalysisRunner(env.ANALYSIS_RUNNER_URL));
       }
+      // waitUntil ends 30 s after the response, often before Render finishes booting: a new ticket also gets a
+      // Workflow that keeps the wake request open for the whole cold start (10.11: a ticket waited 4+ minutes).
+      if(startsWork&&response.ok)ctx.waitUntil(env.SETTLEMENT.create({id:`wake-${crypto.randomUUID()}`,params:{scheduledAt:Date.now(),wakeOnly:true}}).catch(()=>null));
       const out=new Response(response.body,response);
       if(String(env.BETMIND_RUNTIME)!=='cloudflare-production')out.headers.set('X-Robots-Tag','noindex, nofollow');
       out.headers.set('X-Primul11-Runtime','cloudflare');
