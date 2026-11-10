@@ -135,6 +135,11 @@ describe('weekly COTĂ 100 picking', () => {
     const votes = [pos('alex', '1X2:AWAY'), pos('andrei', '1X2:AWAY'), pos('cosmin', '1X2:AWAY'), pos('victor', 'DC:X2'), pos('robert', 'DC:X2')];
     expect(consensus(votes, 3, 11, keys).marketKey).toBe('DC:X2');
     expect(consensus(votes, 3, 11, keys, 'highest').marketKey).toBe('1X2:AWAY');
+    // 10.11: custom tickets take the backed price closest to what each leg needs, not the biggest one.
+    const wide = [...votes, pos('mihai', 'DC:X2')];
+    expect(consensus(wide, 3, 11, keys, 'nearest', null, 1.36).marketKey).toBe('DC:X2');
+    expect(consensus(wide, 3, 11, keys, 'nearest', null, 1.85).marketKey).toBe('1X2:AWAY');
+    expect(consensus(wide, 3, 11, keys, 'nearest').marketKey).toBe('1X2:AWAY'); // without an aim it behaves like 'highest'
     const sandu = { name: 'Mircea Sandu', maxOdds: 1.55, minProbability: 0.6 };
     const weekly = { minOdds: 1.35, maxOdds: 2.0, minProbability: 0.5, agentCapBonus: 0.3 };
     const p = { ...pos('victor', 'DC:X2'), estimatedProbability: 0.62 };

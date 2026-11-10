@@ -505,7 +505,7 @@ function idealPerLeg(job: JobRow) {
 function ticketBrief(job: JobRow, p: LegPolicy) {
   if (job.config.review) return `biletul adus de utilizator: ${job.config.review.legs.length} meciuri, cotă totală ${Number(job.target_odds)}. Judeci fiecare meci separat; nu ești obligat să urmărești cota.`;
   const base = `${job.config.custom ? `bilet CUSTOM cerut de utilizator: exact ${job.config.custom.legs} meciuri, ${job.config.custom.onlyMarkets?.length ? `TOATE selecțiile doar pe: ${job.config.custom.onlyMarkets.map((o) => ONLY_MARKET_LABEL[o]).join(' sau ')} (alegerea utilizatorului${job.config.custom.onlyMarkets.some((o) => o.startsWith('UNDER')) ? '; pentru acest bilet „sub” pe liniile bifate este PERMIS, oricât de interzis ar fi în general' : ''}), ` : ''}` : ''}țintă cotă ${Number(job.target_odds)}, construit din ${job.config.custom ? 'exact' : 'minimum'} ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
-  if (p.pick === 'highest') {
+  if (p.pick === 'highest' || p.pick === 'nearest') {
     const avg = Math.pow(Number(job.target_odds), 1 / p.minLegs);
     return `${base} Biletul are nevoie de o cotă medie de aproximativ ${avg.toFixed(2)} pe meci, deci aici NU alegi automat varianta cea mai mică: alege selecția solidă cu cotă între ${p.minOdds.toFixed(2)} și ${p.maxOdds.toFixed(2)}. La acest bilet limita ta de cotă este mărită cu +${(p.agentCapBonus ?? 0).toFixed(2)}.`;
   }
@@ -581,7 +581,7 @@ async function chooseDebate(job: JobRow, ids: string[], round: number) {
     const snap = snaps.find((s) => s.fixture.id === id);
     if (!snap) continue;
     const { counted: pos, keys } = guardPositions(job, snap, await latestPositions(job.id, id));
-    if (round === 1 ? contested(pos, keys, jobThreshold(job), jobAgents(job).length, fixedVotes(job)) : (() => { const c = consensus(pos, jobThreshold(job), jobAgents(job).length, keys, jobPolicy(job).pick, fixedVotes(job)); return c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1; })()) out.push(id);
+    if (round === 1 ? contested(pos, keys, jobThreshold(job), jobAgents(job).length, fixedVotes(job)) : (() => { const c = consensus(pos, jobThreshold(job), jobAgents(job).length, keys, jobPolicy(job).pick, fixedVotes(job), jobPolicy(job).aim); return c.outcome !== 'QUALIFIED' && c.votesFor === c.requiredVotes - 1; })()) out.push(id);
   }
   return out;
 }
@@ -602,7 +602,7 @@ async function stepBrain(job: JobRow, ids: string[]) {
   for (const s of await batchSnapshots(job, pending)) {
     const raw = await latestPositions(job.id, s.fixture.id);
     const { counted, keys } = guardPositions(job, s, raw);
-    const c = consensus(counted, threshold, jobAgents(job).length, keys, jobPolicy(job).pick, fixedVotes(job));
+    const c = consensus(counted, threshold, jobAgents(job).length, keys, jobPolicy(job).pick, fixedVotes(job), jobPolicy(job).aim);
     if (!c.shortlist.length) continue;
     const reasons = (key: string) => counted.filter((p) => p.marketKey === key && p.rationale).slice(0, 3).map((p) => `${agentById(p.agentId)?.name}: ${p.rationale.slice(0, 220)}`);
     items.push({
@@ -654,7 +654,7 @@ async function stepVote(job: JobRow, ids: string[]) {
     for (const p of raw) await recordEvent(job.id, { type: 'VOTE_SUBMITTED', stage: 'VOTING', agentId: p.agentId, fixtureId: s.fixture.id, payload: { decision: p.decision, marketKey: p.marketKey, round: p.round, model: `${p.provider}/${p.model}` } });
     const { counted: positions, setAside, keys } = guardPositions(job, s, raw);
     for (const v of setAside) await recordEvent(job.id, { type: 'VOTE_SET_ASIDE', stage: 'VOTING', agentId: v.agentId, fixtureId: s.fixture.id, payload: { marketKey: v.marketKey, marketLabel: s.model.markets.find((m) => m.key === v.marketKey)?.label ?? null, reason: v.reason, note: 'Vot în afara caracterului agentului sau a regulilor de prudență — nenumărat.' } });
-    const c = consensus(positions, threshold, jobAgents(job).length, keys, jobPolicy(job).pick, fixedVotes(job));
+    const c = consensus(positions, threshold, jobAgents(job).length, keys, jobPolicy(job).pick, fixedVotes(job), jobPolicy(job).aim);
     const brain = job.checkpoint.brain?.[s.fixture.id];
     let brainNote = '';
     if (brain && c.shortlist.length) {
@@ -770,7 +770,7 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
       if (!bookmaker) return [];
       const repriced = { ...s, model: { ...s.model, markets: s.model.markets.map((m) => m.key === r.market_key ? { ...m, odds } : m) } };
       const { counted, keys } = guardPositions(job, repriced, await latestPositions(job.id, r.fixture_id));
-      const valid = consensus(counted, jobThreshold(job), jobAgents(job).length, keys, policy.pick, fixedVotes(job)).shortlist.find((m) => m.key === r.market_key);
+      const valid = consensus(counted, jobThreshold(job), jobAgents(job).length, keys, policy.pick, fixedVotes(job), policy.aim).shortlist.find((m) => m.key === r.market_key);
       if (!valid) return [];
       votesFor = valid.supporters.length;
     }
