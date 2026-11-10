@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/format';
 import { MAX_CUSTOM_AGENTS } from '@/lib/slots';
 import type { MatchRow } from '@/lib/catalog';
@@ -10,6 +10,7 @@ import type { AgentCard } from '@/components/custom/custom-form';
 /** Owner request 10.11: you pick the matches (or a whole championship), set the price; the agents choose the pick for each match. */
 const MIN_FROM_HOURS = 20 / 60;
 const MAX_MATCHES = 20;
+const REFRESH_MS = 60_000;
 const TARGETS = [3, 5, 10, 20, 50, 100, 500, 1000];
 const when = (iso: string) => new Date(iso).toLocaleString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
 
@@ -25,14 +26,24 @@ export function OddsXMatch({ agents, topAgentIds = [], remaining, limit, credits
   const [chosen, setChosen] = useState<string[]>(() => { const top = topAgentIds.filter((id) => agents.some((a) => a.id === id)); return top.length >= 3 ? top.slice(0, MAX_CUSTOM_AGENTS) : ['victor', 'andrei', 'alex', 'robert', 'ioana'].filter((id) => agents.some((a) => a.id === id)); });
   const [bold, setBold] = useState(false);
   const [search, setSearch] = useState('');
+  const [open, setOpen] = useState<string[]>([]);
+  const [updated, setUpdated] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Always fresh: reload when opened, every minute while the tab is visible, and when the user comes back to it.
   useEffect(() => {
-    const c = new AbortController();
-    setLoadError(false);
-    api<{ rows: MatchRow[] }>('/api/matches', { signal: c.signal }).then((d) => { if (!c.signal.aborted) setRows(d.rows); }).catch(() => { if (!c.signal.aborted) setLoadError(true); });
-    return () => c.abort();
+    let c = new AbortController();
+    const load = (first: boolean) => {
+      c.abort(); c = new AbortController(); const mine = c;
+      if (first) setLoadError(false);
+      api<{ rows: MatchRow[] }>('/api/matches', { signal: mine.signal }).then((d) => { if (!mine.signal.aborted) { setRows(d.rows); setLoadError(false); setUpdated(Date.now()); } }).catch(() => { if (!mine.signal.aborted && first) setLoadError(true); });
+    };
+    load(true);
+    const tick = setInterval(() => { if (document.visibilityState === 'visible') load(false); }, REFRESH_MS);
+    const onVisible = () => { if (document.visibilityState === 'visible') load(false); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { c.abort(); clearInterval(tick); document.removeEventListener('visibilitychange', onVisible); };
   }, [retry]);
 
   // Only football matches the analysis can use: not started, with prices, starting in 20 minutes … 7 days.
@@ -41,6 +52,11 @@ export function OddsXMatch({ agents, topAgentIds = [], remaining, limit, credits
     return (rows ?? []).filter((m) => m.odds && m.status === 'pre' && m.source !== 'pandascore' && m.leagueId !== 'CS2' && Date.parse(m.kickoff) >= now + MIN_FROM_HOURS * 3600_000 && Date.parse(m.kickoff) <= now + 168 * 3600_000)
       .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff));
   }, [rows]);
+  useEffect(() => {
+    if (!rows) return;
+    const ok = new Set(usable.map((m) => m.id));
+    setPicked((c) => (c.every((id) => ok.has(id)) ? c : c.filter((id) => ok.has(id))));
+  }, [rows, usable]);
   const q = search.trim().toLowerCase();
   const groups = useMemo(() => {
     const by = new Map<string, { id: string; league: string; country: string; items: MatchRow[] }>();
@@ -52,6 +68,7 @@ export function OddsXMatch({ agents, topAgentIds = [], remaining, limit, credits
     return [...by.values()].sort((a, b) => b.items.length - a.items.length || a.league.localeCompare(b.league));
   }, [usable, q]);
 
+  const toggleOpen = (id: string) => setOpen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
   const sel = useMemo(() => new Set(picked), [picked]);
   const toggle = (id: string) => setPicked((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= MAX_MATCHES ? c : [...c, id]));
   const toggleLeague = (ids: string[]) => setPicked((c) => {
@@ -94,22 +111,26 @@ export function OddsXMatch({ agents, topAgentIds = [], remaining, limit, credits
           <h2 className="font-display text-lg font-bold">Alege meciurile</h2>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Caută echipă sau campionat" aria-label="Caută echipă sau campionat" className="ml-auto w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm outline-none focus:border-cyan sm:w-64" />
         </div>
-        <p className="mt-1 text-[11px] text-muted">Bifează meciuri sau un campionat întreg (maximum {MAX_MATCHES}). Agenții aleg pronosticul de la fiecare meci, ca biletul să ajungă la cota ta.</p>
+        <p className="mt-1 text-[11px] text-muted">Deschide un campionat ca să vezi meciurile, sau bifează-l întreg (maximum {MAX_MATCHES}). Lista se actualizează singură la fiecare minut{updated ? <> · ultima actualizare {new Date(updated).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Bucharest' })}</> : null}. Agenții aleg pronosticul de la fiecare meci, ca biletul să ajungă la cota ta.</p>
         {loadError && <p className="mt-3 text-sm text-rose" role="alert">Nu am putut încărca meciurile. <button type="button" className="underline" onClick={() => { setRows(null); setRetry((x) => x + 1); }}>Reîncearcă</button></p>}
         {!rows && !loadError && <p className="mt-3 text-sm text-muted" role="status">Se încarcă meciurile…</p>}
         {rows && !groups.length && <p className="mt-3 text-sm text-muted">{q ? 'Niciun meci pentru căutarea ta.' : 'Nu sunt meciuri cu cote în următoarele 7 zile.'}</p>}
         <div className="mt-3 space-y-3">
           {groups.map((g) => {
             const ids = g.items.map((m) => m.id);
+            const expanded = !!q || open.includes(g.id);
             const all = ids.every((id) => sel.has(id)); const some = !all && ids.some((id) => sel.has(id));
             return (
               <section key={g.id} className="rounded-lg border border-line">
-                <label className="flex cursor-pointer items-center gap-2 bg-panel-2 px-3 py-2 text-sm font-semibold">
-                  <input type="checkbox" checked={all} ref={(el) => { if (el) el.indeterminate = some; }} onChange={() => toggleLeague(ids)} className="h-4 w-4 accent-cyan" />
-                  <span>{g.league}{g.country ? <span className="ml-1 font-normal text-muted">· {g.country}</span> : null}</span>
-                  <span className="ml-auto text-xs font-normal text-muted">{g.items.length} {g.items.length === 1 ? 'meci' : 'meciuri'}</span>
-                </label>
-                <ul>
+                <div className="flex items-center gap-2 bg-panel-2 px-3 py-2 text-sm font-semibold">
+                  <input type="checkbox" aria-label={`Bifează tot ${g.league}`} checked={all} ref={(el) => { if (el) el.indeterminate = some; }} onChange={() => toggleLeague(ids)} className="h-4 w-4 accent-cyan" />
+                  <button type="button" onClick={() => toggleOpen(g.id)} aria-expanded={expanded} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                    {expanded ? <ChevronDown size={16} aria-hidden /> : <ChevronRight size={16} aria-hidden />}
+                    <span className="truncate">{g.league}{g.country ? <span className="ml-1 font-normal text-muted">· {g.country}</span> : null}</span>
+                    <span className="ml-auto shrink-0 text-xs font-normal text-muted">{some || all ? `${ids.filter((id) => sel.has(id)).length}/` : ''}{g.items.length} {g.items.length === 1 ? 'meci' : 'meciuri'}</span>
+                  </button>
+                </div>
+                {expanded && <ul>
                   {g.items.map((m) => (
                     <li key={m.id} className="border-t border-line/60">
                       <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm">
@@ -120,7 +141,7 @@ export function OddsXMatch({ agents, topAgentIds = [], remaining, limit, credits
                       </label>
                     </li>
                   ))}
-                </ul>
+                </ul>}
               </section>
             );
           })}
