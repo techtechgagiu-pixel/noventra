@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { wakeAnalysisRunner } from '@/lib/d1/scheduled';
+import { wakeAnalysisRunner, RUNNER_WAKE_TIMEOUT_MS } from '@/lib/d1/scheduled';
 
 vi.mock('@/lib/db',()=>({one:vi.fn(),query:vi.fn(async()=>({}))}));
 vi.mock('@/lib/settlement',()=>({settlePending:vi.fn()}));
@@ -23,4 +23,8 @@ it('reports network failures and refuses unexpected runner origins',async()=>{
   expect(await wakeAnalysisRunner('https://example.onrender.com')).toMatchObject({status:'starting',reason:'TypeError: network unavailable'});
   await expect(wakeAnalysisRunner('https://example.com')).rejects.toThrow('Invalid Render runner origin');
   expect(await wakeAnalysisRunner(undefined)).toEqual({status:'not-configured'});
+});
+
+it('waits longer than a Free-plan cold start (up to ~65 s) before giving up on the wake',()=>{
+  expect(RUNNER_WAKE_TIMEOUT_MS).toBeGreaterThanOrEqual(90_000);
 });
