@@ -202,3 +202,10 @@ export function riskClass(prob: number | null, uncertainty: string): 'LOW' | 'ME
   const base = prob >= 0.7 ? 0 : prob >= 0.5 ? 1 : 2;
   return (['LOW', 'MEDIUM', 'HIGH'] as const)[Math.min(2, base + (uncertainty === 'ridicată' ? 1 : 0))];
 }
+
+/** The odds checks a selection must pass besides team history (see the validation step in the pipeline). */
+const PRICE_CHECKS = ['fixtureStillPreMatch', 'oddsAvailable', 'oddsFresh', 'bookmakerIdentified', 'selectionConsistent', 'probabilityPlausible', 'evNotStronglyNegative'] as const;
+/** Owner rule 12.11: a selection that failed ONLY the old team-history check (Stake-only matches have none) is usable. */
+export function rejectedOnlyForHistory(v: Record<string, unknown> | null | undefined) {
+  return !!v && v.dataSufficient === false && PRICE_CHECKS.every((k) => v[k] === true);
+}
