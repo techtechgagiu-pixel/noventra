@@ -21,7 +21,7 @@ import { activeProvider, getLeagues, loadFixtures, persistFixtures } from '../sp
 import type { Fixture } from '../sports/types';
 import { modelFixture, selectionImplies } from '../stats/engine';
 import { localDate, yyyymmdd } from '../time';
-import { agentFacts, characterViolation, isBannedMarket, factsForAgent, consensus, contested, setVoteWeights, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
+import { agentFacts, characterViolation, isBannedMarket, rejectedOnlyForHistory, factsForAgent, consensus, contested, setVoteWeights, picksOf, riskClass, toPosition, type FinalPosition } from './analysis';
 import { agentTrackRecord, trackRecordText } from '../track-record';
 import { withTheOddsPrices } from '../sports/the-odds-prices';
 import { IMPORT_SOURCE, importStatus, withImportedPrices } from '../sports/imported-prices';
@@ -505,7 +505,7 @@ function idealPerLeg(job: JobRow) {
 function ticketBrief(job: JobRow, p: LegPolicy) {
   if (job.config.review) return `biletul adus de utilizator: ${job.config.review.legs.length} meciuri, cotă totală ${Number(job.target_odds)}. Judeci fiecare meci separat; nu ești obligat să urmărești cota.`;
   const base = `${job.config.custom ? `bilet CUSTOM cerut de utilizator: exact ${job.config.custom.legs} meciuri, ${job.config.custom.onlyMarkets?.length ? `TOATE selecțiile doar pe: ${job.config.custom.onlyMarkets.map((o) => ONLY_MARKET_LABEL[o]).join(' sau ')} (alegerea utilizatorului${job.config.custom.onlyMarkets.some((o) => o.startsWith('UNDER')) ? '; pentru acest bilet „sub” pe liniile bifate este PERMIS, oricât de interzis ar fi în general' : ''}), ` : ''}` : ''}țintă cotă ${Number(job.target_odds)}, construit din ${job.config.custom ? 'exact' : 'minimum'} ${p.minLegs} selecții cu cote ${p.minOdds.toFixed(2)}–${p.maxOdds.toFixed(2)} și probabilitate ≥ ${Math.round(p.minProbability * 100)}% (după motorul statistic).`;
-  const picked = job.config.custom?.fixtures?.length ? ' Meciurile au fost alese de utilizator. Unele nu au istoric de rezultate (doar cote): atunci decizi din cote, știrile zilei, lot, motivație și context. Lipsa istoricului NU este singură un motiv de NO BET.' : '';
+  const picked = `${job.config.custom?.fixtures?.length ? ' Meciurile au fost alese de utilizator.' : ''} Unele meciuri nu au istoric de rezultate (doar cote), de exemplu naționalele sau ligile mici: atunci decizi din cote, știrile zilei, lot, motivație și context. Lipsa istoricului NU este singură un motiv de NO BET.`;
   if (p.pick === 'highest' || p.pick === 'nearest') {
     const avg = Math.pow(Number(job.target_odds), 1 / p.minLegs);
     return `${base} Biletul are nevoie de o cotă medie de aproximativ ${avg.toFixed(2)} pe meci, deci aici NU alegi automat varianta cea mai mică: alege selecția solidă cu cotă între ${p.minOdds.toFixed(2)} și ${p.maxOdds.toFixed(2)}. La acest bilet limita ta de cotă este mărită cu +${(p.agentCapBonus ?? 0).toFixed(2)}.${picked}`;
@@ -703,19 +703,20 @@ async function stepVote(job: JobRow, ids: string[]) {
           selectionConsistent: s.model.markets.some((m) => m.key === key),
           probabilityPlausible: est.estimatedProbability !== null && est.estimatedProbability >= 0.25,
           evNotStronglyNegative: est.estimatedProbability !== null && freshQuote ? est.estimatedProbability * freshQuote.odds - 1 >= -0.12 : false,
-          // oddsxmatch (owner 10.11, „fă să parieze oricum pe ele, din știri”): matches the user picked are not dropped for
-          // missing history (Stake-only matches have none); the agents decide from prices, news and context.
-          dataSufficient: !!job.config.custom?.fixtures?.length || (s.dataQuality.historyHome >= 3 && s.dataQuality.historyAway >= 3),
+          // Owner rule 10.11/12.11 („fă să parieze oricum pe ele, din știri” … „ai grijă să nu se mai întâmple”): missing team
+          // history no longer rejects a backed selection on ANY ticket. Stake-only matches (national teams in the international
+          // break, small leagues) have none; on 12.11 that rejected 23 of 24 matches. It is recorded as historyMissing instead.
         };
         for (const k of Object.keys(validation)) delete validation[k];
-        Object.assign(validation, checks, { originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt, bookmaker: freshQuote?.bookmaker ?? fresh?.odds?.bookmaker ?? s.odds.bookmaker });
+        const historyMissing = s.dataQuality.historyHome < 3 || s.dataQuality.historyAway < 3;
+        Object.assign(validation, checks, { historyMissing, originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt, bookmaker: freshQuote?.bookmaker ?? fresh?.odds?.bookmaker ?? s.odds.bookmaker });
         const failed = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
         await recordEvent(job.id, { type: 'ODDS_VALIDATED', stage: 'VOTING', fixtureId: s.fixture.id, payload: { marketKey: key, checks, originalOdds: est.odds, currentOdds: freshQuote?.odds ?? null, observedAt } });
         if (!failed.length) {
           const alt = key !== c.marketKey ? c.shortlist.find((x) => x.key === key) : null;
           if (alt) Object.assign(c, { marketKey: alt.key, votesFor: alt.supporters.length, directVotes: alt.direct, supporters: alt.supporters });
           outcome = 'QUALIFIED';
-          reason = `Consens ${c.votesFor}/${N} pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.${variedFrom && ti === 0 ? ` Alt pronostic decât „${s.model.markets.find((m) => m.key === variedFrom)?.label ?? variedFrom}”, care e deja pe alt bilet al tău pentru acest meci.` : ti > 0 ? ` (Alegerea de rezervă a creierului — prima, „${s.model.markets.find((m) => m.key === tries[0])?.label}”, a picat la validare: ${failures[0]}.)` : brainNote}`;
+          reason = `${historyMissing ? 'Fără istoric de rezultate (decis din cote și știri). ' : ''}Consens ${c.votesFor}/${N} pentru „${est.label}”${c.directVotes < c.votesFor ? ` (${c.directVotes} voturi directe + ${c.votesFor - c.directVotes} pentru o selecție mai strictă care o include)` : ''}; validare trecută.${variedFrom && ti === 0 ? ` Alt pronostic decât „${s.model.markets.find((m) => m.key === variedFrom)?.label ?? variedFrom}”, care e deja pe alt bilet al tău pentru acest meci.` : ti > 0 ? ` (Alegerea de rezervă a creierului — prima, „${s.model.markets.find((m) => m.key === tries[0])?.label}”, a picat la validare: ${failures[0]}.)` : brainNote}`;
           break;
         }
         failures.push(failed.map((f) => labels[f]).join(', '));
@@ -738,8 +739,9 @@ async function qualifiedCandidates(job: JobRow): Promise<Array<Candidate & { mar
   // or an implausible probability; every check below runs again with the current price and votes.
   const recheck = !!(job.config.completion || job.config.extendedAt);
   const rows = (await many<{ fixture_id: string; market_key: string; votes_for: number; outcome: string; validation: { currentOdds: number; observedAt: string; bookmaker: string; dataSufficient?: boolean; probabilityPlausible?: boolean } }>(
-    `SELECT fixture_id, market_key, votes_for, outcome, validation FROM final_decisions WHERE job_id=$1 AND (outcome='QUALIFIED' OR ($2=1 AND outcome='REJECTED' AND market_key IS NOT NULL))`, [job.id, recheck ? 1 : 0]))
-    .filter((r) => r.outcome === 'QUALIFIED' || (r.validation?.dataSufficient !== false && r.validation?.probabilityPlausible !== false));
+    `SELECT fixture_id, market_key, votes_for, outcome, validation FROM final_decisions WHERE job_id=$1 AND (outcome='QUALIFIED' OR (outcome='REJECTED' AND market_key IS NOT NULL))`, [job.id]))
+    // A selection rejected only for missing history (before the 12.11 rule) counts like a qualified one.
+    .filter((r) => r.outcome === 'QUALIFIED' || rejectedOnlyForHistory(r.validation) || (recheck && r.validation?.probabilityPlausible !== false));
   const snaps = await batchSnapshots(job, rows.map((r) => r.fixture_id));
   // Completion never promotes old scores or expired quotes into a new finalized ticket.
   const stored = config.limits.stakeOnlyOffer && (await importStatus().catch(() => null))?.usable ? true : undefined;
