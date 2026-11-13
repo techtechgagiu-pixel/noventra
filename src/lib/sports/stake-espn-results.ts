@@ -1,6 +1,5 @@
 import { isD1, many, query, SQL_NOW, SQL_AGO, timeCompare } from '../db';
-import { sportsGet } from './http';
-import { espnSummary } from './espn';
+import { recordProviderUsage } from '../usage';
 
 /**
  * Results for Stake-only fixtures (owner question 13.11: „biletele alea nu se mai actualizează?”).
@@ -69,6 +68,15 @@ export function parseScoreboard(data: Obj): EspnEvent[] {
 
 /** Fixtures read per settlement page (a Worker pass keeps its D1 and network work small). */
 export const STAKE_RESULTS_PAGE = () => (isD1() ? 6 : 40);
+/** Compact boards kept between pages (13.11: caching the raw 2-3 MB weekend boards and 0.4 MB summaries, parsed, inside the
+ * Worker ran the isolate out of memory mid-page; the lease then blocked every results pass for 10 minutes). */
+const boardCache = new Map<string, { at: number; events: EspnEvent[] }>();
+async function espnJson(url: string): Promise<Obj> {
+  const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+  await recordProviderUsage('espn', { errors: response.ok ? 0 : 1 }).catch(() => {});
+  if (!response.ok) throw new Error(`espn a răspuns ${response.status}`);
+  return await response.json() as Obj;
+}
 const ymd = (t: number) => new Date(t).toISOString().slice(0, 10).replace(/-/g, '');
 
 /** Final facts from a finished match summary: the 90-minute score (extra time excluded), half time, corners, cards. */
@@ -108,13 +116,14 @@ export async function settleStakeFromEspn() {
       LIMIT ${STAKE_RESULTS_PAGE()}`);
   if (!due.length) return { checked: 0, settled: 0, failures: 0 };
   let failures = 0, settled = 0;
-  const boards = new Map<string, EspnEvent[]>();
   const board = async (day: string) => {
-    if (!boards.has(day)) {
-      const data = await sportsGet<Obj>(`${BASE}/scoreboard?dates=${day}&limit=1000`, { provider: 'espn', ttlMs: 10 * 60_000 }).catch(() => { failures++; return null; });
-      boards.set(day, data ? parseScoreboard(data) : []);
-    }
-    return boards.get(day)!;
+    const hit = boardCache.get(day);
+    if (hit && Date.now() - hit.at < 10 * 60_000) return hit.events;
+    const events = await espnJson(`${BASE}/scoreboard?dates=${day}&limit=1000`).then(parseScoreboard).catch(() => { failures++; return null; });
+    if (!events) return [];
+    if (boardCache.size > 20) boardCache.clear();
+    boardCache.set(day, { at: Date.now(), events }); // only ids, names, times: a few KB per day
+    return events;
   };
   for (const f of due) {
     const kickoff = Date.parse(new Date(f.kickoff_utc).toISOString());
@@ -128,8 +137,8 @@ export async function settleStakeFromEspn() {
       continue;
     }
     if (e && e.state === 'post') {
-      const sm = await espnSummary('all', e.id, 10 * 60_000).catch(() => { failures++; return null; });
-      const facts = sm ? summaryFacts(sm) : null;
+      // Read once and reduced to the facts at once; the large summary is not kept.
+      const facts = await espnJson(`${BASE}/summary?event=${encodeURIComponent(e.id)}`).then(summaryFacts).catch(() => { failures++; return null; });
       if (facts && facts.home !== null && facts.away !== null) {
         await query(`UPDATE fixtures SET status='post', home_score=$2, away_score=$3, ht_home=$4, ht_away=$5, corners_home=$6, corners_away=$7, cards_home=$8, cards_away=$9,
             live_clock=NULL, source_observed_at=${SQL_NOW()}, results_checked_at=${SQL_NOW()}, updated_at=${SQL_NOW()} WHERE id=$1 AND provider='stake'`,
