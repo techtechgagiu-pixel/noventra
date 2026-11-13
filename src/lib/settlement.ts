@@ -1,5 +1,6 @@
 import { many, one, query, dialect, isD1, SQL_NOW, SQL_AGO, timeCompare } from './db';
 import { espnLeagueDay, espnSummary } from './sports/espn';
+import { settleStakeFromEspn, STAKE_RESULTS_PAGE } from './sports/stake-espn-results';
 import { getLeagues, persistFixtures } from './sports/fixtures';
 import { localDate, yyyymmdd } from './time';
 import { runAutomation } from './automation';
@@ -203,6 +204,9 @@ export async function settlePending() {
     }
     await query(`UPDATE fixtures SET results_checked_at=${SQL_NOW()} WHERE ${dialect('id=ANY($1)','id IN (SELECT value FROM json_each($1))')}`, [due.map((d) => d.fixture_id)]);
     }
+    // Stake-only matches (no ESPN id) get their result from ESPN's all-competitions scoreboard (13.11).
+    const stake = await settleStakeFromEspn().catch((error) => { console.warn(JSON.stringify({ event: 'stake_results_failed', message: (error as Error).message })); return { checked: 0, settled: 0, failures: 1 }; });
+    sourceErrors += stake.failures;
     const facts=await loadMatchFacts();
     sourceErrors += facts.failures;
     const predictionsChanged = await settleAgentPredictions();
@@ -218,7 +222,7 @@ export async function settlePending() {
     const ticketChanges = tickets.flatMap((t) => { const outcome=ticketOutcome(t.outcomes); return outcome!==t.outcome_status ? [{id:t.id,outcome}] : []; });
     await updateOutcomes('tickets',ticketChanges);
     const touched = new Set([...changed.map((x) => x.ticket), ...ticketChanges.map((x) => x.id)]);
-    return { checkedFixtures: due.length, factsChecked:facts.checked, moreWork:isD1() && (due.length===2 || facts.checked===2), sourceErrors, ticketsChecked: touched.size, predictionsChanged, selectionsChanged: changed.length, ticketsChanged: ticketChanges.length };
+    return { checkedFixtures: due.length, factsChecked:facts.checked, moreWork:isD1() && (due.length===2 || facts.checked===2 || stake.checked===STAKE_RESULTS_PAGE()), stakeChecked: stake.checked, stakeSettled: stake.settled, sourceErrors, ticketsChecked: touched.size, predictionsChanged, selectionsChanged: changed.length, ticketsChanged: ticketChanges.length };
     });
   } catch (error) {
     console.warn(JSON.stringify({ event: 'settlement_failed', message: (error as Error).message }));
