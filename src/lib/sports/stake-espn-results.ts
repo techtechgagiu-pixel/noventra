@@ -101,8 +101,11 @@ export async function settleStakeFromEspn() {
         AND ${timeCompare('f.kickoff_utc', '>', SQL_AGO(7 * 24, 'hours'))}
         AND (f.results_checked_at IS NULL OR ${timeCompare('f.results_checked_at', '<', SQL_AGO(15, 'minutes'))})
         AND (EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING')
-          OR EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.outcome IS NULL))
-      ORDER BY f.results_checked_at NULLS FIRST, f.kickoff_utc LIMIT ${STAKE_RESULTS_PAGE()}`);
+          OR (${timeCompare('f.kickoff_utc', '>', SQL_AGO(72, 'hours'))} AND EXISTS (SELECT 1 FROM agent_predictions p WHERE p.fixture_id=f.id AND p.decision='BET_CANDIDATE' AND p.outcome IS NULL)))
+      -- Ticket legs first (13.11: 17 legs waited behind 160 small-league matches that only had agent votes and that ESPN
+      -- does not list); agent-vote-only matches are tried for 3 days, then left to the manual form.
+      ORDER BY EXISTS (SELECT 1 FROM ticket_selections s WHERE s.fixture_id=f.id AND s.outcome='PENDING') DESC, f.results_checked_at NULLS FIRST, f.kickoff_utc DESC
+      LIMIT ${STAKE_RESULTS_PAGE()}`);
   if (!due.length) return { checked: 0, settled: 0, failures: 0 };
   let failures = 0, settled = 0;
   const boards = new Map<string, EspnEvent[]>();
