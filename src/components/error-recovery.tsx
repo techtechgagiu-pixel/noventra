@@ -14,6 +14,13 @@ export function ErrorRecovery({ error, reset }: { error: Error & { digest?: stri
     let recent: number[] = [];
     try { recent = (JSON.parse(sessionStorage.getItem(key) ?? '[]') as number[]).filter((t) => Date.now() - t < 60_000); } catch { /* storage unavailable */ }
     if (recent.length >= 2) { setState('failed'); return; }
+    // 18.11: after a deploy, a tab opened earlier asks for script files of the previous build (404). That is not an
+    // outage: load the new version at once instead of showing „Verific conexiunea”.
+    if (/ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(`${error?.name} ${error?.message}`)) {
+      try { sessionStorage.setItem(key, JSON.stringify([...recent, Date.now()])); } catch { /* ignore */ }
+      window.location.reload();
+      return;
+    }
     (async () => {
       for (let i = 0; i < 12 && alive; i++) {
         const health = await fetch('/api/health', { cache: 'no-store', signal: AbortSignal.timeout(20_000) }).then(async (r) => ({ok:r.ok, data:await r.json().catch(()=>null)})).catch(() => null);
