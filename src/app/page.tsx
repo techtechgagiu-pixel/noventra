@@ -34,6 +34,7 @@ import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
 import { OddsXMatch } from '@/components/custom/odds-x-match';
+import { calibrationBands } from '@/lib/real-chance-data';
 import { localDate } from '@/lib/time';
 import { getAccount } from '@/lib/credits';
 import { config } from '@/lib/config';
@@ -151,12 +152,12 @@ async function AcasaTab({ userId }: { userId: string }) {
 }
 
 async function TicketPanel({ userId, id, fresh, back }: { userId: string; id: string; fresh: boolean; back: string }) {
-  const t = UUID.test(id) ? await ticketDetail(userId, id) : null;
+  const [t, bands] = UUID.test(id) ? await Promise.all([ticketDetail(userId, id), calibrationBands()]) : [null, []] as const;
   if (!t) return <p className="card p-6 text-muted">Biletul nu a fost găsit. <Link className="text-cyan" href={back}>Înapoi</Link></p>;
   return (
     <div className="space-y-3">
       <Link href={back} className="text-sm text-muted hover:text-text">← Înapoi</Link>
-      <TicketView t={plain(t) as unknown as TicketData} fresh={fresh} />
+      <TicketView t={plain(t) as unknown as TicketData} fresh={fresh} bands={[...bands]} />
     </div>
   );
 }
@@ -245,7 +246,7 @@ async function CustomTab({ userId, job, limit }: { userId: string; job?: string;
       return <CustomLive key={job} jobId={job} initialMeta={plain(meta)} initialEvents={plain(events)} info={info} />;
     }
   }
-  const [cards, recent, ranking, account] = await Promise.all([agentCards(), customJobs(userId, Math.max(limit, 20)), agentRanking(), getAccount(userId).catch(() => null)]);
+  const [cards, recent, ranking, account, bands] = await Promise.all([agentCards(), customJobs(userId, Math.max(limit, 20)), agentRanking(), getAccount(userId).catch(() => null), calibrationBands()]);
   return (
     <div className="custom-tab space-y-6">
       <div>
@@ -253,7 +254,7 @@ async function CustomTab({ userId, job, limit }: { userId: string; job?: string;
         <p className="custom-extra mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {limit} bilete custom pe zi.</p>
       </div>
       <StaleOfferNotice />
-      <CustomForm credits={config.creditsEnabled && account && !account.founder ? account.balance : null} agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
+      <CustomForm bands={bands} credits={config.creditsEnabled && account && !account.founder ? account.balance : null} agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
       {recent.length > 0 && (
         <section className="custom-extra">
           <h3 className="mb-2 font-display text-lg font-bold">Biletele tale custom</h3>
