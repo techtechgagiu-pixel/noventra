@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from 'next';
-import { Barlow, Barlow_Condensed } from 'next/font/google';
+import { Barlow, Big_Shoulders } from 'next/font/google';
 import './globals.css';
 
-// Stadium-signage pair: Barlow for reading, Barlow Condensed for scoreboard numbers and headlines.
+// Barlow for reading; Big Shoulders Display (stadium signage, 18.11; Big Shoulders family) for board numbers and headlines.
 const body = Barlow({ subsets: ['latin', 'latin-ext'], weight: ['400', '500', '600', '700'], variable: '--font-body', display: 'swap' });
-const board = Barlow_Condensed({ subsets: ['latin', 'latin-ext'], weight: ['500', '600', '700', '800'], variable: '--font-board', display: 'swap' });
+const board = Big_Shoulders({ subsets: ['latin', 'latin-ext'], weight: ['600', '700', '800', '900'], variable: '--font-board', display: 'swap' });
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false }, // private personal tool
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     images: [{ url: '/twitter-image.png', width: 1200, height: 675, alt: 'PRIMUL 11: agenții dezbat, tu primești biletul.' }],
   },
 };
-export const viewport: Viewport = { themeColor: '#0b1d15', width: 'device-width', initialScale: 1 };
+export const viewport: Viewport = { themeColor: '#0b1230', width: 'device-width', initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

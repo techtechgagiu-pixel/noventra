@@ -63,7 +63,7 @@ function News({ c }: { c: NewsCard }) {
   const { ref, n } = useReveal(c.headlines.length + (c.take ? 1 : 0));
   const h = AGENT_META.hantu;
   return (
-    <aside ref={ref} className="rounded-[1.4rem] border border-[#84cc16]/40 bg-[linear-gradient(180deg,rgba(132,204,22,.08),rgba(15,26,53,.6))] p-4 md:p-5" aria-label="Știrile lui Nemotron 3.5 Super VL">
+    <aside ref={ref} className="rounded-[1.4rem] border border-[#5fe3a1]/40 bg-[linear-gradient(180deg,rgba(132,204,22,.08),rgba(15,26,53,.6))] p-4 md:p-5" aria-label="Știrile lui Nemotron 3.5 Super VL">
       <div className="flex items-center gap-3">
         <img src={h.thumb} alt="" className="h-12 w-12 rounded-full border-2 object-cover" style={{ borderColor: h.accent }} />
         <div><p className="font-display text-lg font-bold leading-tight" style={{ color: h.accent }}>Nemotron 3.5 Super VL a citit presa</p><p className="text-xs text-muted">{c.match}, {fmtDateTime(c.at)}</p></div>
@@ -78,7 +78,7 @@ function News({ c }: { c: NewsCard }) {
       </ul>
       {c.take && (
         <div className="mt-4 transition-opacity duration-500" style={{ opacity: n > c.headlines.length ? 1 : 0 }}>
-          {c.pick && <p className="inline-block rounded-md bg-[#84cc16]/15 px-1.5 py-0.5 text-[11px] font-semibold text-[#a3e635]">{c.pick}</p>}
+          {c.pick && <p className="inline-block rounded-md bg-[#5fe3a1]/15 px-1.5 py-0.5 text-[11px] font-semibold text-[#7ff0b8]">{c.pick}</p>}
           <p className="mt-1.5 text-[14px] leading-snug">„{c.take}”</p>
         </div>
       )}

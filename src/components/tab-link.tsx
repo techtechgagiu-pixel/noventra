@@ -11,7 +11,7 @@ function PendingHint() {
 export function TabLink({ href, label, active, highlight = false, children }: { href: string; label: string; active: boolean; highlight?: boolean; children: ReactNode }) {
   const [intent, setIntent] = useState(false);
   return <Link href={href} title={label} aria-label={label} aria-current={active ? 'page' : undefined}
-    prefetch={intent} onMouseEnter={() => setIntent(true)} onFocus={() => setIntent(true)}
+    prefetch={intent} onMouseEnter={() => setIntent(true)} onFocus={() => setIntent(true)} onTouchStart={() => setIntent(true)}
     className={highlight ? 'app-tab app-tab-hot' : 'app-tab'}>
     {children}<PendingHint />
   </Link>;

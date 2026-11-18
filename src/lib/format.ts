@@ -18,7 +18,7 @@ const ACCENTS: Record<string, string> = {
   "ioana": "#f472b6",
   "radu": "#2dd4bf",
   "elena": "#facc15",
-  "hantu": "#84cc16",
+  "hantu": "#5fe3a1",
   "becali": "#c084fc",
   "ilie": "#38bdf8",
   "sumudica": "#d946ef",

@@ -79,13 +79,13 @@ export function autoFormation(active: Set<string> | null): Record<string, Spot> 
   });
   return out;
 }
-const CONFETTI = ['#7fdc6c', '#ffe36e', '#ffbe3d', '#ff6150', '#8fd0ff', '#eef5ec'];
+const CONFETTI = ['#5fe3a1', '#ffe36e', '#ff4f9a', '#ff6150', '#8fd0ff', '#eef1fb'];
 const newBall = (): Ball => ({ pos: { x: 0, y: 0 }, z: 0, spin: 0, owner: null, flight: null, step: null, plan: [], holdUntil: 0, pop: 0, trail: [] });
 /** Stable per-agent phase so every player jogs to his own rhythm. */
 const phaseOf = (id: string) => { let h = 7; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 9973; return (h / 9973) * Math.PI * 2; };
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
 // Floodlit-pitch palette (matches the site): amber data, chalk text, football result colours.
-const C = { cyan: '#ffbe3d', emerald: '#7fdc6c', gold: '#ffe36e', rose: '#ff6150', violet: '#8fd0ff', muted: '#a3bcad', text: '#eef5ec', lime: '#c8f07a', line: '#275341' };
+const C = { cyan: '#ff4f9a', emerald: '#5fe3a1', gold: '#ffe36e', rose: '#ff6150', violet: '#8fd0ff', muted: '#a9b3d6', text: '#eef1fb', lime: '#a8f5d0', line: '#2e3d7c' };
 const NAME = (id: string) => AGENT_META[id]?.short ?? AGENT_META[id]?.name ?? id;
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -561,7 +561,7 @@ export class MapScene {
     b.step = step;
     // The kicker strides into the ball; a puff of turf where it was struck.
     if (b.owner?.k === 'agent' && d > 0) { const a = this.agents.get(b.owner.id); if (a) { const s = (kind === 'shot' ? 9 : 5) * this.L.r; a.vel.x += ((target.x - from.x) / d) * s; a.vel.y += ((target.y - from.y) / d) * s; } }
-    this.confetti(from, kind === 'shot' ? 10 : 5, t, { colors: ['#7fdc6c', '#c8f07a', '#eef5ec'], speed: kind === 'shot' ? 90 : 55, gravity: 30, life: 420 });
+    this.confetti(from, kind === 'shot' ? 10 : 5, t, { colors: ['#5fe3a1', '#a8f5d0', '#eef1fb'], speed: kind === 'shot' ? 90 : 55, gravity: 30, life: 420 });
     if (kind === 'shot') this.burst({ k: 'pt', x: from.x, y: from.y }, '#ffffff', t, 0.6, 450);
     b.owner = null;
   }
@@ -722,11 +722,11 @@ export class MapScene {
     // Drifting dust + radar sweep from the centre circle
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for (const d of this.dust) { ctx.fillStyle = `rgba(238,245,236,${d.a * 0.3})`; ctx.fillRect(L.pitch.x + d.x * L.pitch.w, L.pitch.y + d.y * L.pitch.h, 1.5, 1.5); }
+    for (const d of this.dust) { ctx.fillStyle = `rgba(238,241,251,${d.a * 0.3})`; ctx.fillRect(L.pitch.x + d.x * L.pitch.w, L.pitch.y + d.y * L.pitch.h, 1.5, 1.5); }
     if (!this.reducedMotion && 'createConicGradient' in ctx) {
       const cx = L.pitch.x + L.pitch.w / 2, cy = L.pitch.y + L.pitch.h / 2; const ang = (t / 4000) * Math.PI * 2;
       const g = (ctx as CanvasRenderingContext2D).createConicGradient(ang, cx, cy);
-      g.addColorStop(0, 'rgba(255,236,190,0.08)'); g.addColorStop(0.08, 'rgba(255,236,190,0)'); g.addColorStop(1, 'rgba(255,236,190,0)');
+      g.addColorStop(0, 'rgba(190,205,255,0.08)'); g.addColorStop(0.08, 'rgba(190,205,255,0)'); g.addColorStop(1, 'rgba(190,205,255,0)');
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, Math.max(L.pitch.w, L.pitch.h) * 0.6, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
@@ -757,11 +757,11 @@ export class MapScene {
     const f0 = G(-1, 0), f1 = G(1, 0);
     ctx.save();
     ctx.beginPath(); ctx.moveTo(f0.x, f0.y); for (const q of back) ctx.lineTo(q.x, q.y); ctx.lineTo(f1.x, f1.y); ctx.closePath();
-    ctx.fillStyle = hit ? `rgba(127,220,108,${0.08 + 0.22 * Math.max(0, 1 - (t - hit.t0) / 700)})` : 'rgba(238,245,236,0.06)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(238,245,236,0.28)'; ctx.lineWidth = 0.6;
+    ctx.fillStyle = hit ? `rgba(95,227,161,${0.08 + 0.22 * Math.max(0, 1 - (t - hit.t0) / 700)})` : 'rgba(238,241,251,0.06)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(238,241,251,0.28)'; ctx.lineWidth = 0.6;
     for (let i = 0; i <= N; i++) { const a = G(-1 + (2 * i) / N, 0); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(back[i].x, back[i].y); ctx.stroke(); }
     for (const d of [0.35, 0.7]) { ctx.beginPath(); for (let i = 0; i <= N; i++) { const s = -1 + (2 * i) / N; const q = G(s * (1 - 0.1 * d), d * (1 + bulge(s))); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); } ctx.stroke(); }
-    ctx.strokeStyle = 'rgba(238,245,236,0.55)'; ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(238,241,251,0.55)'; ctx.lineWidth = 1.2;
     ctx.beginPath(); back.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(f0.x, f0.y); ctx.lineTo(back[0].x, back[0].y); ctx.moveTo(f1.x, f1.y); ctx.lineTo(back[N].x, back[N].y); ctx.stroke();
     // Goal line between the posts, and the posts (the hit one shakes).
@@ -834,7 +834,7 @@ export class MapScene {
     bg.addColorStop(0, '#0e2419'); bg.addColorStop(1, '#0a1a12');
     g.fillStyle = bg; g.fillRect(0, 0, L.w, L.h);
     // Hex-ish dot grid
-    g.fillStyle = 'rgba(238,245,236,0.05)';
+    g.fillStyle = 'rgba(238,241,251,0.05)';
     for (let y = 8; y < L.h; y += 18) for (let x = (Math.floor(y / 18) % 2) * 9 + 4; x < L.w; x += 18) g.fillRect(x, y, 1, 1);
     // Pitch
     const P = L.pitch; const wide = L.mode === 'wide';
@@ -843,13 +843,13 @@ export class MapScene {
     roundRect(g, P.x, P.y, P.w, P.h, 14); g.fillStyle = field; g.fill();
     // Mown stripes
     const stripes = 10;
-    for (let i = 0; i < stripes; i += 2) { g.fillStyle = 'rgba(238,245,236,0.03)'; if (wide) g.fillRect(P.x + (i * P.w) / stripes, P.y, P.w / stripes, P.h); else g.fillRect(P.x, P.y + (i * P.h) / stripes, P.w, P.h / stripes); }
-    g.strokeStyle = 'rgba(238,245,236,0.3)'; g.lineWidth = 1.4;
+    for (let i = 0; i < stripes; i += 2) { g.fillStyle = 'rgba(238,241,251,0.03)'; if (wide) g.fillRect(P.x + (i * P.w) / stripes, P.y, P.w / stripes, P.h); else g.fillRect(P.x, P.y + (i * P.h) / stripes, P.w, P.h / stripes); }
+    g.strokeStyle = 'rgba(238,241,251,0.3)'; g.lineWidth = 1.4;
     roundRect(g, P.x + 6, P.y + 6, P.w - 12, P.h - 12, 10); g.stroke();
     const cx = P.x + P.w / 2, cy = P.y + P.h / 2; const cr = Math.min(P.w, P.h) * 0.13;
     g.beginPath(); if (wide) { g.moveTo(cx, P.y + 6); g.lineTo(cx, P.y + P.h - 6); } else { g.moveTo(P.x + 6, cy); g.lineTo(P.x + P.w - 6, cy); } g.stroke();
     g.beginPath(); g.arc(cx, cy, cr, 0, Math.PI * 2); g.stroke();
-    g.beginPath(); g.arc(cx, cy, 2.5, 0, Math.PI * 2); g.fillStyle = 'rgba(238,245,236,0.55)'; g.fill();
+    g.beginPath(); g.arc(cx, cy, 2.5, 0, Math.PI * 2); g.fillStyle = 'rgba(238,241,251,0.55)'; g.fill();
     // Penalty boxes
     const boxD = (wide ? P.w : P.h) * 0.14, boxW = (wide ? P.h : P.w) * 0.46, sixD = boxD * 0.4, sixW = boxW * 0.45;
     const box = (atStart: boolean, d: number, wv: number) => {
@@ -860,12 +860,12 @@ export class MapScene {
     // Arena panels
     g.lineWidth = 1;
     const panel = (r: { x: number; y: number; w: number; h: number }, title: string, color: string) => {
-      roundRect(g, r.x, r.y, r.w, r.h, 10); g.fillStyle = 'rgba(14,36,25,0.82)'; g.fill(); g.strokeStyle = 'rgba(39,83,65,0.95)'; g.stroke();
+      roundRect(g, r.x, r.y, r.w, r.h, 10); g.fillStyle = 'rgba(14,36,25,0.82)'; g.fill(); g.strokeStyle = 'rgba(46,61,124,0.95)'; g.stroke();
       g.fillStyle = color; g.font = `600 11px ${this.font}`; g.textBaseline = 'top'; g.fillText(title, r.x + 10, r.y + 7);
     };
     panel(L.queue, 'Meciuri la intrare', 'rgba(163,188,173,0.95)');
-    panel(L.active, 'În analiză și dezbatere', 'rgba(255,190,61,0.95)');
-    panel(L.tray, 'Biletul', 'rgba(127,220,108,0.95)');
+    panel(L.active, 'În analiză și dezbatere', 'rgba(255,79,154,0.95)');
+    panel(L.tray, 'Biletul', 'rgba(95,227,161,0.95)');
     return c;
   }
 
@@ -909,7 +909,7 @@ export class MapScene {
       const a = pos.get(ids[i])!, b = pos.get(ids[j])!; const d = Math.hypot(a.x - b.x, a.y - b.y);
       if (d > Math.max(L.pitch.w, L.pitch.h) * 0.2) continue;
       const act = Math.max(this.agents.get(ids[i])!.activity, this.agents.get(ids[j])!.activity);
-      ctx.strokeStyle = `rgba(238,245,236,${0.05 + act * 0.12})`;
+      ctx.strokeStyle = `rgba(238,241,251,${0.05 + act * 0.12})`;
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
     // Live work lines: analysing agents ↔ fixtures in play
@@ -988,7 +988,7 @@ export class MapScene {
         ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = enter;
       }
       // Disc + portrait
-      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fillStyle = '#112b20'; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fillStyle = '#141f47'; ctx.fill();
       const img = this.portrait(f.id, r - 2);
       if (img) ctx.drawImage(img, p.x - (r - 2), p.y - (r - 2), (r - 2) * 2, (r - 2) * 2);
       else { ctx.fillStyle = accent; ctx.font = `700 ${Math.round(r * 0.7)}px ${this.font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(NAME(f.id).slice(0, 2).toUpperCase(), p.x, p.y); }
@@ -1049,7 +1049,7 @@ export class MapScene {
       ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
       for (let i = 1; i < b.trail.length; i++) {
         const a = b.trail[i - 1], c = b.trail[i]; if (a.x === c.x && a.y === c.y) continue; const k = 1 - i / b.trail.length;
-        ctx.strokeStyle = fast ? `rgba(255,226,150,${0.6 * k})` : `rgba(238,245,236,${0.2 * k})`; ctx.lineWidth = (fast ? 6 : 3) * k + 0.5;
+        ctx.strokeStyle = fast ? `rgba(255,226,150,${0.6 * k})` : `rgba(238,241,251,${0.2 * k})`; ctx.lineWidth = (fast ? 6 : 3) * k + 0.5;
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
       }
       if (fast) { const s = this.glowSprite('#ffe9b0'); ctx.globalAlpha = 0.7; ctx.drawImage(s, b.pos.x - 16, b.pos.y - b.z - 16, 32, 32); }
@@ -1145,7 +1145,7 @@ export class MapScene {
       // Active card
       const h = 44;
       const col = f.state === 'DEBATE' ? C.gold : f.state === 'VOTING' ? C.violet : C.cyan;
-      roundRect(ctx, x, y - h / 2, w, h, 8); ctx.fillStyle = 'rgba(17,43,32,0.97)'; ctx.fill();
+      roundRect(ctx, x, y - h / 2, w, h, 8); ctx.fillStyle = 'rgba(20,31,71,0.97)'; ctx.fill();
       ctx.strokeStyle = hexA(flash > 0 ? f.flashColor : col, 0.5 + flash * 0.5 + (f.state === 'DEBATE' ? Math.sin(t / 200) * 0.15 : 0)); ctx.lineWidth = 1.2 + flash * 1.5; ctx.stroke();
       ctx.textAlign = 'left'; ctx.fillStyle = C.text; ctx.font = `700 ${L.mode === 'wide' ? 11 : 10}px ${this.font}`;
       if (L.mode === 'wide') ctx.fillText(fit(ctx, `${teamShort(f.home)} – ${teamShort(f.away)}`, w - 16), x + 8, y - 8);
