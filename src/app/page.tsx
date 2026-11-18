@@ -217,6 +217,24 @@ async function agentCards(): Promise<AgentCard[]> {
 
 const CUSTOM_STATUS: Record<string, string> = { QUEUED: 'în coadă', RUNNING: 'live', WAITING: 'așteaptă', PAUSED: 'pauză', COMPLETED: 'gata', INCOMPLETE: 'incomplet', NO_BET: 'NO BET', FAILED: 'eșuat' };
 
+/** 16.11: the Stake offer comes from the owner's laptop; when it slept, every ticket ended NO BET for „cota prea veche”.
+ * Warn before sending tickets once the newest import is older than 12 hours (prices expire at 24). */
+async function StaleOfferNotice() {
+  const row = await one<{ at: string | Date | null }>('SELECT max(imported_at) AS at FROM imported_odds').catch(() => null);
+  const at = row?.at ? Date.parse(new Date(row.at).toISOString()) : NaN;
+  const hours = Number.isFinite(at) ? (Date.now() - at) / 3_600_000 : Infinity;
+  if (hours < 12) return null;
+  const expired = hours >= config.limits.importedOddsMaxAgeMinutes / 60;
+  return (
+    <div role="alert" className={`rounded-xl border p-3 text-sm ${expired ? 'border-rose/60 bg-rose/10 text-rose' : 'border-gold/60 bg-gold/10 text-gold'}`}>
+      <strong>{expired ? 'Oferta Stake a expirat' : 'Oferta Stake e veche'}</strong>
+      {' '}— ultimul import acum {Number.isFinite(hours) ? `${Math.floor(hours)} ore` : 'mult timp'}.
+      {expired ? ' Agenții vor respinge selecțiile pentru „cota prea veche”.' : ' Cotele expiră la 24 de ore.'}
+      {' '}Pornește importul pe Mac: <code className="text-xs">launchctl kickstart -k gui/$(id -u)/ro.noventra.primul11-import</code>
+    </div>
+  );
+}
+
 async function CustomTab({ userId, job, limit }: { userId: string; job?: string; limit: number }) {
   if (job && UUID.test(job)) {
     const meta = await jobMeta(userId, job);
@@ -234,6 +252,7 @@ async function CustomTab({ userId, job, limit }: { userId: string; job?: string;
         <h1 className="page-title">Bilet custom</h1>
         <p className="custom-extra mt-1 max-w-2xl text-sm text-muted">Alege cota, meciurile, ligile și agenții, apoi câte bilete vrei să creeze echipa. Am pregătit o echipă de 5 agenți; poți ajusta toate setările înainte de pornire. Maximum {limit} bilete custom pe zi.</p>
       </div>
+      <StaleOfferNotice />
       <CustomForm credits={config.creditsEnabled && account && !account.founder ? account.balance : null} agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
       {recent.length > 0 && (
         <section className="custom-extra">
@@ -268,6 +287,7 @@ async function OddsXMatchTab({ userId, limit }: { userId: string; limit: number 
         <h1 className="page-title">oddsxmatch</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">Tu alegi meciurile sau un campionat întreg și cota dorită. Agenții aleg pronosticul de la fiecare meci, iar rezultatul este un bilet obișnuit. Se numără la cele {limit} bilete custom pe zi.</p>
       </div>
+      <StaleOfferNotice />
       <OddsXMatch credits={config.creditsEnabled && account && !account.founder ? account.balance : null} agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
     </div>
   );
