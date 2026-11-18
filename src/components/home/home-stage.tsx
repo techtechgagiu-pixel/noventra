@@ -55,19 +55,19 @@ export function HomeStage({ events, title, finishedAt, target }: { events: Nexus
   }, [upTo, all, shown?.seq]);
 
   const meta = shown?.agent ? AGENT_META[shown.agent] : null;
-  const tone = shown?.kind === 'objection' ? '#ffe36e' : shown?.kind === 'brain' ? '#ffe36e' : shown?.kind === 'ticket' ? '#7fdc6c' : meta?.accent ?? '#ffbe3d';
+  const tone = shown?.kind === 'objection' ? '#ffe36e' : shown?.kind === 'brain' ? '#ffe36e' : shown?.kind === 'ticket' ? '#5fe3a1' : meta?.accent ?? '#ff4f9a';
 
   const words = (
     <h1 className="font-display text-[clamp(2.4rem,9vw,3.6rem)] lg:text-[clamp(2.6rem,3.9vw,3.9rem)] font-bold leading-[0.95] tracking-[-0.03em]" aria-label="Analizează. Dezbate. Decide.">
       {WORDS.map((w, i) => (
-        <span key={w} className="block transition-[color,opacity] duration-700" style={{ color: i === phase ? '#eef5ec' : 'rgba(238,242,251,0.22)' }}>{w}.</span>
+        <span key={w} className="block transition-[color,opacity] duration-700" style={{ color: i === phase ? '#eef1fb' : 'rgba(238,242,251,0.22)' }}>{w}.</span>
       ))}
     </h1>
   );
   const lower = (
     <div className="min-h-[112px]" aria-live="polite">
       {shown && (
-        <div key={shown.seq} className="animate-[lowerthird_.5s_cubic-bezier(.2,.8,.2,1)] flex w-full max-w-xl items-stretch overflow-hidden rounded-xl border border-white/10 bg-[#0b1d15]/92 shadow-2xl backdrop-blur">
+        <div key={shown.seq} className="animate-[lowerthird_.5s_cubic-bezier(.2,.8,.2,1)] flex w-full max-w-xl items-stretch overflow-hidden rounded-xl border border-white/10 bg-[#0b1230]/92 shadow-2xl backdrop-blur">
           <div className="w-1.5 shrink-0" style={{ background: tone }} />
           {meta ? <img src={meta.thumb} alt="" className="h-auto w-20 shrink-0 object-cover" /> : <img src="/logo.svg" alt="" className="h-20 w-20 shrink-0 p-3" />}
           <div className="min-w-0 px-4 py-3">

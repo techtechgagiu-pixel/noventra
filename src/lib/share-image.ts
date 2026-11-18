@@ -5,7 +5,7 @@
 export type ShareLeg = { home: string; away: string; league: string; kickoff: string; label: string; odds: number; outcome: string; homeScore: number | null; awayScore: number | null };
 export type ShareTicket = { title: string; createdAt: string; actualOdds: number | null; outcomeStatus: string; legs: ShareLeg[] };
 
-const C = { ink: '#0b1d15', stripe: '#0f261c', panel: '#112b20', line: '#275341', amber: '#ffbe3d', green: '#7fdc6c', rose: '#ff6150', text: '#eef5ec', muted: '#a3bcad' };
+const C = { ink: '#0b1230', stripe: '#0f261c', panel: '#141f47', line: '#2e3d7c', amber: '#ff4f9a', green: '#5fe3a1', rose: '#ff6150', text: '#eef1fb', muted: '#a9b3d6' };
 const W = 1080;
 const PAD = 72;
 const ROW = 132;
@@ -74,7 +74,7 @@ export async function renderShareImage(t: ShareTicket): Promise<Blob> {
   const hits = t.legs.filter((l) => l.outcome === 'WON').length;
   ctx.font = `800 40px ${board}`;
   const bw = ctx.measureText(banner).width + 56;
-  ctx.fillStyle = won ? 'rgba(127,220,108,.16)' : lost ? 'rgba(255,97,80,.16)' : 'rgba(255,190,61,.14)';
+  ctx.fillStyle = won ? 'rgba(95,227,161,.16)' : lost ? 'rgba(255,97,80,.16)' : 'rgba(255,79,154,.14)';
   ctx.strokeStyle = accent; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(PAD, y, bw, 64, 14); ctx.fill(); ctx.stroke();
   ctx.fillStyle = accent; ctx.fillText(banner, PAD + 28, y + 33);
@@ -90,7 +90,7 @@ export async function renderShareImage(t: ShareTicket): Promise<Blob> {
   ctx.textAlign = 'right';
   ctx.font = `600 26px ${body}`; ctx.fillText('COTA TOTALĂ', W - PAD, y - 4);
   ctx.font = `800 150px ${board}`; ctx.fillStyle = C.amber;
-  ctx.shadowColor = 'rgba(255,190,61,.35)'; ctx.shadowBlur = 30;
+  ctx.shadowColor = 'rgba(255,79,154,.35)'; ctx.shadowBlur = 30;
   ctx.fillText(fmtOdds(t.actualOdds), W - PAD, y + 120);
   ctx.shadowBlur = 0; ctx.textAlign = 'left';
 
@@ -98,16 +98,16 @@ export async function renderShareImage(t: ShareTicket): Promise<Blob> {
   y += 170;
   const shown = t.legs.slice(0, MAX_LEGS);
   const slipH = shown.length * ROW + (t.legs.length > MAX_LEGS ? 64 : 0) + 24;
-  ctx.fillStyle = 'rgba(17,43,32,.92)'; ctx.strokeStyle = won ? 'rgba(127,220,108,.7)' : C.line; ctx.lineWidth = 2;
+  ctx.fillStyle = 'rgba(20,31,71,.92)'; ctx.strokeStyle = won ? 'rgba(95,227,161,.7)' : C.line; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(PAD - 16, y, W - 2 * PAD + 32, slipH, 22); ctx.fill(); ctx.stroke();
-  ctx.setLineDash([10, 10]); ctx.strokeStyle = 'rgba(238,245,236,.16)';
+  ctx.setLineDash([10, 10]); ctx.strokeStyle = 'rgba(238,241,251,.16)';
   ctx.beginPath(); ctx.moveTo(PAD + 4, y + 18); ctx.lineTo(PAD + 4, y + slipH - 18); ctx.stroke(); ctx.setLineDash([]);
 
   let ry = y + 12;
   shown.forEach((l, i) => {
     const left = PAD + 32;
     const right = W - PAD - 8;
-    if (i > 0) { ctx.strokeStyle = 'rgba(238,245,236,.08)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(left, ry); ctx.lineTo(right, ry); ctx.stroke(); }
+    if (i > 0) { ctx.strokeStyle = 'rgba(238,241,251,.08)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(left, ry); ctx.lineTo(right, ry); ctx.stroke(); }
     const mark = l.outcome === 'WON' ? C.green : l.outcome === 'LOST' ? C.rose : C.muted;
     ctx.font = `400 22px ${body}`; ctx.fillStyle = C.muted;
     ctx.fillText(fit(ctx, `${l.league} · ${fmtWhen(l.kickoff)}`, 640), left, ry + 38);
