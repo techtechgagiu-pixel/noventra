@@ -7,6 +7,7 @@ import { AGENT_META, api } from '@/lib/format';
 import { CUSTOM_LIMIT_PER_DAY, MARKET_FAMILIES, type MarketFamilyId, MAX_CUSTOM_AGENTS, customPolicy, customThreshold } from '@/lib/slots';
 import { LeaguePicker, type LeagueOption } from '@/components/matches/league-picker';
 import type { MatchRow } from '@/lib/catalog';
+import { bestLegs, legChance, pct, type CalibrationBand } from '@/lib/real-chance';
 
 export type AgentCard = { id: string; name: string; title: string; specialty: string; risk: number; maxOdds: number; minProbability: number; model: string | null; record: string | null };
 type Step = 'basics' | 'leagues' | 'interval' | 'agents' | 'finish';
@@ -67,7 +68,7 @@ function dayHours(k: number, now = new Date()) {
   return { from: Math.max(20 / 60, hrs(startUtc)), to: Math.max(hrs(startUtc + 86_400_000), 20 / 60 + 1), label: new Date(startUtc + 12 * 3600_000).toLocaleDateString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Bucharest' }) };
 }
 
-export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_PER_DAY, limit = CUSTOM_LIMIT_PER_DAY, credits = null }: { agents: AgentCard[]; topAgentIds?: string[]; remaining?: number; limit?: number; credits?: number | null }) {
+export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_PER_DAY, limit = CUSTOM_LIMIT_PER_DAY, credits = null, bands = [] }: { agents: AgentCard[]; topAgentIds?: string[]; remaining?: number; limit?: number; credits?: number | null; bands?: CalibrationBand[] }) {
   const router = useRouter();
   const [count, setCount] = useState(1);
   const inFlight = useRef(false);
@@ -191,6 +192,19 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
           <p className="text-xs font-semibold text-muted">Media de cotă pe meci</p>
           <p className={`mt-2 font-display text-[2.6rem] font-bold leading-none tabular ${tooLow || tooHigh ? 'text-rose' : risk.c}`}>≈ {Number.isFinite(perLeg) ? perLeg.toFixed(2) : '—'}</p>
           <p className="mt-1 text-xs text-muted">{tooLow ? 'Prea mică — pune mai puține meciuri.' : tooHigh ? 'Prea mare — pune mai multe meciuri.' : <>Pentru cota {target} din {legs} {legs === 1 ? 'meci' : 'meciuri'}. Cotele selecțiilor pot diferi.</>}</p>
+          {!tooLow && !tooHigh && bands.some((b) => b.n > 0) && (() => {
+            // Șansa reală (18.11): measured on every settled leg, not on the bookmaker's price.
+            const chance = Math.pow(legChance(perLeg, bands), legs), best = bestLegs(target, bands);
+            const better = best && best.legs !== legs && best.chance > chance * 1.15;
+            return (
+              <div className="mt-3 border-t border-line pt-3" aria-live="polite">
+                <p className="text-xs font-semibold text-muted">Șansa reală estimată</p>
+                <p className="mt-1 text-sm"><strong className="font-display text-2xl tabular">{pct(chance)}</strong> <span className="text-xs text-muted">· cota {target} plătește ca pentru {pct(1 / target)}</span></p>
+                {better && <button type="button" onClick={() => setLegs(best.legs)} className="mt-2 text-left text-xs text-cyan underline-offset-2 hover:underline">Cu {best.legs} {best.legs === 1 ? 'meci' : 'meciuri'} (≈ {best.perLeg.toFixed(2)} pe meci) șansa urcă la {pct(best.chance)}. Folosește {best.legs}.</button>}
+                <p className="mt-1 text-[11px] text-muted">Din rezultatele tuturor biletelor decontate, pe intervale de cotă.</p>
+              </div>
+            );
+          })()}
 
         </div>
       </div>

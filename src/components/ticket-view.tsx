@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { AlertTriangle, Check, ClipboardCopy, Download, History, ListChecks, PlayCircle, Share2, Sparkles } from 'lucide-react';
 import { shareTicketImage } from '@/lib/share-image';
+import { pct, ticketChance, type CalibrationBand } from '@/lib/real-chance';
 import { AGENT_META, OUTCOME_RO, fmtDateTime, odds } from '@/lib/format';
 import { superbetPick } from '@/lib/superbet-format';
 
@@ -48,7 +49,7 @@ export function superbetText(t: TicketData) {
   return lines.join('\n');
 }
 
-export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
+export function TicketView({ t, fresh, bands = [] }: { t: TicketData; fresh: boolean; bands?: CalibrationBand[] }) {
   const [copied, setCopied] = useState(false);
   const [copiedSb, setCopiedSb] = useState(false);
   const [digest, setDigest] = useState(t.summary.digest ?? null);
@@ -98,7 +99,12 @@ export function TicketView({ t, fresh }: { t: TicketData; fresh: boolean }) {
           </div>
           <div className="flex items-end gap-8 text-right">
             {!t.summary.review && <div><p className="text-xs text-muted">Țintă</p><p className="font-display text-3xl font-bold tabular text-muted">{t.target}</p></div>}
-            <div><p className="text-xs text-muted">{t.summary.review ? 'Cota biletului tău' : 'Cotă reală'}</p><p className={`board-num text-[4rem] ${completed ? '' : 'opacity-40'}`}>{completed ? odds(t.actualOdds) : '—'}</p></div>
+            <div><p className="text-xs text-muted">{t.summary.review ? 'Cota biletului tău' : 'Cotă reală'}</p><p className={`board-num text-[4rem] ${completed ? '' : 'opacity-40'}`}>{completed ? odds(t.actualOdds) : '—'}</p>
+              {completed && t.selections.length > 0 && bands.some((b) => b.n > 0) && (
+                // Șansa reală (18.11): measured on every settled leg in the same price band, not the bookmaker's price.
+                <p className="mt-1 text-xs text-muted" title="Din rezultatele tuturor biletelor decontate, pe intervale de cotă">Șansă reală estimată <strong className="text-text tabular">{pct(ticketChance(t.selections.map((s) => Number(s.odds)), bands))}</strong></p>
+              )}
+            </div>
           </div>
         </div>
         {completed || partial.length > 0 ? (
