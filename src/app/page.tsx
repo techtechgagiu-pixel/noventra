@@ -221,8 +221,11 @@ const CUSTOM_STATUS: Record<string, string> = { QUEUED: 'în coadă', RUNNING: '
 /** 16.11: the Stake offer comes from the owner's laptop; when it slept, every ticket ended NO BET for „cota prea veche”.
  * Warn before sending tickets once the newest import is older than 12 hours (prices expire at 24). */
 async function StaleOfferNotice() {
-  const row = await one<{ at: string | Date | null }>('SELECT max(imported_at) AS at FROM imported_odds').catch(() => null);
-  const at = row?.at ? Date.parse(new Date(row.at).toISOString()) : NaN;
+  // Read like any other timestamp column (decoded to a Date); a failed read hides the notice instead of crying wolf.
+  const row = await one<{ imported_at: string | Date | null }>('SELECT imported_at FROM imported_odds ORDER BY imported_at DESC LIMIT 1')
+    .catch((error) => { console.warn(JSON.stringify({ event: 'stale_offer_check_failed', message: (error as Error).message?.slice(0, 200) })); return undefined; });
+  if (row === undefined) return null;
+  const at = row?.imported_at ? new Date(row.imported_at).getTime() : NaN;
   const hours = Number.isFinite(at) ? (Date.now() - at) / 3_600_000 : Infinity;
   if (hours < 12) return null;
   const expired = hours >= config.limits.importedOddsMaxAgeMinutes / 60;
