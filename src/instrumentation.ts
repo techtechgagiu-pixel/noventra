@@ -21,3 +21,18 @@ export async function register() {
     void refreshStoredCatalog().catch(()=>console.warn(JSON.stringify({event:'catalog_refresh_failed'})));
   }
 }
+
+/** 18.11: keep the real cause of a failed server render (the browser only gets a digest). Best effort, never throws. */
+export async function onRequestError(error: unknown, request: { path?: string }, context: { routePath?: string; routeType?: string; renderSource?: string }) {
+  try {
+    const e = error as Error & { digest?: string };
+    console.error(JSON.stringify({ event: 'request_error', digest: e?.digest, path: request?.path, message: e?.message?.slice(0, 300) }));
+    if (!process.env.BETMIND_RUNTIME?.startsWith('cloudflare')) return;
+    const { query } = await import('./lib/db');
+    await query('INSERT INTO app_errors (digest, path, route, kind, message, stack) VALUES ($1,$2,$3,$4,$5,$6)', [
+      String(e?.digest ?? ''), String(request?.path ?? '').slice(0, 300), String(context?.routePath ?? ''), `${context?.routeType ?? ''}/${context?.renderSource ?? ''}`,
+      `${e?.name ?? 'Error'}: ${e?.message ?? String(error)}`.slice(0, 1000), String(e?.stack ?? '').slice(0, 1500),
+    ]);
+    if (Math.random() < 0.05) await query("DELETE FROM app_errors WHERE at < strftime('%Y-%m-%dT%H:%M:%fZ','now','-7 days')");
+  } catch { /* logging must never break a request */ }
+}

@@ -30,6 +30,7 @@ import { automationHealth } from '@/lib/automation';
 import { agentStats, agentRanking, currentMonth } from '@/lib/agent-stats';
 import { TabLink } from '@/components/tab-link';
 import { TabLoading } from '@/components/tab-loading';
+import { TabBoundary } from '@/components/tab-boundary';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
@@ -68,7 +69,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
   // Perf 10.11: both header reads go out together (they used to wait for each other on every tab change).
   const [running, creditsOut] = await Promise.all([
     many<{ id: string; slot: string; status: string; created_at: Date }>(
-      "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id]),
+      "SELECT id, slot, status, created_at FROM ticket_generation_jobs WHERE user_id=$1 AND status IN ('QUEUED','RUNNING','WAITING','PAUSED') ORDER BY created_at DESC", [user.id])
+      // 18.11: the badge is decoration; a slow read must not take the whole page down.
+      .catch((error) => { console.warn(JSON.stringify({ event: 'running_jobs_read_failed', message: (error as Error).message?.slice(0, 200) })); return [] as Array<{ id: string; slot: string; status: string; created_at: Date }>; }),
     // When the OpenRouter account runs out of credits the agents fall back to slow free models: say so plainly.
     one<{ n: number }>(`SELECT count(*) AS n FROM model_health WHERE model_key='openrouter:*' AND ${timeCompare('exhausted_until', '>', SQL_NOW())}`).catch(() => null),
   ]);
@@ -118,7 +121,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {user.role === 'admin' ? 'Creditele OpenRouter s-au terminat: agenții lucrează acum pe modelele gratuite de rezervă (Gemini, Groq) — merge, dar mai încet. Încarcă credite pe openrouter.ai → Credits și modelele plătite revin singure în cel mult 30 de minute.' : 'Analizele merg mai încet acum; biletele în lucru se completează singure, poți închide pagina.'}
       </p></div>}
       <main className="app-main mx-auto max-w-6xl px-4 pb-24 pt-8">
-        <Suspense key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.sport,sp.fresh].join(':')} fallback={<TabLoading tab={tab} />}>
+        <TabBoundary key={[tab,sp.ticket,sp.job,sp.replay,sp.luna,sp.scope,sp.sport,sp.fresh].join(':')}>
+        <Suspense fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
         {tab === 'custom' && <CustomTab limit={await customLimitForUser(user)} userId={user.id} job={sp.job} />}
         {tab === 'oddsxmatch' && <OddsXMatchTab limit={await customLimitForUser(user)} userId={user.id} />}
@@ -127,6 +131,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} sport={sp.sport} />}
         {tab === 'istoric' && <IstoricTab userId={user.id} ticket={sp.ticket} fresh={sp.fresh === '1'} admin={user.role === 'admin'} canRemove={canRemoveTickets(user)} />}
         </Suspense>
+        </TabBoundary>
       </main>
       <footer className="app-footer mx-auto max-w-6xl space-y-1 px-4 pb-28 md:pb-10"><p>Rezultatele și scorurile live de pe bilete se actualizează automat la 10 minute.</p><p>18+ · Analizele nu garantează rezultatele și nu plasează pariuri. Joacă responsabil.</p></footer>
       <FeedbackButton />

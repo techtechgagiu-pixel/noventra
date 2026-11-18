@@ -75,7 +75,7 @@ export function TicketArchive({ tickets, initialFilter = 'all', title = 'Bilete 
             const shown = t.selections.length ? t.selections : partial.map((s) => ({ match: s.snapshot.match, label: s.market_label, odds: s.odds, outcome: s.outcome, kickoff: s.snapshot.kickoff as string | null, status: s.fixture_status ?? null, home_score: s.home_score, away_score: s.away_score, clock: s.live_clock ?? null, score_at: s.score_at ?? null }));
             return (
             <li key={t.id} className="min-w-0">
-              <Link href={`/?tab=istoric&ticket=${t.id}`} className="slip" data-result={result ?? undefined}>
+              <Link prefetch={false} href={`/?tab=istoric&ticket=${t.id}`} className="slip" data-result={result ?? undefined}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0"><p className="font-display text-xl font-bold leading-tight">{SLOTS_UI[t.slot] ?? (t.slot.startsWith('CUSTOM_') ? `CUSTOM — COTĂ ${t.target_odds}` : t.slot.startsWith('REVIEW_') ? `BILETUL TĂU — COTĂ ${t.target_odds}` : t.slot)}</p><p className="mt-0.5 text-xs text-muted">{t.ticket_no ? <span className="mr-1.5 font-semibold text-cyan tabular">#{t.ticket_no}</span> : null}{fmtDateTime(t.created_at)}</p><div className="mt-1.5"><CreatorBadge c={t.creator} small /></div></div>
                   <div className="shrink-0 text-right"><p className={`board-num text-[2.6rem] ${t.generation_status === 'COMPLETED' ? '' : 'opacity-40'}`}>{t.generation_status === 'COMPLETED' ? odds(t.actual_odds) : '—'}</p><p className="mt-1 text-xs text-muted">țintă {t.target_odds}</p></div>
