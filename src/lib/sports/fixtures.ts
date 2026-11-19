@@ -64,9 +64,17 @@ export const activeProvider = () => g.__bmFixtureOverride ?? liveProvider;
 export async function persistFixtures(fixtures: Fixture[]) {
   const writes:import('../d1/client').Statement[]=[];
   const write=isD1()?async(text:string,params:unknown[])=>{writes.push({text,params});}:query;
+  // 19.11: on D1 (Render writes through the bridge) every statement travels over the network even when the row
+  // is unchanged: the hourly catalog sent ~10 MB/h and used up Render's bandwidth. Read the current hashes first
+  // (one small query per 90 fixtures) and send only what changed. Same result as the SQL guards below.
+  const known=isD1()?await knownHashes(fixtures.map((f)=>f.id)):null;
   for (const f of fixtures) {
     const contentHash = hash([f.home, f.away, f.kickoff, f.status, f.homeScore, f.awayScore, f.clock ?? null]);
-    await write(
+    const oddsHash = f.odds ? hash([f.odds.bookmaker, f.odds.markets]) : null;
+    const fixtureSame = known?.fixtures.get(f.id) === contentHash;
+    const oddsSame = !f.odds || known?.odds.get(f.id) === oddsHash;
+    if (fixtureSame && oddsSame) continue;
+    if (!fixtureSame) await write(
       `INSERT INTO fixtures (id, provider, provider_id, league_id, home_team, away_team, home_team_id, away_team_id, home_logo, away_logo, kickoff_utc, status, home_score, away_score, content_hash, source_observed_at, live_clock)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        ON CONFLICT (id) DO UPDATE SET home_team=EXCLUDED.home_team, away_team=EXCLUDED.away_team, kickoff_utc=EXCLUDED.kickoff_utc,
@@ -79,8 +87,7 @@ export async function persistFixtures(fixtures: Fixture[]) {
     );
     // The current prices of a fixture are its LAST saved snapshot (by id), not the one observed most recently:
     // merged prices keep the time their main source observed them (The Odds API cache, an imported export).
-    if (f.odds) {
-      const oddsHash = hash([f.odds.bookmaker, f.odds.markets]);
+    if (f.odds && !oddsSame) {
       await write(
         `INSERT INTO odds_snapshots (fixture_id, bookmaker, source, markets, observed_at, provider_updated_at, content_hash)
          SELECT $1,$2,$3,$4,$5,$6,$7
@@ -90,6 +97,22 @@ export async function persistFixtures(fixtures: Fixture[]) {
     }
   }
   for(let i=0;i<writes.length;i+=20)await atomic(writes.slice(i,i+20));
+}
+
+/** Current fixture hash and latest odds hash per fixture id (D1 only; ids in chunks under D1's 100-parameter limit). */
+async function knownHashes(ids: string[]) {
+  const fixtures = new Map<string, string>(), odds = new Map<string, string>();
+  const unique = [...new Set(ids)];
+  for (let i = 0; i < unique.length; i += 90) {
+    const chunk = unique.slice(i, i + 90), marks = chunk.map((_, k) => `$${k + 1}`).join(',');
+    const [f, o] = await Promise.all([
+      many<{ id: string; content_hash: string | null }>(`SELECT id, content_hash FROM fixtures WHERE id IN (${marks})`, chunk),
+      many<{ fixture_id: string; content_hash: string | null }>(`SELECT fixture_id, content_hash FROM odds_snapshots WHERE id IN (SELECT max(id) FROM odds_snapshots WHERE fixture_id IN (${marks}) GROUP BY fixture_id)`, chunk),
+    ]);
+    for (const r of f) if (r.content_hash) fixtures.set(r.id, r.content_hash);
+    for (const r of o) if (r.content_hash) odds.set(r.fixture_id, r.content_hash);
+  }
+  return { fixtures, odds };
 }
 
 /** Stored Counter-Strike fixtures of the window, each with its latest saved prices. */
