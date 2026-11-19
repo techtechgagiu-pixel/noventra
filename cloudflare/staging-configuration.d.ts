@@ -11,6 +11,12 @@ interface __BaseEnv_Primul11Env {
 	ANALYSIS_RUNNER_URL: string;
 	AUTH_SECRET: string;
 	APP_BASE_URL: string;
+	// 19.11: Workers Rate Limiting bindings declared in wrangler.production.jsonc (`ratelimits`), read by src/lib/rate-limit.ts.
+	RL_LOGIN_ALL: RateLimit;
+	RL_LOGIN: RateLimit;
+	RL_ASSISTANT: RateLimit;
+	RL_CUSTOM: RateLimit;
+	RL_CHECKOUT: RateLimit;
 	SETTLEMENT: Workflow<Parameters<import("./staging-worker").SettlementWorkflow['run']>[0]['payload']>;
 }
 declare namespace Cloudflare {

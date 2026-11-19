@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { fail, json, rateLimited, requireUser, sameOrigin } from '@/lib/http';
+import { fail, json, requireUser, sameOrigin } from '@/lib/http';
+import { limitExceeded } from '@/lib/rate-limit';
 import { EXTRA_MAX, EXTRA_MIN, extraCents, parseExtra, planById } from '@/lib/credits';
 import { config } from '@/lib/config';
 
@@ -10,7 +11,7 @@ export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return fail('Cerere respinsă (origine necunoscută).', 403);
   const user = await requireUser(req);
   if (user instanceof NextResponse) return user;
-  if (rateLimited(`checkout:${user.id}`, 5, 60_000)) return fail('Prea multe cereri. Așteaptă un minut.', 429);
+  if (await limitExceeded('RL_CHECKOUT', `card:${user.id}`)) return fail('Prea multe cereri. Așteaptă un minut.', 429);
   if (!config.stripeSecretKey) return fail('Plata nu este configurată încă.', 503);
   const body = await req.json().catch(() => null) as { plan?: string; extra?: number } | null;
   const extra = body?.extra !== undefined ? parseExtra(body.extra) : null;

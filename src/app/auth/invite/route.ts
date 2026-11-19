@@ -2,14 +2,15 @@ import { createHash } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE, cookieBase, loginDestination, loginWithCode } from '@/lib/auth';
 import { config } from '@/lib/config';
-import { rateLimited, sameOrigin } from '@/lib/http';
+import { sameOrigin } from '@/lib/http';
+import { limitExceeded } from '@/lib/rate-limit';
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return new NextResponse('Origine respinsă.', { status: 403 });
   const address = req.headers.get('cf-connecting-ip') || req.headers.get('x-forwarded-for') || 'unknown';
   const key = createHash('sha256').update(address).digest('hex');
   let intent: unknown = null;
   const back = (error: string) => NextResponse.redirect(`${config.appBaseUrl}/login?error=${error}&cod=1${intent === 'custom' ? '&next=custom' : ''}`, 303);
-  if (rateLimited('code-login:all', 100, 60_000) || rateLimited(`code-login:${key}`, 10, 60_000)) return back('rate');
+  if (await limitExceeded('RL_LOGIN_ALL', 'all') || await limitExceeded('RL_LOGIN', key)) return back('rate');
   if (Number(req.headers.get('content-length')) > 1024) return back('invalid');
   const form = await req.formData().catch(() => null);
   intent = form?.get('next');
