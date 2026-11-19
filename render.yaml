@@ -1,4 +1,6 @@
-# Render Blueprint — one free Node web service. Durable data lives in Neon, never on Render's disk.
+# Render Blueprint — one free Node web service: the analysis runner („betmind-nexus”) only.
+# The site runs on Cloudflare Workers; durable data lives in Cloudflare D1. Render reads and writes D1 through the
+# signed bridge of the production Worker (BETMIND_DATABASE=d1-http), never on Render's disk.
 services:
   - type: web
     name: betmind-nexus
@@ -17,6 +19,20 @@ services:
         value: https://primul11.noventra.ro
       - key: APP_TIMEZONE
         value: Europe/Bucharest
+      - key: BETMIND_DATABASE
+        value: d1-http
+      - key: BETMIND_RUNNER_ONLY
+        value: "1"
+      - key: BETMIND_MAINTENANCE
+        value: "0"
+      - key: BETMIND_DISABLE_WORKER
+        value: "0"
+      # Production Worker URL and the same server-only secret as the Worker: set in the Render dashboard, never here.
+      - key: D1_BRIDGE_URL
+        sync: false
+      - key: D1_BRIDGE_SECRET
+        sync: false
+      # Legacy Postgres (Neon) connection, unused while BETMIND_DATABASE=d1-http.
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_DATABASE_URL

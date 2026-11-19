@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { fail, json, rateLimited, requireUser, sameOrigin } from '@/lib/http';
+import { fail, json, requireUser, sameOrigin } from '@/lib/http';
+import { limitExceeded } from '@/lib/rate-limit';
 import { SlotError, createCustomJob, customJobs, customBatchJobs } from '@/lib/jobs/service';
 import { customLimitForUser, maxLegsForUser } from '@/lib/credits';
 
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return fail('Cerere respinsă (origine necunoscută).', 403);
   const user = await requireUser(req);
   if (user instanceof NextResponse) return user;
-  if (rateLimited(`custom:${user.id}`, 6, 60_000)) return fail('Prea multe cereri. Așteaptă un minut.', 429);
+  if (await limitExceeded('RL_CUSTOM', user.id)) return fail('Prea multe cereri. Așteaptă un minut.', 429);
   const body = await req.json().catch(() => null);
   try {
     const maxLegs = await maxLegsForUser(user);

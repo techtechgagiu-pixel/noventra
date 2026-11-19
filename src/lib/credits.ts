@@ -26,6 +26,18 @@ export const EXTRA_PACKS = [30, 60, 120, 300];
 export const parseExtra = (n: unknown) => { const v = Number(n); return Number.isInteger(v) && v >= EXTRA_MIN && v <= EXTRA_MAX ? v : null; };
 export const extraCents = (credits: number) => credits * SINGLE_CREDIT_CENTS;
 
+/** Credits a paid Stripe Checkout session buys, or null when the paid amount does not match our own price for it.
+ * The numbers always come from our tables (plan or single-credit price), never from what the client sent. */
+export function paidSessionCredits(s: { amount_total?: number; currency?: string; metadata?: { plan?: string; credits?: string } }): number | null {
+  if (s.currency !== 'eur') return null;
+  if (s.metadata?.plan === 'extra') {
+    const n = parseExtra(s.metadata.credits);
+    return n !== null && s.amount_total === extraCents(n) ? n : null;
+  }
+  const plan = planById(s.metadata?.plan);
+  return plan && s.amount_total === plan.priceCents ? plan.credits : null;
+}
+
 export type Account = { balance: number; founder: boolean };
 
 /** Existing accounts were marked founders by the migration; any later account starts with the free credits. */

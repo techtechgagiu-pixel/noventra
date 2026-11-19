@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { config } from '@/lib/config';
 import { verifySignature } from '@/lib/stripe-signature';
-import { addPurchasedCredits, extraCents, parseExtra, planById } from '@/lib/credits';
+import { addPurchasedCredits, paidSessionCredits } from '@/lib/credits';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,15 +12,9 @@ export async function POST(req: NextRequest) {
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const s = event.data.object;
     if (s.payment_status === 'paid' && s.metadata?.userId) {
-      if (s.metadata.plan === 'extra') {
-        // Extra credits: the count must match what was actually paid at the single-credit price.
-        const n = parseExtra(s.metadata.credits);
-        if (n !== null && s.currency === 'eur' && s.amount_total === extraCents(n)) await addPurchasedCredits(s.metadata.userId, n, s.id);
-      } else {
-        // Plans: the credits come from our own plan table, never from client-sent numbers.
-        const plan = planById(s.metadata.plan);
-        if (plan) await addPurchasedCredits(s.metadata.userId, plan.credits, s.id);
-      }
+      // Plans and extra credits: added only when the paid sum and currency match our own price (an altered session buys nothing).
+      const credits = paidSessionCredits(s);
+      if (credits !== null) await addPurchasedCredits(s.metadata.userId, credits, s.id);
     }
   }
   return new Response('ok');
