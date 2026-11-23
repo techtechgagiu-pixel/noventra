@@ -1,6 +1,7 @@
 import { one, query } from '../db';
 import { settlePending } from '../settlement';
 import { autoContinueJobs } from './auto-continue';
+import { runScheduledCustom } from '../jobs/scheduled-custom';
 
 /** A Free Render service takes 25-65 s to boot; a request abandoned before the boot finishes leaves it asleep,
  * so the wake has to outwait the cold start. */
@@ -29,8 +30,10 @@ export async function scheduledMaintenance(runner:string|undefined,{wake=true}:{
   // alone do not prevent a Free web service from spinning down.
   // Paused or incomplete tickets continue on their own, even with nobody on the site.
   const auto=await autoContinueJobs().catch(()=>({resumed:0,completed:0}));
+  // Standing custom orders (23.11), queued before the count so the same pass wakes the runner for them.
+  const scheduled=await runScheduledCustom().catch((error)=>{console.warn(JSON.stringify({event:'scheduled_custom_failed',message:(error as Error).message?.slice(0,200)}));return [];});
   const queued=await one<{n:number}>("SELECT count(*) AS n FROM ticket_generation_jobs WHERE status IN ('QUEUED','WAITING','RUNNING')");
   const woke=!queued?.n?{status:'idle'}:wake?await wakeAnalysisRunner(runner):{status:'deferred'};
-  return {queued:queued?.n??0,wake:woke,auto};
+  return {queued:queued?.n??0,wake:woke,auto,scheduled};
 }
 export const scheduledSettlementPage=()=>settlePending();
