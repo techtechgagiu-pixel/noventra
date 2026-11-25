@@ -5,7 +5,7 @@
 export type ShareLeg = { home: string; away: string; league: string; kickoff: string; label: string; odds: number; outcome: string; homeScore: number | null; awayScore: number | null };
 export type ShareTicket = { title: string; createdAt: string; actualOdds: number | null; outcomeStatus: string; legs: ShareLeg[] };
 
-const C = { ink: '#0b1230', stripe: '#0f261c', panel: '#141f47', line: '#2e3d7c', amber: '#ff4f9a', green: '#5fe3a1', rose: '#ff6150', text: '#eef1fb', muted: '#a9b3d6' };
+const C = { ink: '#10161d', stripe: '#0f261c', panel: '#18222d', line: '#31404f', amber: '#ff9a3c', green: '#5fe3a1', rose: '#ff6150', text: '#f2eee6', muted: '#a9b4bf' };
 const W = 1080;
 const PAD = 72;
 const ROW = 132;
@@ -62,9 +62,9 @@ export async function renderShareImage(t: ShareTicket): Promise<Blob> {
   let y = PAD;
   if (logo) ctx.drawImage(logo, PAD, y, 72, 72);
   ctx.textBaseline = 'middle';
-  ctx.font = `800 46px ${board}`; ctx.fillStyle = C.text; ctx.fillText('PRIMUL', PAD + 92, y + 38);
-  const pw = ctx.measureText('PRIMUL ').width;
-  ctx.fillStyle = C.amber; ctx.fillText('11', PAD + 92 + pw, y + 38);
+  ctx.font = `800 46px ${board}`; ctx.fillStyle = C.text; ctx.fillText('TREI', PAD + 92, y + 38);
+  const pw = ctx.measureText('TREI ').width;
+  ctx.fillStyle = C.amber; ctx.fillText('PUNCTE', PAD + 92 + pw, y + 38);
   ctx.font = `400 26px ${body}`; ctx.fillStyle = C.muted; ctx.textAlign = 'right';
   ctx.fillText(fmtDay(t.createdAt), W - PAD, y + 38); ctx.textAlign = 'left';
 
@@ -74,7 +74,7 @@ export async function renderShareImage(t: ShareTicket): Promise<Blob> {
   const hits = t.legs.filter((l) => l.outcome === 'WON').length;
   ctx.font = `800 40px ${board}`;
   const bw = ctx.measureText(banner).width + 56;
-  ctx.fillStyle = won ? 'rgba(95,227,161,.16)' : lost ? 'rgba(255,97,80,.16)' : 'rgba(255,79,154,.14)';
+  ctx.fillStyle = won ? 'rgba(95,227,161,.16)' : lost ? 'rgba(255,97,80,.16)' : 'rgba(255,154,60,.14)';
   ctx.strokeStyle = accent; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(PAD, y, bw, 64, 14); ctx.fill(); ctx.stroke();
   ctx.fillStyle = accent; ctx.fillText(banner, PAD + 28, y + 33);
@@ -90,7 +90,7 @@ export async function renderShareImage(t: ShareTicket): Promise<Blob> {
   ctx.textAlign = 'right';
   ctx.font = `600 26px ${body}`; ctx.fillText('COTA TOTALĂ', W - PAD, y - 4);
   ctx.font = `800 150px ${board}`; ctx.fillStyle = C.amber;
-  ctx.shadowColor = 'rgba(255,79,154,.35)'; ctx.shadowBlur = 30;
+  ctx.shadowColor = 'rgba(255,154,60,.35)'; ctx.shadowBlur = 30;
   ctx.fillText(fmtOdds(t.actualOdds), W - PAD, y + 120);
   ctx.shadowBlur = 0; ctx.textAlign = 'left';
 
@@ -98,16 +98,16 @@ export async function renderShareImage(t: ShareTicket): Promise<Blob> {
   y += 170;
   const shown = t.legs.slice(0, MAX_LEGS);
   const slipH = shown.length * ROW + (t.legs.length > MAX_LEGS ? 64 : 0) + 24;
-  ctx.fillStyle = 'rgba(20,31,71,.92)'; ctx.strokeStyle = won ? 'rgba(95,227,161,.7)' : C.line; ctx.lineWidth = 2;
+  ctx.fillStyle = 'rgba(24,34,45,.92)'; ctx.strokeStyle = won ? 'rgba(95,227,161,.7)' : C.line; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(PAD - 16, y, W - 2 * PAD + 32, slipH, 22); ctx.fill(); ctx.stroke();
-  ctx.setLineDash([10, 10]); ctx.strokeStyle = 'rgba(238,241,251,.16)';
+  ctx.setLineDash([10, 10]); ctx.strokeStyle = 'rgba(242,238,230,.16)';
   ctx.beginPath(); ctx.moveTo(PAD + 4, y + 18); ctx.lineTo(PAD + 4, y + slipH - 18); ctx.stroke(); ctx.setLineDash([]);
 
   let ry = y + 12;
   shown.forEach((l, i) => {
     const left = PAD + 32;
     const right = W - PAD - 8;
-    if (i > 0) { ctx.strokeStyle = 'rgba(238,241,251,.08)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(left, ry); ctx.lineTo(right, ry); ctx.stroke(); }
+    if (i > 0) { ctx.strokeStyle = 'rgba(242,238,230,.08)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(left, ry); ctx.lineTo(right, ry); ctx.stroke(); }
     const mark = l.outcome === 'WON' ? C.green : l.outcome === 'LOST' ? C.rose : C.muted;
     ctx.font = `400 22px ${body}`; ctx.fillStyle = C.muted;
     ctx.fillText(fit(ctx, `${l.league} · ${fmtWhen(l.kickoff)}`, 640), left, ry + 38);
@@ -142,7 +142,7 @@ export async function shareTicketImage(t: ShareTicket): Promise<'shared' | 'down
   const name = `primul11-${t.title.replace(/\W+/g, '-').toLowerCase()}-${t.createdAt.slice(0, 10)}.png`;
   const file = new File([blob], name, { type: 'image/png' });
   if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: `PRIMUL 11 · ${t.title}`, text: 'primul11.noventra.ro' }); return 'shared'; }
+    try { await navigator.share({ files: [file], title: `TREI PUNCTE · ${t.title}`, text: 'primul11.noventra.ro' }); return 'shared'; }
     catch (e) { if ((e as Error).name === 'AbortError') return 'cancelled'; }
   }
   const url = URL.createObjectURL(blob);

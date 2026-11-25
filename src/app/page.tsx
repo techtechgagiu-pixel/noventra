@@ -51,7 +51,7 @@ type Tab = 'acasa' | 'custom' | 'oddsxmatch' | 'analiza' | 'istoric' | 'statisti
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
-/** PRIMUL 11 — public introduction and authenticated application sections. */
+/** TREI PUNCTE — public introduction and authenticated application sections. */
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string; ticket?: string; job?: string; replay?: string; fresh?: string; scope?: string; luna?: string; vedere?: string; sport?: string }> }) {
   let user;
   try { user = await currentUser(); }
@@ -94,7 +94,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4">
           <Link href="/" aria-label="Acasă" className="flex items-center gap-2.5 py-3">
             <img src="/logo.svg" alt="" className="h-8 w-8" />
-            <span className="app-wordmark">PRIMUL <b>11</b></span>
+            <span className="app-wordmark">TREI <b>PUNCTE</b></span>
             <span className="rounded border border-gold/50 px-1.5 py-px text-[10px] font-semibold text-gold">beta</span>
           </Link>
           <nav className="app-tabs md:ml-auto" aria-label="Secțiuni">

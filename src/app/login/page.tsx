@@ -20,9 +20,9 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
   const codeError = error === 'invalid' || (error === 'rate' && cod === '1');
   return <main className="flex min-h-screen items-center justify-center px-5 py-12">
     <section className="card w-full max-w-md space-y-7 p-8">
-      <div className="flex items-center gap-3"><img src="/logo.svg" alt="" className="h-12 w-12" /><span className="app-wordmark">PRIMUL <b>11</b></span></div>
+      <div className="flex items-center gap-3"><img src="/logo.svg" alt="" className="h-12 w-12" /><span className="app-wordmark">TREI <b>PUNCTE</b></span></div>
       <div>
-        <p className="mb-2 text-sm text-muted">32 de agenți AI care dezbat fiecare meci</p>
+        <p className="mb-2 text-sm text-muted">3 modele AI mari care dezbat fiecare meci</p>
         <h1 className="font-display text-[2.4rem] font-bold leading-none">{custom ? 'Un pas până la biletul tău.' : 'Bine ai venit în echipă.'}</h1>
         <p className="mt-3 text-sm text-muted">{custom ? 'Conectează-te, apoi alegi cota, meciurile și agenții. Analiza pornește numai când apeși „Pornește dezbaterea”.' : 'Intră cu contul tău Google. Biletele create de toată lumea apar la „Bilete create”, cu numele celui care le-a făcut.'}</p>
       </div>

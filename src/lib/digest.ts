@@ -6,7 +6,7 @@ import { structuredCall } from './ai/router';
 import { selectionImplies } from './stats/engine';
 
 /**
- * "Rezumat de la Primul 11": ≤ 10 lines written once, from the agents' own recorded rationales.
+ * "Rezumat de la Trei Puncte": ≤ 10 lines written once, from the agents' own recorded rationales.
  * Generated at ticket finalisation (part of the authorised job) or on an explicit click for older tickets.
  * Viewing a ticket never calls AI.
  */
@@ -14,7 +14,7 @@ export type Digest = { lines: string[]; source: 'ai' | 'data'; model: string | n
 
 const DigestSchema = z.preprocess((v) => (Array.isArray(v) ? { lines: v } : v), z.object({ lines: z.array(z.string().min(3).max(220)).min(1).max(10) }));
 
-const SYSTEM = `Ești redactorul aplicației PRIMUL 11. Scrii un rezumat de MAXIMUM 10 rânduri, în română, al unui bilet de pariuri, folosind EXCLUSIV motivările agenților primite în mesaj.
+const SYSTEM = `Ești redactorul aplicației TREI PUNCTE. Scrii un rezumat de MAXIMUM 10 rânduri, în română, al unui bilet de pariuri, folosind EXCLUSIV motivările agenților primite în mesaj.
 Format: un rând = o propoziție scurtă (max. 160 de caractere), fără liniuțe sau numerotare.
 Rândul 1: concluzia generală (câte meciuri, cota totală, prudența EXACT cum e dată în ticket.prudence și șansa estimată ca toate să iasă, ticket.chanceAllLegsWin).
 Apoi, pentru fiecare meci, 1–2 rânduri: de ce a fost ales (numește 1–2 agenți și argumentul lor) și ce risc a semnalat cineva.

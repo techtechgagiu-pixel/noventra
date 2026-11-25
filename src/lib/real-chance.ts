@@ -1,5 +1,5 @@
 /**
- * „Șansa reală” (18.11): how often the legs PRIMUL 11 puts on tickets actually win, by price band, measured on every
+ * „Șansa reală” (18.11): how often the legs TREI PUNCTE puts on tickets actually win, by price band, measured on every
  * settled selection. On 18.11 (1 737 legs) the agents won slightly less often than the bookmaker's price implies in
  * every band (85% vs 87% under 1.20, 55% vs 63% at 1.50–1.80), so a 10-leg ticket at 1.25 each is far less likely
  * than its price suggests. The form and the ticket show that number instead of letting the price speak for itself.

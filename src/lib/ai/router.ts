@@ -70,6 +70,8 @@ function retryAfter(res: Response, body: string) {
 }
 
 /** OpenRouter models whose endpoint rejects `reasoning.enabled=false` (learned at runtime, e.g. GLM 5.3 Flash). */
+/** 25.11: the three large models think before answering (hidden), with room left for the JSON. */
+const TOP_REASONING: Record<string, string> = { 'anthropic/claude-fable-5.2': 'medium', 'openai/gpt-6.2-astra-pro': 'medium', 'google/gemini-4-neon': 'medium' };
 const reasoningRequired = new Set<string>(['z-ai/glm-5.3-flash']);
 
 async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: string, apiKey: string): Promise<RawResult> {
@@ -86,9 +88,9 @@ async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: st
   if (ref.provider === 'openrouter') {
     // Mandatory-reasoning models cannot disable thinking. Use their lowest supported effort,
     // omit reasoning text and leave room for JSON; reasoning still consumes billed output tokens.
-    const effort = (NEW_AI_PROFILES.find((a) => a.model === ref.model) as { reasoningEffort?: string } | undefined)?.reasoningEffort ?? (reasoningRequired.has(ref.model) ? 'low' : undefined);
+    const effort = (NEW_AI_PROFILES.find((a) => a.model === ref.model) as { reasoningEffort?: string } | undefined)?.reasoningEffort ?? TOP_REASONING[ref.model] ?? (reasoningRequired.has(ref.model) ? 'low' : undefined);
     body.reasoning = effort ? { effort, exclude: true } : { enabled: false };
-    body.max_completion_tokens = Math.min(8000, Math.max(Number(body.max_completion_tokens) || 0, 4000));
+    body.max_completion_tokens = TOP_REASONING[ref.model] ? 16000 : Math.min(8000, Math.max(Number(body.max_completion_tokens) || 0, 4000));
   }
   let reservation:string|null=null;
   if(ref.provider==='openrouter'&&isD1()&&!ref.model.endsWith(':free')){

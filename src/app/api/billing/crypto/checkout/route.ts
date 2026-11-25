@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify({
       price_amount: Number((plan.priceCents / 100).toFixed(2)), price_currency: 'eur',
       order_id: makeOrderId(user.id, plan.id, plan.credits),
-      order_description: extra === null ? `PRIMUL 11 · ${plan.name} (${plan.credits} credite)` : `PRIMUL 11 · ${plan.credits} credite extra`,
+      order_description: extra === null ? `TREI PUNCTE · ${plan.name} (${plan.credits} credite)` : `TREI PUNCTE · ${plan.credits} credite extra`,
       ipn_callback_url: `${config.appBaseUrl}/api/billing/crypto/webhook`,
       success_url: `${config.appBaseUrl}/planuri?plata=ok`, cancel_url: `${config.appBaseUrl}/planuri?plata=anulata`,
     }),

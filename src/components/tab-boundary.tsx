@@ -6,7 +6,7 @@ const CHUNK = /ChunkLoadError|Loading chunk|Failed to fetch dynamically imported
 
 /**
  * 18.11: a tab whose server render fails once (a database read that times out, a busy Worker) is fetched again in place,
- * up to three times, instead of replacing the whole page with „Verific conexiunea PRIMUL 11…”.
+ * up to three times, instead of replacing the whole page with „Verific conexiunea TREI PUNCTE…”.
  */
 class Boundary extends Component<{ children: ReactNode; refresh: () => void }, { error: Error | null; tries: number }> {
   state = { error: null as Error | null, tries: 0 };

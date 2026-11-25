@@ -23,7 +23,7 @@ export function OddsXMatch({ agents, topAgentIds = [], remaining, limit, credits
   const [retry, setRetry] = useState(0);
   const [target, setTarget] = useState(10);
   const [picked, setPicked] = useState<string[]>([]);
-  const [chosen, setChosen] = useState<string[]>(() => { const top = topAgentIds.filter((id) => agents.some((a) => a.id === id)); return top.length >= 3 ? top.slice(0, MAX_CUSTOM_AGENTS) : ['victor', 'andrei', 'alex', 'robert', 'ioana'].filter((id) => agents.some((a) => a.id === id)); });
+  const [chosen, setChosen] = useState<string[]>(() => agents.map((a) => a.id).slice(0, MAX_CUSTOM_AGENTS));
   const [bold, setBold] = useState(false);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<string[]>([]);

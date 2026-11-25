@@ -13,7 +13,7 @@ import { factsForAgent } from '@/lib/jobs/analysis';
 import type { FixtureSnapshot } from '@/lib/jobs/types';
 
 it('registers ten distinct new voters, model prices and portraits across every presentation surface', () => {
-  expect(NEW_AI_PROFILES).toHaveLength(10);expect(VOTING_AGENTS).toHaveLength(32);expect(AGENTS).toHaveLength(34);
+  expect(NEW_AI_PROFILES).toHaveLength(10);expect(VOTING_AGENTS).toHaveLength(3);expect(AGENTS).toHaveLength(34);
   expect(new Set(VOTER_IDS).size).toBe(32);expect(LEGACY_VOTER_IDS).toHaveLength(22);
   expect(new Set(NEW_AI_PROFILES.map((a)=>a.model)).size).toBe(10);
   for(const a of NEW_AI_PROFILES){

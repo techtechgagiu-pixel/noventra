@@ -9,20 +9,21 @@ import { NEW_AI_PROFILES } from './new-agent-profiles';
 export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; outPerM: number }> = {
   ...Object.fromEntries(NEW_AI_PROFILES.map((a) => [a.id, { model: a.model, inPerM: a.inPerM, outPerM: a.outPerM }])),
   // Corina: sourced sports reporting; catalogue checked 2026-10-22.
-  corina: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },
-  scout: { model: 'google/gemini-2.5-flash-lite', inPerM: 0.1, outPerM: 0.4 },
+  corina: { model: 'google/gemini-4-neon', inPerM: 3, outPerM: 15 },
+  scout: { model: 'google/gemini-4-neon', inPerM: 3, outPerM: 15 },
   victor: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },
-  andrei: { model: 'deepseek/deepseek-v4.1-flash', inPerM: 0.14, outPerM: 0.42 },
+  // 25.11: the three-agent team — Anthropic, OpenAI and Google top models (OpenRouter catalogue checked 25.11).
+  andrei: { model: 'anthropic/claude-fable-5.2', inPerM: 8, outPerM: 40 },
   mihai: { model: 'openai/gpt-6-luna', inPerM: 0.1, outPerM: 0.5 },
   alex: { model: 'xiaomi/mimo-v2.6-flash', inPerM: 0.14, outPerM: 0.28 },
   diana: { model: 'z-ai/glm-5.3-flash', inPerM: 0.15, outPerM: 0.5 },
   // GPT-6 Luna Pro is also the team's brain: one strong model for both his vote and his decisions (2026-10-21).
-  robert: { model: 'openai/gpt-6-luna-pro', inPerM: 0.1, outPerM: 0.5 },
+  robert: { model: 'openai/gpt-6.2-astra-pro', inPerM: 8, outPerM: 40 },
   ioana: { model: 'qwen/qwen3.8-flash', inPerM: 0.15, outPerM: 0.47 },
   radu: { model: 'meta-llama/llama-4-maverick', inPerM: 0.188, outPerM: 0.652 },
   elena: { model: 'google/gemma-4-31b-it', inPerM: 0.2, outPerM: 0.4 },
   cosmin: { model: 'tencent/hy3', inPerM: 0.132, outPerM: 0.528 },
-  hantu: { model: 'nvidia/nemotron-3.5-super-vl', inPerM: 0.15, outPerM: 0.5 },
+  hantu: { model: 'google/gemini-4-neon', inPerM: 3, outPerM: 15 },
   becali: { model: 'deepseek/deepseek-v4-flash', inPerM: 0.091, outPerM: 0.182 },
   // Echipa a doua (2026-10-21) — fiecare agent își păstrează modelul, ca rezultatele lunare să fie comparabile.
   ilie: { model: 'mistralai/mistral-small-3.2-24b-instruct', inPerM: 0.075, outPerM: 0.2 },
@@ -37,7 +38,13 @@ export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; 
   tamas: { model: 'deepseek/deepseek-v4.1-flash-1017', inPerM: 0.15, outPerM: 0.6 },
 };
 
-export const OPENROUTER_PRICE = new Map(Object.values(OPENROUTER_MODELS).map((m) => [m.model, m]));
+/** 25.11: fallbacks of the three large models (same company, one step down), priced so the budget can reserve them. */
+const FALLBACK_PRICES = [
+  { model: 'anthropic/claude-sonnet-5.5', inPerM: 2, outPerM: 10 },
+  { model: 'openai/gpt-6.2-sol-pro', inPerM: 2, outPerM: 10 },
+  { model: 'google/gemini-4-carbon', inPerM: 2, outPerM: 10 },
+];
+export const OPENROUTER_PRICE = new Map([...FALLBACK_PRICES, ...Object.values(OPENROUTER_MODELS)].map((m) => [m.model, m]));
 
 export function openRouterDefault(agentId: string, freeDefault: ModelRef): { primary: ModelRef; fallback: ModelRef } | null {
   const m = OPENROUTER_MODELS[agentId];

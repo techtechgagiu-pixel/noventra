@@ -2,7 +2,7 @@ import { safeEqual } from '../safe-equal';
 
 const COOKIE = 'bm_migration';
 const WINDOW = 3600;
-const page = '<!doctype html><html lang="ro"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Primul 11</title><body style="background:#080e20;color:#e5edf9;font:18px system-ui;max-width:600px;margin:15vh auto;padding:24px"><h1>PRIMUL 11 se mută</h1><p>Transferăm ultimele date. Biletele și statisticile sunt păstrate. Revino în câteva minute.</p></body></html>';
+const page = '<!doctype html><html lang="ro"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Trei Puncte</title><body style="background:#080e20;color:#e5edf9;font:18px system-ui;max-width:600px;margin:15vh auto;padding:24px"><h1>TREI PUNCTE se mută</h1><p>Transferăm ultimele date. Biletele și statisticile sunt păstrate. Revino în câteva minute.</p></body></html>';
 
 async function mac(secret: string, expiry: string) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);

@@ -119,6 +119,14 @@ export function startWorker() {
   state.started = true;
   state.timer = setInterval(kickWorker, 5_000);
   kickWorker();
+  // 25.11: standing custom orders also run here. The runner on Render is published on every merge and kept awake,
+  // while the Cloudflare cron needs a manual deploy; the per-day claim in D1 keeps both from queuing the same batch.
+  if (process.env.BETMIND_RUNNER_ONLY === '1') {
+    const scheduled = () => void import('./scheduled-custom').then((m) => m.runScheduledCustom()).then((r) => { if (r.length) kickWorker(); })
+      .catch((error) => console.warn(JSON.stringify({ event: 'scheduled_custom_failed', message: (error as Error).message?.slice(0, 200) })));
+    setInterval(scheduled, 60_000);
+    scheduled();
+  }
   console.log(JSON.stringify({ event: 'worker_started', worker: WORKER_ID }));
 }
 

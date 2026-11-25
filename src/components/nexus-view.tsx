@@ -130,14 +130,14 @@ function Network({ state, animate, activeFx }: { state: NexusState; animate: boo
   return (
     <svg viewBox="0 0 760 420" className="h-auto w-full" role="img" aria-label="Rețeaua NEXUS: meciuri, agenți și nucleul de decizie">
       <defs>
-        <radialGradient id="core" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#ff4f9a" stopOpacity=".55" /><stop offset="100%" stopColor="#ff4f9a" stopOpacity="0" /></radialGradient>
+        <radialGradient id="core" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#ff9a3c" stopOpacity=".55" /><stop offset="100%" stopColor="#ff9a3c" stopOpacity="0" /></radialGradient>
       </defs>
       {/* fixtures entering */}
       {activeFx.slice(0, 5).map((m, i) => (
         <g key={m}>
-          <line x1={110} y1={70 + i * 62} x2={cx - 40} y2={cy} stroke="#ff4f9a" strokeOpacity=".35" className={animate ? 'flow' : ''} />
-          <rect x={8} y={52 + i * 62} width={150} height={34} rx={9} fill="#141f47" stroke="#2e3d7c" />
-          <text x={16} y={74 + i * 62} fill="#eef1fb" fontSize="11">{m.length > 22 ? m.slice(0, 21) + '…' : m}</text>
+          <line x1={110} y1={70 + i * 62} x2={cx - 40} y2={cy} stroke="#ff9a3c" strokeOpacity=".35" className={animate ? 'flow' : ''} />
+          <rect x={8} y={52 + i * 62} width={150} height={34} rx={9} fill="#18222d" stroke="#31404f" />
+          <text x={16} y={74 + i * 62} fill="#f2eee6" fontSize="11">{m.length > 22 ? m.slice(0, 21) + '…' : m}</text>
         </g>
       ))}
       {nodes.map((n) => {
@@ -153,15 +153,15 @@ function Network({ state, animate, activeFx }: { state: NexusState; animate: boo
         );
       })}
       <circle cx={cx} cy={cy} r={70} fill="url(#core)" opacity={animate ? 1 : 0.4} />
-      <circle cx={cx} cy={cy} r={38} fill="#141f47" stroke="#ff4f9a" strokeWidth="2" />
-      <text x={cx} y={cy - 2} textAnchor="middle" fill="#ff4f9a" fontSize="12" fontWeight="800" letterSpacing="2">NEXUS</text>
-      <text x={cx} y={cy + 13} textAnchor="middle" fill="#a9b3d6" fontSize="9">CORE</text>
+      <circle cx={cx} cy={cy} r={38} fill="#18222d" stroke="#ff9a3c" strokeWidth="2" />
+      <text x={cx} y={cy - 2} textAnchor="middle" fill="#ff9a3c" fontSize="12" fontWeight="800" letterSpacing="2">NEXUS</text>
+      <text x={cx} y={cy + 13} textAnchor="middle" fill="#a9b4bf" fontSize="9">CORE</text>
       {/* toward ticket */}
       <line x1={cx + 40} y1={cy} x2={700} y2={cy} stroke="#5fe3a1" strokeOpacity={state.accepted.length ? 0.8 : 0.2} strokeWidth="2" className={state.accepted.length && animate ? 'flow' : ''} />
-      <rect x={640} y={cy - 34} width={112} height={68} rx={12} fill="#141f47" stroke="#5fe3a1" strokeOpacity=".6" />
-      <text x={696} y={cy - 10} textAnchor="middle" fill="#a9b3d6" fontSize="10">BILET</text>
-      <text x={696} y={cy + 12} textAnchor="middle" fill="#eef1fb" fontSize="18" fontWeight="700">{state.accepted.length}</text>
-      <text x={696} y={cy + 26} textAnchor="middle" fill="#a9b3d6" fontSize="9">selecții</text>
+      <rect x={640} y={cy - 34} width={112} height={68} rx={12} fill="#18222d" stroke="#5fe3a1" strokeOpacity=".6" />
+      <text x={696} y={cy - 10} textAnchor="middle" fill="#a9b4bf" fontSize="10">BILET</text>
+      <text x={696} y={cy + 12} textAnchor="middle" fill="#f2eee6" fontSize="18" fontWeight="700">{state.accepted.length}</text>
+      <text x={696} y={cy + 26} textAnchor="middle" fill="#a9b4bf" fontSize="9">selecții</text>
     </svg>
   );
 }

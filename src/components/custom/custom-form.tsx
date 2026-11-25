@@ -31,21 +31,7 @@ const TARGETS = [2, 3, 5, 10, 20, 50, 100];
 const pick = (...ids: string[]) => (a: AgentCard[]) => a.filter((x) => ids.includes(x.id)).map((x) => x.id);
 /** Ready-made teams: by risk profile, by story (generations, roles) and by method. The user can still tick freely. */
 const GROUPS: Array<{ label: string; hint: string; ids: (a: AgentCard[]) => string[] }> = [
-  { label: 'Noua echipă AI (10)', hint: 'Cele zece modele noi, fiecare cu un rol distinct', ids: pick(...NEW_AI_PROFILES.map((a) => a.id)) },
-  { label: 'Primul 11', hint: 'Unsprezece profiluri diferite: prudenți, tacticieni, oameni de cifre și contrarieni', ids: pick('robert', 'victor', 'andrei', 'mihai', 'alex', 'ioana', 'cosmin', 'hantu', 'porumboiu', 'nova', 'sigma') },
-  { label: 'Prudenții', hint: 'Cote mici, probabilitate mare', ids: (a) => a.filter((x) => x.maxOdds <= 1.7).map((x) => x.id) },
-  { label: 'Echilibrații', hint: 'Cote medii, risc moderat', ids: (a) => a.filter((x) => x.maxOdds > 1.7 && x.maxOdds < 2).map((x) => x.id) },
-  { label: 'Vânătorii de cote', hint: 'Acceptă cote mari', ids: (a) => a.filter((x) => x.maxOdds >= 2).map((x) => x.id) },
-  { label: 'Context și tactică (6)', hint: 'Context, tactică și verificarea pieței', ids: pick('andrei', 'mihai', 'ilie', 'prunea', 'petrescu', 'cosmin') },
-  { label: 'Tacticienii', hint: 'Scenarii și ritmul jocului', ids: pick('robert', 'radu', 'cosmin', 'ioana', 'petrescu', 'sumudica', 'alex') },
-  { label: 'Strategie și audit', hint: 'Strategie, scepticism și verificarea dovezilor', ids: pick('victor', 'elena', 'becali', 'stoica', 'porumboiu') },
-  { label: 'Dinamica jocului', hint: 'Ocazii, dueluri și scenarii adverse', ids: pick('ianis', 'dragusin', 'man', 'diana', 'tamas') },
-  { label: 'Apărarea', hint: 'Gândesc din spate: goluri primite, portari, dueluri', ids: pick('dragusin', 'prunea', 'petrescu', 'tamas', 'diana', 'mihai') },
-  { label: 'Atacul', hint: 'Goluri, ocazii, flancuri', ids: pick('alex', 'man', 'ianis', 'andrei', 'ioana', 'sumudica') },
-  { label: 'Oamenii cifrelor', hint: 'Statistică, piață, risc, verificare', ids: pick('andrei', 'elena', 'cosmin', 'robert', 'porumboiu', 'stoica') },
-  { label: 'Contrarianii', hint: 'Caută ce scapă majorității', ids: pick('stoica', 'sumudica', 'tamas', 'becali', 'hantu') },
-  { label: 'Echipă mică (5)', hint: 'Rapid și ieftin: un profil din fiecare zonă', ids: pick('robert', 'andrei', 'ioana', 'cosmin', 'radu') },
-  { label: 'Surpriză (7)', hint: '7 agenți la întâmplare', ids: (a) => [...a].sort(() => Math.random() - 0.5).slice(0, 7).map((x) => x.id) },
+  { label: 'Echipa completă (3)', hint: 'Analistul (Anthropic), Reporterul (Google) și Decidentul (OpenAI)', ids: (a) => a.map((x) => x.id) },
 ];
 
 /** Selectable offsets, from 20 minutes to one week. */
@@ -86,7 +72,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   const fromHours = dayWin ? dayWin.from : STOPS[fromI], toHours = dayWin ? dayWin.to : STOPS[toI];
   const win = toHours > 48 ? '7d' : toHours > 24 ? '48h' : '24h';
   const [minAgree, setMinAgree] = useState<number | null>(null); // owner request 06.11: null = automatic threshold
-  const [chosen, setChosen] = useState<string[]>(['victor', 'andrei', 'alex', 'robert', 'ioana']);
+  const [chosen, setChosen] = useState<string[]>(['andrei', 'hantu', 'robert']);
   const [leagues, setLeagues] = useState<string[]>([]);
   // Owner request 30.10: a ticket made only of Counter-Strike matches, one tap away.
   const [sport, setSport] = useState<'football' | 'cs'>('football');

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 /** The app moved to primul11.noventra.ro: the old address redirects permanently, keeping the path. */
 export function proxy(req: NextRequest) {
   if(!process.env.BETMIND_RUNTIME?.startsWith('cloudflare')&&req.nextUrl.pathname!=='/api/health'){
-    if(process.env.BETMIND_MAINTENANCE==='1')return new NextResponse('PRIMUL 11 se mută. Biletele și statisticile sunt păstrate. Revino în câteva minute.',{status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
+    if(process.env.BETMIND_MAINTENANCE==='1')return new NextResponse('TREI PUNCTE se mută. Biletele și statisticile sunt păstrate. Revino în câteva minute.',{status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
     // A client may retain the old DNS answer briefly after cutover. The public
     // hostname can still use this D1-backed fallback during DNS propagation;
     // the direct Render origin exposes only health.

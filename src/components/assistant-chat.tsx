@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MessageCircleQuestion, Send, X } from 'lucide-react';
 
 /**
- * "Întreabă PRIMUL 11" (owner request 03.11): a chat with the site assistant, which reads the app's own data
+ * "Întreabă TREI PUNCTE" (owner request 03.11): a chat with the site assistant, which reads the app's own data
  * (tickets, agents, matches, Stake odds, statistics). The conversation lives in this tab only.
  */
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -49,11 +49,11 @@ export function AssistantChat() {
 
   return <>
     <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls="assistant-panel" className="assistant-fab">
-      <MessageCircleQuestion size={18} aria-hidden /><span>Întreabă PRIMUL 11</span>
+      <MessageCircleQuestion size={18} aria-hidden /><span>Întreabă TREI PUNCTE</span>
     </button>
-    {open && <section id="assistant-panel" className="assistant-panel" role="dialog" aria-label="Asistentul PRIMUL 11">
+    {open && <section id="assistant-panel" className="assistant-panel" role="dialog" aria-label="Asistentul TREI PUNCTE">
       <header className="assistant-head">
-        <div><h2>Asistentul PRIMUL 11</h2><p>Răspunde din datele site-ului: bilete, agenți, meciuri, cote.</p></div>
+        <div><h2>Asistentul TREI PUNCTE</h2><p>Răspunde din datele site-ului: bilete, agenți, meciuri, cote.</p></div>
         <button type="button" onClick={() => setOpen(false)} aria-label="Închide asistentul" className="assistant-x"><X size={16} aria-hidden /></button>
       </header>
       <div className="assistant-body">

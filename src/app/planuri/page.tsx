@@ -7,7 +7,7 @@ import { BuyButton, ExtraCredits } from '@/components/plans-buy';
 import { CreditsBadge } from '@/components/credits-badge';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Planuri · PRIMUL 11', description: 'Credite pentru biletele tale: un credit acoperă un meci.' };
+export const metadata = { title: 'Planuri · TREI PUNCTE', description: 'Credite pentru biletele tale: un credit acoperă un meci.' };
 
 const eur = (cents: number) => `€${(cents / 100).toFixed(2).replace('.', ',')}`;
 const INCLUDED = ['Toți agenții, cu orice echipă (maximum 6 pe bilet)', 'Bilete custom cu toate opțiunile: cotă, meciuri, ligi, piețe, interval', 'Selectorul „câți agenți trebuie să fie de acord”', 'Dezbatere completă și verdict în maximum 30 de minute', 'Istoricul biletelor și rezultatele'];
