@@ -619,8 +619,9 @@ async function stepBrain(job: JobRow, ids: string[]) {
   const alreadyOnTicket: Record<string, number> = {};
   for (const r of onTicket) { const fam = r.market_key.split(':')[0]; alreadyOnTicket[fam] = (alreadyOnTicket[fam] ?? 0) + 1; }
   const own = (await activeAssignments()).get(BRAIN_AGENT_ID);
-  const strong = providerConfigured('openrouter') ? { provider: 'openrouter' as const, model: 'openai/gpt-6-luna-pro' } : null;
-  const primary = strong ?? own?.primary;
+  // 25.11: the brain is the Decider's own model (GPT-6.2 Astra Pro); the old fixed GPT-6 Luna Pro call failed on every ticket.
+  const strong = null as { provider: 'openrouter'; model: string } | null;
+  const primary = own?.primary;
   if (!primary) return;
   await recordEvent(job.id, { type: 'BRAIN_STARTED', stage: 'VOTING', agentId: BRAIN_AGENT_ID, payload: { fixtures: items.length, model: `${primary.provider}/${primary.model}` } });
   try {
