@@ -38,7 +38,13 @@ export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; 
   tamas: { model: 'deepseek/deepseek-v4.1-flash-1017', inPerM: 0.15, outPerM: 0.6 },
 };
 
-export const OPENROUTER_PRICE = new Map(Object.values(OPENROUTER_MODELS).map((m) => [m.model, m]));
+/** 25.11: fallbacks of the three large models (same company, one step down), priced so the budget can reserve them. */
+const FALLBACK_PRICES = [
+  { model: 'anthropic/claude-sonnet-5.5', inPerM: 2, outPerM: 10 },
+  { model: 'openai/gpt-6.2-sol-pro', inPerM: 2, outPerM: 10 },
+  { model: 'google/gemini-4-carbon', inPerM: 2, outPerM: 10 },
+];
+export const OPENROUTER_PRICE = new Map([...FALLBACK_PRICES, ...Object.values(OPENROUTER_MODELS)].map((m) => [m.model, m]));
 
 export function openRouterDefault(agentId: string, freeDefault: ModelRef): { primary: ModelRef; fallback: ModelRef } | null {
   const m = OPENROUTER_MODELS[agentId];
