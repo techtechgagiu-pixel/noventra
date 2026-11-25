@@ -30,7 +30,7 @@ const RISK_RO: Record<string, string> = { LOW: 'Risc scăzut', MEDIUM: 'Risc med
 export const ticketRef = (t: { number?: number | null }) => (t.number ? `Biletul #${t.number} · ` : '');
 
 export function ticketText(t: TicketData) {
-  const lines = [`PRIMUL 11 — ${ticketRef(t)}${t.title}`, `Creat: ${fmtDateTime(t.createdAt)} (ora României)`, `Țintă: ${t.target} · Cotă reală: ${odds(t.actualOdds)} · ${t.legCount} meciuri`, ''];
+  const lines = [`TREI PUNCTE — ${ticketRef(t)}${t.title}`, `Creat: ${fmtDateTime(t.createdAt)} (ora României)`, `Țintă: ${t.target} · Cotă reală: ${odds(t.actualOdds)} · ${t.legCount} meciuri`, ''];
   t.selections.forEach((s) => lines.push(`${s.position}. ${s.snapshot.match} (${s.snapshot.league}) — ${fmtDateTime(s.snapshot.kickoff)}`, `   ${s.market_label} @ ${odds(s.odds)} · ${s.bookmaker} · cotă observată ${fmtDateTime(s.quote_observed_at)} · ${s.votes_for}/${t.summary.agents ?? 6} voturi`));
   if (t.mixedBookmakers) lines.push('', 'Atenție: cotele provin de la bookmakeri diferiți; cota combinată poate să nu fie reproductibilă la un singur operator.');
   lines.push('', 'Cotele sunt cele observate la creare și se pot schimba. Analiza nu garantează rezultatul. 18+');
@@ -39,7 +39,7 @@ export function ticketText(t: TicketData) {
 
 /** Plain text to rebuild the ticket by hand in the Superbet app (search team → market → pick). */
 export function superbetText(t: TicketData) {
-  const lines = [`PRIMUL 11 — ${ticketRef(t)}${t.title} — pentru Superbet`, `${t.legCount} meciuri · cota la noi ${odds(t.actualOdds)}`, ''];
+  const lines = [`TREI PUNCTE — ${ticketRef(t)}${t.title} — pentru Superbet`, `${t.legCount} meciuri · cota la noi ${odds(t.actualOdds)}`, ''];
   t.selections.forEach((s) => {
     const p = superbetPick(s.market_key, s.snapshot.home, s.snapshot.away);
     lines.push(`${s.position}. ${s.snapshot.home} – ${s.snapshot.away} · ${fmtDateTime(s.snapshot.kickoff)}`,
@@ -156,7 +156,7 @@ export function TicketView({ t, fresh, bands = [] }: { t: TicketData; fresh: boo
       )}
       {completed && !t.summary.review && (
         <div className="card p-5">
-          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold"><Sparkles size={18} className="text-cyan" aria-hidden /> Rezumat de la Primul 11</h2>
+          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold"><Sparkles size={18} className="text-cyan" aria-hidden /> Rezumat de la Trei Puncte</h2>
           {digest ? (
             <>
               <ul className="space-y-1.5 text-sm leading-relaxed">{digest.lines.map((l, i) => <li key={i} className={i === 0 ? 'font-semibold' : ''}>{l}</li>)}</ul>

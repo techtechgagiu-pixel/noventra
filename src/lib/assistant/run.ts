@@ -4,7 +4,7 @@ import { AGENT_META } from '../format';
 import { toolSpecs, runTool, type ToolCtx } from './tools';
 
 /**
- * Site assistant (owner request 03.11): answers any question about PRIMUL 11 from the app's own data, through the
+ * Site assistant (owner request 03.11): answers any question about TREI PUNCTE from the app's own data, through the
  * read-only tools in tools.ts. Main model: Claude Haiku 5.5 on OpenRouter, under its own daily cap
  * (ASSISTANT_DAILY_USD, default $0.50, owner decision); over the cap it answers with a free Groq model.
  */
@@ -22,7 +22,7 @@ type Msg = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | n
 const utcDay = () => new Date().toISOString().slice(0, 10);
 const roster = () => Object.entries(AGENT_META).map(([id, a]) => `${id} = ${a.name} (${a.title})`).join('; ');
 
-const system = (ctx: ToolCtx) => `Ești asistentul site-ului PRIMUL 11 (primul11.noventra.ro): o echipă de agenți AI care analizează meciuri de fotbal și Counter-Strike 2 la cotele Stake, dezbat și votează bilete.
+const system = (ctx: ToolCtx) => `Ești asistentul site-ului TREI PUNCTE (primul11.noventra.ro): o echipă de agenți AI care analizează meciuri de fotbal și Counter-Strike 2 la cotele Stake, dezbat și votează bilete.
 Răspunzi în română, scurt și concret, ca un analist care cunoaște platforma. Folosește uneltele ca să citești datele reale (bilete, agenți, meciuri, cote, statistici) înainte să răspunzi la orice întrebare despre ele; nu inventa cifre, meciuri sau rezultate. Dacă datele nu există, spune asta.
 Reguli: nu promiți câștiguri și nu spui că un pronostic e sigur; analizele nu garantează rezultate (18+). Nu poți plasa pariuri și nu poți modifica nimic în aplicație; dacă ți se cere, explici unde din site se face. Nu dezvălui adrese de e-mail.
 Agenții (id = nume): ${roster()}.
@@ -43,7 +43,7 @@ async function complete(messages: Msg[], paid: boolean) {
   const key = paid ? config.openRouterApiKey : config.geminiApiKey;
   if (!key) throw new Error('Asistentul nu are cheie pentru modelul AI.');
   const body: Record<string, unknown> = { model: paid ? ASSISTANT_MODEL : FREE.model, messages, tools: toolSpecs(), tool_choice: 'auto', temperature: 0.2, max_tokens: 1400 };
-  const res = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'PRIMUL 11 asistent' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) });
+  const res = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'TREI PUNCTE asistent' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) });
   const json = await res.json().catch(() => ({})) as { choices?: Array<{ message?: Msg }>; usage?: { prompt_tokens?: number; completion_tokens?: number }; error?: { message?: string } };
   if (!res.ok) throw new Error(json.error?.message?.slice(0, 160) || `Modelul AI a răspuns ${res.status}.`);
   if (paid) await record((json.usage?.prompt_tokens ?? 0) * PRICE.inPerToken + (json.usage?.completion_tokens ?? 0) * PRICE.outPerToken, false);

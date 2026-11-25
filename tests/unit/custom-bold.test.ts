@@ -3,7 +3,7 @@ import { customPolicy, type CustomConfig } from '../../src/lib/slots';
 import { parseCustom } from '../../src/lib/jobs/service';
 import { characterViolation } from '../../src/lib/jobs/analysis';
 
-const cfg = (extra: Partial<CustomConfig> = {}): CustomConfig => ({ target: 1000, legs: 20, agents: ['victor'], window: '7d', ...extra });
+const cfg = (extra: Partial<CustomConfig> = {}): CustomConfig => ({ target: 1000, legs: 20, agents: ['andrei'], window: '7d', ...extra });
 
 describe('custom ticket „riscă și cote mari”', () => {
   it('widens the price band, lowers the probability floor and aims each leg at the price the target needs', () => {
@@ -20,7 +20,7 @@ describe('custom ticket „riscă și cote mari”', () => {
     expect(characterViolation(p, agent, customPolicy(cfg({ bold: true })), market)).toBeNull();
   });
   it('is read from the request only when exactly true', () => {
-    const body = { target: 1000, legs: 20, agents: ['victor'] };
+    const body = { target: 1000, legs: 20, agents: ['andrei'] };
     expect(parseCustom({ ...body, bold: true }).bold).toBe(true);
     expect(parseCustom({ ...body, bold: 'true' }).bold).toBeUndefined();
     expect(parseCustom(body).bold).toBeUndefined();

@@ -115,8 +115,8 @@ function SystemLine({ m }: { m: Extract<Msg, { kind: 'system' }> }) {
 
 function AgentBubble({ m, match }: { m: Extract<Msg, { kind: 'agent' }>; match?: string }) {
   const meta = AGENT_META[m.agent];
-  const accent = meta?.accent ?? '#ff4f9a';
-  const border = m.tone === 'objection' ? '#ffe36e' : m.tone === 'brain' ? '#ffe36e' : m.tone === 'failed' ? '#ff6150' : m.tone === 'nobet' ? '#2e3d7c' : accent;
+  const accent = meta?.accent ?? '#ff9a3c';
+  const border = m.tone === 'objection' ? '#ffe36e' : m.tone === 'brain' ? '#ffe36e' : m.tone === 'failed' ? '#ff6150' : m.tone === 'nobet' ? '#31404f' : accent;
   return (
     <article className="flex gap-2.5">
       {meta?.thumb ? <img src={meta.thumb} alt="" className="mt-0.5 h-9 w-9 shrink-0 rounded-full border-2 object-cover" style={{ borderColor: accent }} /> : <div className="h-9 w-9 shrink-0 rounded-full bg-panel-2" />}

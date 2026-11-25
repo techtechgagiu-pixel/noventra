@@ -40,7 +40,7 @@ export function FeedbackButton() {
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="Ajută-ne să îmbunătățim" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
           <div className="card w-full max-w-md space-y-3 p-5">
             <div className="flex items-start justify-between gap-3">
-              <div><h2 className="font-display text-lg font-bold">Ajută-ne să îmbunătățim</h2><p className="text-xs text-muted">Ce ți-ar plăcea să apară nou în PRIMUL 11 sau ce nu merge cum trebuie? Citim tot.</p></div>
+              <div><h2 className="font-display text-lg font-bold">Ajută-ne să îmbunătățim</h2><p className="text-xs text-muted">Ce ți-ar plăcea să apară nou în TREI PUNCTE sau ce nu merge cum trebuie? Citim tot.</p></div>
               <button type="button" onClick={() => setOpen(false)} aria-label="Închide" className="text-muted hover:text-text"><X size={18} /></button>
             </div>
             {state === 'sent' ? (

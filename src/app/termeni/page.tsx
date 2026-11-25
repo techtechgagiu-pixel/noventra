@@ -1,8 +1,8 @@
 import Link from 'next/link';
-export const metadata = { title: 'Termeni · PRIMUL 11' };
+export const metadata = { title: 'Termeni · TREI PUNCTE' };
 export default function Terms() {
   return <main className="mx-auto max-w-2xl space-y-5 px-5 py-12 text-sm leading-relaxed text-muted">
-    <Link href="/login" className="text-cyan">← PRIMUL 11</Link>
+    <Link href="/login" className="text-cyan">← TREI PUNCTE</Link>
     <h1 className="font-display text-3xl font-bold text-text">Termeni de utilizare</h1>
     <ul className="list-disc space-y-2 pl-5">
       <li>Aplicația este destinată persoanelor de peste 18 ani.</li>

@@ -1,11 +1,11 @@
 import Link from 'next/link';
-export const metadata = { title: 'Confidențialitate · PRIMUL 11' };
+export const metadata = { title: 'Confidențialitate · TREI PUNCTE' };
 /** Public privacy notice (required by Google sign-in). Plain, factual, matches what the app stores. */
 export default function Privacy() {
   return <main className="mx-auto max-w-2xl space-y-5 px-5 py-12 text-sm leading-relaxed text-muted">
-    <Link href="/login" className="text-cyan">← PRIMUL 11</Link>
+    <Link href="/login" className="text-cyan">← TREI PUNCTE</Link>
     <h1 className="font-display text-3xl font-bold text-text">Politica de confidențialitate</h1>
-    <p>PRIMUL 11 este o aplicație de analiză a meciurilor de fotbal cu agenți AI. Nu plasează pariuri și nu primește plăți.</p>
+    <p>TREI PUNCTE este o aplicație de analiză a meciurilor de fotbal cu agenți AI. Nu plasează pariuri și nu primește plăți.</p>
     <h2 className="font-display text-lg font-bold text-text">Ce date folosim</h2>
     <ul className="list-disc space-y-1 pl-5">
       <li>La conectarea cu Google: numele, adresa de e-mail și poza de profil ale contului Google (permisiunile „openid email profile”). Nu cerem acces la Gmail, Drive sau alte date.</li>

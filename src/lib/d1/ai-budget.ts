@@ -30,7 +30,7 @@ export function paidCallUpperEstimate(model:string,input:{system:string;user:str
   const price=OPENROUTER_PRICE.get(model);
   if(!price)return null; // Unknown paid prices require explicit catalogue configuration.
   const bytes=new TextEncoder().encode(input.system+input.user).byteLength+512;
-  const output=Math.min(8000,Math.max(input.maxOutputTokens??2200,4000));
+  const output=/claude-fable|gpt-6\.2-astra|gemini-4-neon/.test(model)?16000:Math.min(8000,Math.max(input.maxOutputTokens??2200,4000));
   return Math.max(1,Math.ceil(bytes*price.inPerM+output*price.outPerM));
 }
 export function paidCallActual(model:string,inputTokens:number|null,outputTokens:number|null){

@@ -61,7 +61,7 @@ export function CustomLive({ jobId, initialMeta, initialEvents, info, back = { h
         {behind ? <span className="chip text-cyan">harta redă discuția…</span> : null}
         {fx.on !== null && (
           <button type="button" onClick={() => fx.set(!fx.on)} aria-pressed={fx.on} className={`chip ml-auto ${fx.on ? 'text-emerald' : 'text-gold'}`}
-            title={fx.system ? 'Sistemul tău cere animații reduse („Reduce motion”); poți porni efectele doar pentru PRIMUL 11.' : undefined}>
+            title={fx.system ? 'Sistemul tău cere animații reduse („Reduce motion”); poți porni efectele doar pentru TREI PUNCTE.' : undefined}>
             <Sparkles size={12} aria-hidden />{fx.on ? 'Efecte pornite' : fx.system ? 'Pornește efectele (animații reduse de sistem)' : 'Pornește efectele'}
           </button>
         )}

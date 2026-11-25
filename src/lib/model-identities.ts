@@ -5,7 +5,7 @@ const MODEL_NAMES: Record<string, string> = {
   'gpt-oss-20b': 'GPT-OSS 20B', 'gpt-oss-120b': 'GPT-OSS 120B', 'gemini-3-flash-preview': 'Gemini 3 Flash Preview',
   'gemini-3.6-flash': 'Gemini 3.6 Flash', 'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite', 'qwen3.8-27b': 'Qwen 3.8 27B',
   ...Object.fromEntries(NEW_AI_PROFILES.map((a) => [a.model.slice(a.model.indexOf('/') + 1), a.modelName])),
-  'claude-haiku-5.5': 'Claude Haiku 5.5', 'deepseek-v4.1-flash': 'DeepSeek V4.1 Flash',
+  'claude-haiku-5.5': 'Claude Haiku 5.5', 'claude-fable-5.2': 'Claude Fable 5.2', 'gpt-6.2-astra-pro': 'GPT-6.2 Astra Pro', 'gemini-4-neon': 'Gemini 4 Neon', 'deepseek-v4.1-flash': 'DeepSeek V4.1 Flash',
   'gpt-6-luna': 'GPT-6 Luna', 'gpt-6-luna-pro': 'GPT-6 Luna Pro', 'mimo-v2.6-flash': 'MiMo V2.6 Flash',
   'glm-5.3-flash': 'GLM 5.3 Flash', 'qwen3.8-flash': 'Qwen 3.8 Flash', 'llama-4-maverick': 'Llama 4 Maverick',
   'gemma-4-31b-it': 'Gemma 4 31B', 'hy3': 'HY3', 'nemotron-3.5-super-vl': 'Nemotron 3.5 Super VL',
