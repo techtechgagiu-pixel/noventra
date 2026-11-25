@@ -65,7 +65,8 @@ type Spot = { u: number; v: number };
  * press (corina) and VAR (porumboiu) on the touchlines, so nobody sits outside the field or on the bench.
  */
 export function autoFormation(active: Set<string> | null): Record<string, Spot> {
-  const ids = FORMATION.map((f) => f.id).filter((id) => !active || active.has(id) || id === 'corina' || id === BRAIN);
+  // 25.11: the press desk (corina) is no longer drawn; its news go to the Reporter (hantu). Only the agents of the job play.
+  const ids = FORMATION.map((f) => f.id).filter((id) => id !== 'corina' && (!active || active.has(id) || id === BRAIN));
   if (!ids.some((id) => NEW_IDS.has(id))) return Object.fromEntries(FORMATION.filter((f) => ids.includes(f.id)).map((f) => [f.id, { u: f.u, v: f.v }]));
   const out: Record<string, Spot> = { [BRAIN]: { u: 0.04, v: 0.5 } };
   if (ids.includes('corina')) out.corina = { u: 0.5, v: 1.1 };
@@ -334,7 +335,7 @@ export class MapScene {
         if (e.fixtureId && go) { this.send({ k: 'src' }, F(e.fixtureId), e.type === 'SCOUT_COMPLETED' ? C.cyan : C.violet, now, { size: 0.8 }); this.setFx(e.fixtureId, { flash: now, flashColor: C.cyan }); }
         break;
       case 'NEWS_COMMENTARY':
-        if (go) this.send({ k: 'news' }, A('corina'), '#ec4899', now, { done: () => this.say('corina', cut(String(p.commentary ?? ''), 60), '#ec4899', performance.now()) });
+        if (go) { const rep = this.isActive('hantu') ? 'hantu' : 'corina'; this.send({ k: 'news' }, A(rep), '#ec4899', now, { done: () => this.say(rep, cut(String(p.commentary ?? ''), 60), '#ec4899', performance.now()) }); }
         break;
       case 'RESEARCH_BRIEF':
         if (go && e.fixtureId) { const rep = this.isActive('hantu') ? 'hantu' : 'corina'; this.send({ k: 'src' }, A(rep), C.lime, now, { size: 1, done: () => { const t2 = performance.now(); this.say(rep, `🔎 dosar · ${cut(String(p.match ?? ''), 20)}`, C.lime, t2); this.send(A(rep), F(e.fixtureId!), C.lime, t2, { size: 0.8 }); } }); }
