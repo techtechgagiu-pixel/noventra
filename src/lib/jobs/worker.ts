@@ -6,7 +6,9 @@ import { QuotaExceededError } from '../sports/http';
 import { recordEvent } from './events';
 import { runJobSlice, type JobRow } from './pipeline';
 
-const WORKER_ID = `${process.env.RENDER_INSTANCE_ID || 'local'}:${randomUUID().slice(0, 8)}`;
+// Lazy: Cloudflare forbids random values in the global scope (deploy failed with code 10021).
+let workerIdValue: string | undefined;
+const getWorkerId = () => (workerIdValue ??= `${process.env.RENDER_INSTANCE_ID || 'local'}:${randomUUID().slice(0, 8)}`);
 const LEASE_MS = 3 * 60_000;
 /**
  * A slice runs ~50 s plus at most one unit (a model call with its retries). Past this limit it is treated as hung:
@@ -33,7 +35,7 @@ async function claim(): Promise<(JobRow & { recovered: boolean }) | null> {
   if(isD1())return one<JobRow & {recovered:boolean}>(`UPDATE ticket_generation_jobs SET claim_recovered=(status='RUNNING'),lease_owner=$1,lease_expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','+3 minutes'),status='RUNNING',started_at=COALESCE(started_at,strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     WHERE id=(SELECT c.id FROM ticket_generation_jobs c WHERE ((c.status IN ('QUEUED','WAITING') AND julianday(c.next_run_at)<=julianday('now') AND ${fairClause('$2')}) OR (c.status='RUNNING' AND (c.lease_expires_at IS NULL OR julianday(c.lease_expires_at)<julianday('now')))) ORDER BY (c.started_at IS NULL), c.next_run_at LIMIT 1)
       AND (SELECT count(*) FROM ticket_generation_jobs WHERE status='RUNNING' AND julianday(lease_expires_at)>julianday('now'))<$2
-    RETURNING *,claim_recovered AS recovered`,[WORKER_ID,config.limits.maxConcurrentJobs]);
+    RETURNING *,claim_recovered AS recovered`,[getWorkerId(),config.limits.maxConcurrentJobs]);
   return one<JobRow & { recovered: boolean }>(
     `WITH picked AS (
        SELECT c.id, (c.status = 'RUNNING') AS recovered FROM ticket_generation_jobs c
@@ -42,7 +44,7 @@ async function claim(): Promise<(JobRow & { recovered: boolean }) | null> {
      UPDATE ticket_generation_jobs j SET lease_owner=$1, lease_expires_at=now() + ($2 || ' milliseconds')::interval, status='RUNNING', started_at=COALESCE(started_at, now())
      FROM picked WHERE j.id = picked.id
      RETURNING j.id, j.user_id, j.slot, to_char(j.period_key,'YYYY-MM-DD') AS period_key, j.target_odds, j.required_legs, j.seed, j.config, j.status, j.stage, j.checkpoint, j.candidate_order, j.eligible_count, j.attempt_count, j.created_at, j.started_at, picked.recovered`,
-    [WORKER_ID, String(LEASE_MS), config.limits.maxConcurrentJobs],
+    [getWorkerId(), String(LEASE_MS), config.limits.maxConcurrentJobs],
   );
 }
 
@@ -54,13 +56,13 @@ async function wasInterrupted(jobId: string) {
 async function processOne(sliceTimeoutMs = SLICE_TIMEOUT_MS): Promise<boolean> {
   const job = await claim();
   if (!job) return false;
-  const tick = setInterval(() => { void query(`UPDATE ticket_generation_jobs SET lease_expires_at=${dialect("now()+interval '3 minutes'","strftime('%Y-%m-%dT%H:%M:%fZ','now','+3 minutes')")} WHERE id=$1 AND lease_owner=$2`, [job.id, WORKER_ID]).catch((e) => console.error(JSON.stringify({ event: 'worker_heartbeat_failed', message: (e as Error).message }))); }, 60_000);
+  const tick = setInterval(() => { void query(`UPDATE ticket_generation_jobs SET lease_expires_at=${dialect("now()+interval '3 minutes'","strftime('%Y-%m-%dT%H:%M:%fZ','now','+3 minutes')")} WHERE id=$1 AND lease_owner=$2`, [job.id, getWorkerId()]).catch((e) => console.error(JSON.stringify({ event: 'worker_heartbeat_failed', message: (e as Error).message }))); }, 60_000);
   try {
     if (job.recovered && job.stage !== 'QUEUED' && (await wasInterrupted(job.id))) {
       await recordEvent(job.id, { type: 'JOB_RESUMED', stage: job.stage, payload: { by: 'system', note: 'Execuția a fost reluată din ultimul checkpoint salvat (serviciul a fost repornit sau a fost inactiv). Între timp nu s-a procesat nimic.' } });
     }
     const outcome = await withTimeout(runJobSlice(job), sliceTimeoutMs);
-    if (outcome === 'CONTINUE') await query(`UPDATE ticket_generation_jobs SET status='QUEUED', next_run_at=${SQL_NOW()}, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1 AND lease_owner=$2`, [job.id, WORKER_ID]);
+    if (outcome === 'CONTINUE') await query(`UPDATE ticket_generation_jobs SET status='QUEUED', next_run_at=${SQL_NOW()}, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1 AND lease_owner=$2`, [job.id, getWorkerId()]);
   } catch (error) {
     await handleError(job, error as Error);
   } finally {
@@ -127,8 +129,8 @@ export function startWorker() {
     setInterval(scheduled, 60_000);
     scheduled();
   }
-  console.log(JSON.stringify({ event: 'worker_started', worker: WORKER_ID }));
+  console.log(JSON.stringify({ event: 'worker_started', worker: getWorkerId() }));
 }
 
-export const workerId = WORKER_ID;
+export const workerId = getWorkerId;
 export { processOne as _processOneForTests, claim as _claimForTests };
