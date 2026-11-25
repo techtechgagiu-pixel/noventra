@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Activity, BarChart3, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
 import { MatchesView } from '@/components/matches/matches-view';
-import { currentUser, googleConfigured } from '@/lib/auth';
-import { PublicHome } from '@/components/home/public-home';
+import { currentUser } from '@/lib/auth';
 import { ResultsRefresh } from '@/components/results-refresh';
 import { FeedbackButton } from '@/components/feedback-button';
 import { AssistantChat } from '@/components/assistant-chat';
@@ -55,13 +54,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
   let user;
   try { user = await currentUser(); }
   catch (error) {
-    if (databaseIssue(error) === 'quota') return <PublicHome google={googleConfigured()} unavailable />;
     throw error;
   }
   const sp = await searchParams;
   if (!user) {
-    if ((sp.tab && sp.tab !== 'acasa') || sp.ticket || sp.job || sp.replay) redirect('/login');
-    return <PublicHome google={googleConfigured()} />;
+    redirect('/login');
   }
   // Old daily-ticket URLs remain readable through the shared archive.
   const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'verifica' ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric'; // "Biletul tău" was removed (27.10); old links land on Acasă
@@ -105,7 +102,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
           </nav>
           <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 md:ml-2">
             {canSeeAccounts(user) && <Link href="/admin" className="text-xs font-semibold text-cyan hover:text-text" title="Panou admin: coadă live, conturi, credite, consum, plăți">Admin</Link>}
-            {user.role === 'admin' ? <Link href="/admin/invitations" className="text-xs text-muted hover:text-text" title="Conturi și coduri de acces">Conturi</Link> : canSeeAccounts(user) && <Link href="/conturi" className="text-xs text-muted hover:text-text" title="Cine s-a conectat cu Google">Conturi</Link>}
+            
             {canSeeAccounts(user) && <Link href="/cote" className="text-xs text-muted hover:text-text" title="Import cote Stake">Cote</Link>}
             {user.role === 'admin' && <Link href="/admin/feedback" className="text-xs text-muted hover:text-text" title="Ideile trimise de utilizatori">Sugestii</Link>}
             <CreditsBadge />

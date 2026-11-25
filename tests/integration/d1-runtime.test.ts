@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { d1Database, sqliteParameters, decodeRow } from '@/lib/d1/client';
 import { splitSqlScript } from '@/lib/d1/sql-script';
 import { withDatabase, atomic, query, one, tx } from '@/lib/db';
-import { issueInvitation, loginWithCode, userFromToken, createSession } from '@/lib/auth';
+import { hashAccessCode, loginWithCode, userFromToken } from '@/lib/auth';
 import { agentStats } from '@/lib/agent-stats';
 import { agentTrackRecord, allTrackRecords } from '@/lib/track-record';
 import { config } from '@/lib/config';
@@ -101,26 +101,19 @@ describe('real D1 runtime (local workerd, no provider calls)', () => {
     await expect(tx(async () => undefined)).rejects.toThrow(/Interactive/);
   }));
 
-  it('preserves invitation isolation, exact seven-day validity, revocation and Google roles', async () => scope(async () => {
-    const owner = (await one<{ id: string }>("INSERT INTO users(google_sub,email,name,role) VALUES('owner:primary','owner@test.local','Owner','admin') RETURNING id"))!;
-    const invite = await issueInvitation(owner.id, 'D1 visitor');
-    const saved = (await one<{ created_at: Date; expires_at: Date }>('SELECT created_at,expires_at FROM invitation_codes WHERE id=$1', [invite.id]))!;
-    expect(saved.expires_at.getTime() - saved.created_at.getTime()).toBe(7 * 86400_000);
-    // Set only the configured admin hash in memory; no provider/real-account login.
-    const original = config.ownerAccessCodeHash, demo = config.allowDemoProviders;
-    config.ownerAccessCodeHash = 'a'.repeat(64);
-    config.allowDemoProviders = false;
+  it('owner code opens a session; a wrong code or rotated hash does not', async () => scope(async () => {
+    await one("INSERT INTO users(google_sub,email,name,role) VALUES('owner:primary','owner@test.local','Owner','admin') RETURNING id");
+    const original = config.ownerAccessCodeHash;
+    const code = 'P11-TEST-CODE-FOR-OWNER-ACCESS';
+    config.ownerAccessCodeHash = hashAccessCode(code);
     try {
-      const login = await loginWithCode(invite.code);
+      expect(await loginWithCode('P11-WRONG-CODE-FOR-OWNER-ACCESS')).toBeNull();
+      const login = await loginWithCode(code);
       expect(login).not.toBeNull();
-      expect(await userFromToken(login!.token)).toMatchObject({ name: 'D1 visitor', role: 'user', soundEnabled: false });
-      await query('UPDATE invitation_codes SET revoked_at=$2 WHERE id=$1', [invite.id, new Date()]);
+      expect(await userFromToken(login!.token)).toMatchObject({ role: 'admin' });
+      config.ownerAccessCodeHash = 'b'.repeat(64);
       expect(await userFromToken(login!.token)).toBeNull();
-      const google = await createSession(owner.id, undefined, { google: true });
-      expect(await userFromToken(google.token)).toMatchObject({ role: 'user' });
-      await query('UPDATE users SET blocked_at=$2 WHERE id=$1', [owner.id, new Date()]);
-      expect(await userFromToken(google.token)).toBeNull();
-    } finally { config.ownerAccessCodeHash = original; config.allowDemoProviders = demo; }
+    } finally { config.ownerAccessCodeHash = original; }
   }));
 
   it('keeps final-round/latest-analysis statistics and Romanian month boundaries aligned', async () => scope(async () => {
