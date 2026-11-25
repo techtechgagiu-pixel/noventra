@@ -2,7 +2,7 @@ import { describeModel } from '@/lib/model-identities';
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Activity, BarChart3, History, House, ListOrdered, Scale, SlidersHorizontal, Ticket } from 'lucide-react';
+import { Activity, BarChart3, History, House, ListOrdered, SlidersHorizontal, Ticket } from 'lucide-react';
 import { MatchesView } from '@/components/matches/matches-view';
 import { currentUser, googleConfigured } from '@/lib/auth';
 import { PublicHome } from '@/components/home/public-home';
@@ -34,7 +34,6 @@ import { TabBoundary } from '@/components/tab-boundary';
 import { JobQueue } from '@/components/job-queue';
 import { CustomForm, type AgentCard } from '@/components/custom/custom-form';
 import { CustomLive } from '@/components/custom/custom-live';
-import { OddsXMatch } from '@/components/custom/odds-x-match';
 import { calibrationBands } from '@/lib/real-chance-data';
 import { localDate } from '@/lib/time';
 import { getAccount } from '@/lib/credits';
@@ -47,7 +46,7 @@ import { customLimitForUser } from '@/lib/credits';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'acasa' | 'custom' | 'oddsxmatch' | 'analiza' | 'istoric' | 'statistici' | 'meciuri';
+type Tab = 'acasa' | 'custom' | 'analiza' | 'istoric' | 'statistici' | 'meciuri';
 const UUID = /^[0-9a-f-]{36}$/;
 const plain = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -65,7 +64,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     return <PublicHome google={googleConfigured()} />;
   }
   // Old daily-ticket URLs remain readable through the shared archive.
-  const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'verifica' ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'oddsxmatch' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric'; // "Biletul tău" was removed (27.10); old links land on Acasă
+  const tab: Tab = !sp.tab && !sp.ticket && !sp.job && !sp.replay ? 'acasa' : sp.tab === 'verifica' ? 'acasa' : sp.tab === 'acasa' || sp.tab === 'analiza' || sp.tab === 'custom' || sp.tab === 'statistici' || sp.tab === 'meciuri' ? sp.tab : 'istoric'; // "Biletul tău" was removed (27.10); old links land on Acasă
   // Perf 10.11: both header reads go out together (they used to wait for each other on every tab change).
   const [running, creditsOut] = await Promise.all([
     many<{ id: string; slot: string; status: string; created_at: Date }>(
@@ -81,7 +80,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     { id: 'acasa', label: 'Acasă', icon: House },
     { id: 'istoric', label: 'Bilete create', icon: History },
     { id: 'custom', label: 'Custom', icon: SlidersHorizontal, badge: running.some((j) => j.slot.startsWith('CUSTOM_')) },
-    { id: 'oddsxmatch', label: 'oddsxmatch', icon: Scale, hot: true },
     { id: 'analiza', label: 'Analiză', icon: Activity, badge: running.length > 0 },
     { id: 'meciuri', label: 'Meciuri', icon: ListOrdered },
     { id: 'statistici', label: 'Statistici', icon: BarChart3 },
@@ -125,7 +123,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         <Suspense fallback={<TabLoading tab={tab} />}>
         {tab === 'acasa' && <AcasaTab userId={user.id} />}
         {tab === 'custom' && <CustomTab limit={await customLimitForUser(user)} userId={user.id} job={sp.job} />}
-        {tab === 'oddsxmatch' && <OddsXMatchTab limit={await customLimitForUser(user)} userId={user.id} />}
         {tab === 'analiza' && <AnalizaTab userId={user.id} viewer={user} job={sp.job} replay={sp.replay} running={running} />}
         {tab === 'meciuri' && <MatchesView />}
         {tab === 'statistici' && <StatisticiTab userId={user.id} admin={user.role === 'admin'} month={sp.luna} scope={sp.scope} sport={sp.sport} />}
@@ -288,19 +285,6 @@ async function CustomTab({ userId, job, limit }: { userId: string; job?: string;
   );
 }
 
-async function OddsXMatchTab({ userId, limit }: { userId: string; limit: number }) {
-  const [cards, recent, ranking, account] = await Promise.all([agentCards(), customJobs(userId, Math.max(limit, 20)), agentRanking(), getAccount(userId).catch(() => null)]);
-  return (
-    <div className="custom-tab space-y-6">
-      <div>
-        <h1 className="page-title">oddsxmatch</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Tu alegi meciurile sau un campionat întreg și cota dorită. Agenții aleg pronosticul de la fiecare meci, iar rezultatul este un bilet obișnuit. Se numără la cele {limit} bilete custom pe zi.</p>
-      </div>
-      <StaleOfferNotice />
-      <OddsXMatch credits={config.creditsEnabled && account && !account.founder ? account.balance : null} agents={cards} topAgentIds={topSixAgentIds(ranking)} remaining={Math.max(0, limit - recent.filter((j) => j.period_key === localDate()).length)} limit={limit} />
-    </div>
-  );
-}
 
 async function StatisticiTab({ userId, admin, month, scope, sport }: { userId: string; admin: boolean; month?: string; scope?: string; sport?: string }) {
   const m = month === 'all' || /^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ? month! : currentMonth();
