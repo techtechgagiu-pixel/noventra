@@ -7,7 +7,7 @@ it('keeps Ștucan historical identity and adds Corina as a non-voting sports rep
   expect(AGENTS.find((a) => a.id === 'hantu')!.name).toBe('Gemini 4 Hydrogen');
   expect(cleanAgentText('Hanțu citează presa.')).toBe('Gemini 4 Hydrogen citează presa.');
   const corina = AGENTS.find((a) => a.id === 'corina')!;
-  expect(corina.name).toBe('Gemini 4 Neon');
+  expect(corina.name).toBe('Gemini 4 Hydrogen');
   expect(VOTING_AGENTS.some((a) => a.id === 'corina')).toBe(false);
   expect(systemPrompt(corina)).not.toContain('BET_CANDIDATE');
 });
@@ -22,8 +22,8 @@ it('retains sourced headlines, removes duplicates and states missing news honest
 
 it('binds Corina to the user-selected Haiku model and includes its real price in accounting', async () => {
   const { OPENROUTER_MODELS, OPENROUTER_PRICE } = await import('@/lib/ai/openrouter-models');
-  expect(OPENROUTER_MODELS.corina.model).toBe('google/gemini-4-neon');
-  expect(OPENROUTER_PRICE.get(OPENROUTER_MODELS.corina.model)).toMatchObject({ inPerM: 3, outPerM: 15 });
+  expect(OPENROUTER_MODELS.corina.model).toBe('google/gemini-4-hydrogen');
+  expect(OPENROUTER_PRICE.get(OPENROUTER_MODELS.corina.model)).toMatchObject({ inPerM: 1.5, outPerM: 7.5 });
 });
 
 it('rejects executable source links', () => {

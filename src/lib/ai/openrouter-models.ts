@@ -9,8 +9,8 @@ import { NEW_AI_PROFILES } from './new-agent-profiles';
 export const OPENROUTER_MODELS: Record<string, { model: string; inPerM: number; outPerM: number }> = {
   ...Object.fromEntries(NEW_AI_PROFILES.map((a) => [a.id, { model: a.model, inPerM: a.inPerM, outPerM: a.outPerM }])),
   // Corina: sourced sports reporting; catalogue checked 2026-10-22.
-  corina: { model: 'google/gemini-4-neon', inPerM: 3, outPerM: 15 },
-  scout: { model: 'google/gemini-4-neon', inPerM: 3, outPerM: 15 },
+  corina: { model: 'google/gemini-4-hydrogen', inPerM: 1.5, outPerM: 7.5 },
+  scout: { model: 'google/gemini-4-hydrogen', inPerM: 1.5, outPerM: 7.5 },
   victor: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },
   // 25.11: the three-agent team — Anthropic, OpenAI and Google top models (OpenRouter catalogue checked 25.11).
   andrei: { model: 'anthropic/claude-haiku-5.5', inPerM: 0.1, outPerM: 0.5 },
