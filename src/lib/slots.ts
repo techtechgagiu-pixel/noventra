@@ -111,6 +111,19 @@ export const GUEST_CUSTOM_LIMIT = 1;
 export const MAX_CUSTOM_AGENTS = 6;
 /** Votes a selection needs from a team of n agents: 1 (≤3), 2 (4–6), then ~27% (3 of 12, 6 of 22). */
 export const customThreshold = (n: number) => (n === 3 ? 2 : n <= 2 ? 1 : n <= 6 ? 2 : Math.max(3, Math.round(n * 0.27)));
+/**
+ * How wide a custom ticket searches. With every chosen agent required to agree (e.g. 3 of 3) only ~5% of the analysed
+ * matches pass (26.11: 4 of 75), so a 12-leg ticket needs far more matches than the usual 4 per leg, and a bigger batch
+ * to analyse them inside the 30-minute limit. Otherwise the defaults apply.
+ */
+export const STRICT_SEARCH_MAX_FIXTURES = 150;
+export const STRICT_SEARCH_BATCH = 6;
+export function customSearchSize(c: { legs: number; agents?: string[]; minAgree?: number }, base: { maxFixtures: number; batchSize: number }) {
+  const strict = !!c.minAgree && (c.agents?.length ?? 0) >= 2 && c.minAgree >= (c.agents?.length ?? 0);
+  return strict
+    ? { maxFixtures: Math.min(STRICT_SEARCH_MAX_FIXTURES, Math.max(12, c.legs * 12)), batchSize: Math.max(base.batchSize, STRICT_SEARCH_BATCH) }
+    : { maxFixtures: Math.min(base.maxFixtures, Math.max(12, c.legs * 4)), batchSize: base.batchSize };
+}
 export const isCustomSlot = (id: string) => /^CUSTOM_\d+$/.test(id);
 
 /** A ticket the user built himself and brought to the agents for review. */
