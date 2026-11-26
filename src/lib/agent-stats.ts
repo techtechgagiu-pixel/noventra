@@ -94,7 +94,8 @@ async function agentStatsFresh(userId: string, admin = false, month = currentMon
     const c = career.get(r.agent_id) ?? { won: 0, lost: 0 };
     career.set(r.agent_id, { won: c.won + r.won, lost: c.lost + r.lost });
   }
-  const stats: AgentStat[] = AGENTS.map((a) => {
+  // Statistics show only the active agents (owner 26.11); retired agents' history stays in the database.
+  const stats: AgentStat[] = VOTING_AGENTS.map((a) => {
     const all = picks.filter((p) => p.agent_id === a.id);
     const ownModel = ownOf(a.id);
     const counts = (p: (typeof all)[number]) => sameModel(p.model_id, ownModel) && p.created_at.getTime() < p.kickoff_utc.getTime();
@@ -165,5 +166,5 @@ export async function agentRanking(month = currentMonth()) {
     const c = byId.get(r.agent_id) ?? { won: 0, lost: 0, bets: 0 };
     byId.set(r.agent_id, { won: c.won + r.won, lost: c.lost + r.lost, bets: c.bets + r.bets });
   }
-  return AGENTS.map(a => { const r=byId.get(a.id),won=r?.won??0,lost=r?.lost??0; return {id:a.id,won,lost,bets:r?.bets??0,hitRate:won+lost?won/(won+lost):null,editorial:a.id==='scout'||a.id==='corina'}; });
+  return VOTING_AGENTS.map(a => { const r=byId.get(a.id),won=r?.won??0,lost=r?.lost??0; return {id:a.id,won,lost,bets:r?.bets??0,hitRate:won+lost?won/(won+lost):null,editorial:a.id==='scout'||a.id==='corina'}; });
 }
