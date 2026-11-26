@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   try {
     const maxLegs = await maxLegsForUser(user);
     const legs = Number((body as { legs?: unknown } | null)?.legs);
-    if (Number.isFinite(legs) && legs > maxLegs) return fail(`Planul tău permite bilete de până la ${maxLegs} meciuri. Alege un plan mai mare din „Planuri” (/planuri).`, 403);
+    if (Number.isFinite(legs) && legs > maxLegs) return fail(`Planul tău permite bilete de până la ${maxLegs} meciuri.`, 403);
     return json(await createCustomJob(user.id, body, new Date(), await customLimitForUser(user)), 201);
   } catch (error) {
     if (error instanceof SlotError) return fail(error.message, error.status);
