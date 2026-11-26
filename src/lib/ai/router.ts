@@ -71,7 +71,7 @@ function retryAfter(res: Response, body: string) {
 
 /** OpenRouter models whose endpoint rejects `reasoning.enabled=false` (learned at runtime, e.g. GLM 5.3 Flash). */
 /** 25.11: the three large models think before answering (hidden), with room left for the JSON. */
-const TOP_REASONING: Record<string, string> = { 'anthropic/claude-fable-5.2': 'medium', 'openai/gpt-6.2-astra-pro': 'medium', 'google/gemini-4-neon': 'medium' };
+const TOP_REASONING: Record<string, string> = { 'anthropic/claude-fable-5.2': 'medium', 'openai/gpt-6.2-astra-pro': 'medium', 'openai/gpt-6.2-sol': 'medium', 'google/gemini-4-neon': 'medium' };
 const reasoningRequired = new Set<string>(['z-ai/glm-5.3-flash']);
 
 async function callOpenAiCompatible(ref: ModelRef, input: CallInput, baseUrl: string, apiKey: string): Promise<RawResult> {

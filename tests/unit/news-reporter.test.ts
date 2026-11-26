@@ -4,8 +4,8 @@ import { AGENTS, VOTING_AGENTS, systemPrompt } from '@/lib/ai/agents';
 import { cleanAgentText } from '@/lib/agent-names';
 
 it('keeps Ștucan historical identity and adds Corina as a non-voting sports reporter', () => {
-  expect(AGENTS.find((a) => a.id === 'hantu')!.name).toBe('Gemini 4 Neon');
-  expect(cleanAgentText('Hanțu citează presa.')).toBe('Gemini 4 Neon citează presa.');
+  expect(AGENTS.find((a) => a.id === 'hantu')!.name).toBe('Gemini 4 Hydrogen');
+  expect(cleanAgentText('Hanțu citează presa.')).toBe('Gemini 4 Hydrogen citează presa.');
   const corina = AGENTS.find((a) => a.id === 'corina')!;
   expect(corina.name).toBe('Gemini 4 Neon');
   expect(VOTING_AGENTS.some((a) => a.id === 'corina')).toBe(false);
