@@ -106,7 +106,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
             {canSeeAccounts(user) && <Link href="/cote" className="text-xs text-muted hover:text-text" title="Import cote Stake">Cote</Link>}
             {user.role === 'admin' && <Link href="/admin/feedback" className="text-xs text-muted hover:text-text" title="Ideile trimise de utilizatori">Sugestii</Link>}
             <CreditsBadge />
-            <Link href="/planuri" className="text-xs text-muted hover:text-text" title="Credite și planuri">Planuri</Link>
             <form action="/auth/logout" method="post"><button className="text-xs text-muted hover:text-text">Ieșire</button></form>
           </div>
         </div>

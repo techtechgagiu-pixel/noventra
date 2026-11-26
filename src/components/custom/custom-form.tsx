@@ -335,8 +335,6 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
         {credits !== null && (() => { const cost = legs * count; const short = credits < cost; return short
           ? <div className="mb-2 rounded-xl border border-gold/60 bg-gold/10 px-4 py-3 text-sm" role="alert">
             <p className="font-semibold text-gold">{credits === 0 ? 'Ți-au rămas 0 credite.' : `Ai ${credits} ${credits === 1 ? 'credit' : 'credite'}, iar biletul costă ${cost}.`}</p>
-            <p className="mt-1 text-muted">Alege un plan sau încarcă doar creditele care îți lipsesc ({cost - credits} {cost - credits === 1 ? 'credit' : 'credite'}).</p>
-            <div className="mt-3 flex flex-wrap gap-2"><a href="/planuri" className="btn btn-primary px-4 py-2">Alege un plan</a><a href="/planuri#extra" className="btn btn-ghost px-4 py-2">Încarcă credite extra</a></div>
           </div>
           : <p className="mb-2 text-sm text-muted" role="status">Acest bilet costă {cost} {cost === 1 ? 'credit' : 'credite'}. Ai {credits}.</p>; })()}
         <button onClick={create} disabled={busy || (credits !== null && credits < legs * count) || remaining === 0 || count < 1 || count > remaining || !chosen.length || tooLow || tooHigh || target < 1.2 || (!!catalog && (leagues.length > 0 || sport === 'cs') && available === 0)} className="btn btn-primary px-6 py-3 disabled:opacity-50"><Sparkles size={16} aria-hidden /> {busy ? 'Pornesc…' : count === 1 ? 'Pornește dezbaterea' : `Creează ${count} bilete`}</button>

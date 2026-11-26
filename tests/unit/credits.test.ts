@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { creditsForLegs, extraCents, paidSessionCredits, parseExtra, EXTRA_MAX, PLANS } from '../../src/lib/credits';
 import { boostedAgree, missedTarget } from '../../src/lib/ticket-completion';
-import { verifySignature } from '../../src/lib/stripe-signature';
-import { createHmac } from 'node:crypto';
 
 describe('credite', () => {
   it('un credit acoperă un meci', () => {
@@ -20,17 +18,6 @@ describe('credite extra', () => {
     expect([10, 50, EXTRA_MAX, '70'].map(parseExtra)).toEqual([10, 50, EXTRA_MAX, 70]);
     expect([0, 9, -2, 1.5, EXTRA_MAX + 1, 'x', null, undefined].map(parseExtra)).toEqual([null, null, null, null, null, null, null, null]);
     expect(extraCents(30)).toBe(300);
-  });
-});
-
-describe('semnătura Stripe', () => {
-  const secret = 'whsec_test'; const body = '{"a":1}'; const now = 1_800_000_000_000; const t = now / 1000;
-  const sig = createHmac('sha256', secret).update(`${t}.${body}`).digest('hex');
-  it('acceptă semnătura corectă și respinge cea greșită sau veche', async () => {
-    expect(await verifySignature(body, `t=${t},v1=${sig}`, secret, now)).toBe(true);
-    expect(await verifySignature(body + ' ', `t=${t},v1=${sig}`, secret, now)).toBe(false);
-    expect(await verifySignature(body, `t=${t},v1=${sig}`, secret, now + 600_000)).toBe(false);
-    expect(await verifySignature(body, null, secret, now)).toBe(false);
   });
 });
 

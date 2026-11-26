@@ -23,10 +23,6 @@ export const config = {
   /** Accounts (emails, comma separated) allowed to remove tickets from Bilete create. Kept out of the code on purpose. */
   /** Credits are charged only when CREDITS_ENABLED=1 (founder accounts never pay). Stripe keys are secrets set in Cloudflare. */
   creditsEnabled: process.env.CREDITS_ENABLED === '1',
-  stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
-  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
-  nowpaymentsApiKey: process.env.NOWPAYMENTS_API_KEY || '',
-  nowpaymentsIpnSecret: process.env.NOWPAYMENTS_IPN_SECRET || '',
   ticketRemovers: (process.env.TICKET_REMOVE_EMAILS || '').split(',').map((x: string) => x.trim().toLowerCase()).filter(Boolean),
   openRouterDailyUsd: Number(process.env.OPENROUTER_DAILY_USD || '5'),
   oddsApiKey: process.env.ODDS_API_KEY || '',
