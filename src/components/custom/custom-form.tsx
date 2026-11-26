@@ -85,7 +85,7 @@ export function CustomForm({ agents, topAgentIds = [], remaining = CUSTOM_LIMIT_
   // Owner request 03.11: „Creează bilet” goes step by step (next, next, next); the defaults are all leagues and the usual period.
   const [wizard, setWizard] = useState(true);
   const [step, setStep] = useState(0);
-  const steps = useMemo<Step[]>(() => ['basics', ...(sport === 'football' ? ['leagues' as const] : []), 'interval', 'agents', 'finish'], [sport]);
+  const steps = useMemo<Step[]>(() => ['basics', 'interval', ...(sport === 'football' ? ['leagues' as const] : []), 'agents', 'finish'], [sport]);
   const cur = steps[Math.min(step, steps.length - 1)];
   const [classicOpen, setClassicOpen] = useState(false);
   const optionsOpen = wizard ? cur === 'leagues' || cur === 'interval' || cur === 'finish' : classicOpen;
