@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
+import { FIRST_DIVISION_IDS } from './first-divisions';
 
 /** Leagues pinned at the top, in this order; every `top10` league follows. */
 export const PINNED_LEAGUES = ['UCL', 'UEL', 'UECL', 'ROU1'];
@@ -70,6 +71,7 @@ export function LeaguePicker({ leagues, value, onChange, label = 'Ligi', allLabe
             <button type="button" onClick={() => { setCleared(true); onChange([]); }} className={`chip ${cleared ? 'text-cyan' : 'text-muted'}`}>Debifează tot</button>
             <button type="button" onClick={() => onChange(principal.map((l) => l.id))} className="chip text-muted">Principale</button>
             <button type="button" onClick={() => onChange(leagues.filter((l) => l.top10).map((l) => l.id))} className="chip text-muted">Top 10</button>
+            <button type="button" onClick={() => { const ids = leagues.filter((l) => FIRST_DIVISION_IDS.has(l.id)).map((l) => l.id); if (ids.length) { setCleared(false); onChange(ids); } }} className="chip text-muted" title="Prima divizie din fiecare țară, fără cupe, feminine sau tineret">Prima ligă din fiecare țară</button>
             <button type="button" onClick={() => onChange(leagues.filter((l) => l.count > 0).map((l) => l.id))} className="chip text-muted">Doar cu meciuri</button>
           </div>
           <div role="listbox" aria-multiselectable="true" className="max-h-[min(55vh,400px)] overflow-y-auto p-1">
